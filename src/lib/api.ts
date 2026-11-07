@@ -363,7 +363,7 @@ export async function listActivity(userId: string): Promise<string[]> {
 
 /** Appelle une fonction serveur et remonte le message d'erreur lisible qu'elle renvoie (JSON { error }). */
 async function invoke<T>(name: string, body: unknown, fallback: string): Promise<T> {
-  const { data, error } = await sb().functions.invoke(name, { body })
+  const { data, error } = await sb().functions.invoke(name, { body: body as Record<string, unknown> })
   if (!error) return data as T
   let msg = fallback
   const ctx = (error as { context?: Response }).context
