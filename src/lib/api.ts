@@ -410,7 +410,7 @@ export async function askAI(args: {
     }
     return { reply: `[Démo — tâche « ${args.task} »]\n\n${args.prompt.slice(0, 400)}`, conversationId: null }
   }
-  return invoke<AiResult>('ai-gateway', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+  return invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
 }
 
 export async function listConversations(): Promise<Conversation[]> {
