@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
 import { askAI, listConversations, listCourses, listMessages } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { readPhotoText } from '../lib/ocr'
+import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
 
@@ -19,6 +21,12 @@ export default function Assistant() {
   const [history, setHistory] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
   const [listening, setListening] = useState(false)
+  const [web, setWeb] = useState(true)
+  const [attach, setAttach] = useState<{ name: string; text: string } | null>(null)
+  const [menu, setMenu] = useState(false)
+  const [reading, setReading] = useState('')
+  const photoRef = useRef<HTMLInputElement>(null)
+  const docRef = useRef<HTMLInputElement>(null)
   const [speakingId, setSpeakingId] = useState<string | null>(null)
   const dict = useRef<Dictation | null>(null)
 
@@ -38,6 +46,20 @@ export default function Assistant() {
     dict.current = d
     setListening(true)
   }
+  async function pickFile(f: File | undefined, kind: 'photo' | 'doc') {
+    setMenu(false)
+    if (!f) return
+    setReading(kind === 'photo' ? 'Lecture de la photo…' : 'Lecture du document…')
+    const text = await run(async () => {
+      if (kind === 'photo' || f.type.startsWith('image/')) return readPhotoText(f, setReading)
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) return extractPdfText(f)
+      return (await f.text()).trim()
+    })
+    setReading('')
+    if (text === undefined) return
+    if (text.length < 10) return setError("Je n'ai pas pu lire de texte dans ce fichier. Essaie une photo plus nette ou un PDF non scanné.")
+    setAttach({ name: f.name || 'photo', text: text.slice(0, 6500) })
+  }
   function readAloud(m: Message) {
     if (speakingId === m.id) { stopSpeaking(); setSpeakingId(null); return }
     if (speak(m.content, () => setSpeakingId(null))) setSpeakingId(m.id)
@@ -50,8 +72,10 @@ export default function Assistant() {
     const prompt = q.trim()
     if (!prompt || busy) return
     setText('')
-    setMessages((m) => [...m, { id: 'u' + Date.now(), role: 'user', content: prompt, created_at: '' }])
-    const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId }))
+    const joined = attach
+    setAttach(null)
+    setMessages((m) => [...m, { id: 'u' + Date.now(), role: 'user', content: (joined ? `📎 ${joined.name}\n` : '') + prompt, created_at: '' }])
+    const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
     if (r) {
       setConversationId(r.conversationId)
       setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
@@ -67,7 +91,7 @@ export default function Assistant() {
   function fresh() { setConversationId(null); setMessages([]); setError(null); setHistory(false) }
 
   return (
-    <main className="page" style={{ paddingBottom: 170 }}>
+    <main className="page" style={{ paddingBottom: 200 }}>
       <div className="topbar" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <MemoAvatar animal={profile?.memo_animal ?? null} size={40} />
@@ -85,6 +109,10 @@ export default function Assistant() {
           <option value="">Aucun cours en particulier</option>
           {(courses.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
         </select>
+      </div>
+
+      <div className="chips">
+        <button type="button" role="switch" aria-checked={web} className={'pill' + (web ? ' on' : '')} onClick={() => setWeb((v) => !v)}>Recherche web : {web ? 'oui' : 'non'}</button>
       </div>
 
       {history ? (
@@ -114,9 +142,25 @@ export default function Assistant() {
       )}
       <ErrorBox message={error} />
 
-      <form onSubmit={submit} style={{ position: 'fixed', bottom: 78, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 440, padding: '10px 20px', display: 'flex', gap: 10, background: 'var(--bg)' }}>
+      <form onSubmit={submit} style={{ position: 'fixed', bottom: 78, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 440, padding: '10px 20px', display: 'flex', flexWrap: 'wrap', gap: 10, background: 'var(--bg)' }}>
+        {(attach || reading) && (
+          <div style={{ width: '100%' }}>
+            {reading ? <span className="muted">{reading}</span> : attach && <span className="attach-chip"><Icon name="pdf" size={16} /><span>{attach.name}</span><button type="button" className="link" style={{ textDecoration: 'none' }} onClick={() => setAttach(null)} aria-label="Retirer le fichier joint">✕</button></span>}
+          </div>
+        )}
+        <div style={{ position: 'relative', flex: 'none' }}>
+          <button type="button" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%' }} onClick={() => setMenu((v) => !v)} aria-label="Joindre une photo ou un document" aria-expanded={menu}><Icon name="plus" /></button>
+          {menu && (
+            <div className="card" style={{ position: 'absolute', bottom: 62, left: 0, width: 210, padding: 8, gap: 2, zIndex: 20 }}>
+              <button type="button" className="list-row" style={{ background: 'none', border: 0, textAlign: 'left' }} onClick={() => photoRef.current?.click()}><Icon name="photo" size={20} /><span>Photo ou appareil</span></button>
+              <button type="button" className="list-row" style={{ background: 'none', border: 0, textAlign: 'left' }} onClick={() => docRef.current?.click()}><Icon name="pdf" size={20} /><span>Document (PDF, texte)</span></button>
+            </div>
+          )}
+        </div>
+        <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickFile(e.target.files?.[0], 'photo'); e.target.value = '' }} />
+        <input ref={docRef} type="file" accept="application/pdf,text/plain,.txt,.md,image/*" hidden onChange={(e) => { void pickFile(e.target.files?.[0], 'doc'); e.target.value = '' }} />
         <label htmlFor="q" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ta question</label>
-        <input id="q" className="input" style={{ borderRadius: 26, minWidth: 0 }} placeholder="Pose une question sur ton cours" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
+        <input id="q" className="input" style={{ borderRadius: 26, minWidth: 0, flex: '1 1 0' }} placeholder="Pose une question" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
         {canDictate() && <button type="button" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: listening ? 'var(--braise)' : undefined }} onClick={toggleMic} aria-label={listening ? 'Arrêter la dictée' : 'Dicter ma question'}><Icon name="mic" /></button>}
         <button type="submit" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: '#3ccfb4', border: 0 }} aria-label="Envoyer" disabled={busy}><Icon name="send" color="#0b1513" stroke={2} /></button>
       </form>

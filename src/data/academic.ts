@@ -1,4 +1,5 @@
 // Source : Répertoires académiques UPN et UNIKIN 2026-2027 (colonne « Départements & Mentions »).
+// ULK, UPC et UCC : listes de départ à relire par l'équipe ; l'étudiant peut toujours écrire sa propre faculté ou son département.
 // Modèle : Université → Faculté → Département. Les étudiants peuvent toujours écrire leur propre valeur.
 export const CATALOGUE: Record<string, Record<string, string[]>> = {
   "Université Pédagogique Nationale (UPN)": {
@@ -124,6 +125,67 @@ export const CATALOGUE: Record<string, Record<string, string[]>> = {
       "Épidémiologie / Bio-statistique",
       "Santé Communautaire"
     ]
+  },
+  "Université Libre de Kinshasa (ULK)": {
+    "Faculté de Droit": [
+      "Droit Privé et Judiciaire",
+      "Droit Public",
+      "Droit Économique et Social"
+    ],
+    "Faculté des Sciences Économiques": [
+      "Sciences Économiques",
+      "Gestion Financière"
+    ],
+    "Faculté d'Informatique de Gestion": [
+      "Informatique de Gestion"
+    ],
+    "Faculté des Sciences Sociales, Politiques et Administratives": [
+      "Sciences Politiques et Administratives",
+      "Relations Internationales"
+    ],
+    "Faculté de Médecine": [
+      "Médecine"
+    ]
+  },
+  "Université Protestante au Congo (UPC)": {
+    "Faculté de Droit": [
+      "Droit Privé et Judiciaire",
+      "Droit Public",
+      "Droit Économique et Social"
+    ],
+    "Faculté des Sciences Économiques et de Gestion": [
+      "Sciences Économiques",
+      "Gestion"
+    ],
+    "Faculté de Médecine": [
+      "Médecine"
+    ],
+    "Faculté de Théologie": [
+      "Théologie"
+    ]
+  },
+  "Université Catholique du Congo (UCC)": {
+    "Faculté de Théologie": [
+      "Théologie"
+    ],
+    "Faculté de Droit Canonique": [
+      "Droit Canonique"
+    ],
+    "Faculté de Philosophie": [
+      "Philosophie"
+    ],
+    "Faculté de Droit": [
+      "Droit"
+    ],
+    "Faculté d'Économie et Développement": [
+      "Économie et Développement"
+    ],
+    "Faculté de Sciences Politiques": [
+      "Sciences Politiques"
+    ],
+    "Faculté de Communication": [
+      "Sciences et Techniques de la Communication"
+    ]
   }
 }
 
@@ -148,4 +210,23 @@ export function facultiesFor(university: string | undefined): string[] {
   const own = university && CATALOGUE[university] ? Object.keys(CATALOGUE[university]) : []
   const rest = allFaculties().filter((f) => !own.includes(f))
   return [...own.sort((a, b) => a.localeCompare(b, 'fr')), ...rest]
+}
+
+/** Logos intégrés à Memoa (dossier public/logos). Utilisés tels quels, sans laisser croire que le document est officiel. */
+const LOGOS: Record<string, string> = {
+  'Université Pédagogique Nationale (UPN)': 'upn',
+  'Université de Kinshasa (UNIKIN)': 'unikin',
+  'Université Libre de Kinshasa (ULK)': 'ulk',
+  'Université Protestante au Congo (UPC)': 'upc',
+  'Université Catholique du Congo (UCC)': 'ucc'
+}
+
+export function logoUrlFor(university: string | undefined): string | null {
+  const k = university ? LOGOS[university] : undefined
+  return k ? `${import.meta.env.BASE_URL}logos/${k}.png` : null
+}
+
+/** Nom sans sigle entre parenthèses : « Université Pédagogique Nationale (UPN) » → « Université Pédagogique Nationale ». */
+export function universityLabel(university: string): string {
+  return university.replace(/\s*\([^)]*\)\s*$/, '')
 }

@@ -193,3 +193,13 @@ button { cursor: pointer; }
 
 /* Bouton principal toujours visible au bas des formulaires longs */
 .sticky-action { position: sticky; bottom: 86px; display: flex; flex-direction: column; gap: 8px; padding: 10px 0 4px; background: linear-gradient(to top, var(--bg) 75%, transparent); z-index: 5; }
+
+/* Aucun texte ne doit sortir de sa case : on coupe les mots trop longs et on limite les titres */
+.card, .tile, .book, .list-row, .bubble, .field, .notice, .row > * { min-width: 0; }
+.card, .tile, .book, .list-row, .bubble, .notice, .h1, .h2, .muted { overflow-wrap: anywhere; word-break: break-word; }
+.book b { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.card strong.h2, .tile .h2 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.list-row > span:first-child { min-width: 0; flex: 1 1 auto; }
+select.select, .input { max-width: 100%; text-overflow: ellipsis; }
+.attach-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--surface); font-size: 14px; }
+.attach-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

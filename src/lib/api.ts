@@ -394,6 +394,10 @@ export async function askAI(args: {
   courseId?: string | null
   conversationId?: string | null
   context?: string
+  /** Texte d'un document ou d'une photo joint à la question (lu sur le téléphone). */
+  attachment?: string
+  /** Autorise l'assistant à chercher sur le web. */
+  web?: boolean
 }): Promise<AiResult> {
   if (!isConfigured) {
     await new Promise((r) => setTimeout(r, 600))
@@ -414,6 +418,18 @@ export async function askAI(args: {
     return { reply: `[Démo — tâche « ${args.task} »]\n\n${args.prompt.slice(0, 400)}`, conversationId: null }
   }
   return invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+}
+
+/** Envoie un fichier audio au serveur et reçoit le texte de ce qui y est dit. */
+export async function transcribeAudio(file: File): Promise<string> {
+  if (!isConfigured) {
+    await new Promise((r) => setTimeout(r, 600))
+    return '[Démo] Texte de ton audio.'
+  }
+  const fd = new FormData()
+  fd.append('audio', file, file.name || 'audio')
+  const r = await invoke<{ text: string }>('bright-worker', fd, "La transcription n'est pas disponible pour l'instant. Réessaie dans un instant.")
+  return r.text
 }
 
 export async function listConversations(): Promise<Conversation[]> {

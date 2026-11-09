@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
-import { addNote, askAI, createCourse, getCourse, listCourses, listNotes } from '../lib/api'
+import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, transcribeAudio } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { buildCoursePdf } from '../lib/pdf'
+import { logoUrlFor, universityLabel } from '../data/academic'
+import { buildCoursePdf, buildTpPdf } from '../lib/pdf'
+import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
@@ -12,7 +14,9 @@ import type { Note } from '../lib/types'
 const SOURCES = [
   { id: 'texte', label: 'Texte', icon: 'text' },
   { id: 'voix', label: 'Dictée', icon: 'mic' },
-  { id: 'pdf', label: 'PDF', icon: 'pdf' }
+  { id: 'pdf', label: 'PDF', icon: 'pdf' },
+  { id: 'photo', label: 'Photo', icon: 'photo' },
+  { id: 'audio', label: 'Audio', icon: 'audio' }
 ]
 
 /* Onglet « Cours » : sert uniquement à créer un cours. Une fois créé, il est rangé dans le sac à dos. */
@@ -27,6 +31,8 @@ export function NewCourse() {
   const [listening, setListening] = useState(false)
   const dict = useRef<Dictation | null>(null)
   const pdfInput = useRef<HTMLInputElement>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const audioInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => { dict.current?.stop() }, [])
 
@@ -57,6 +63,26 @@ export function NewCourse() {
     if (!title.trim()) setTitle(f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
+  async function pickPhoto(f: File | undefined) {
+    if (!f) return
+    const text = await run(() => readPhotoText(f, setStep))
+    setStep('')
+    if (text === undefined) return
+    if (text.length < 15) return setError("Je n'arrive pas à lire de texte sur cette photo. Prends-la bien droite, avec de la lumière, ou choisis un texte imprimé.")
+    setContent((c) => (c ? c + '\n\n' : '') + text.slice(0, 60000))
+  }
+
+  async function pickAudio(f: File | undefined) {
+    if (!f) return
+    if (f.size > 20 * 1024 * 1024) return setError('Cet audio est trop lourd (20 Mo maximum). Coupe-le en plusieurs parties.')
+    setStep('Transcription en cours… cela peut prendre une minute.')
+    const text = await run(() => transcribeAudio(f))
+    setStep('')
+    if (text === undefined) return
+    setContent((c) => (c ? c + '\n\n' : '') + text.slice(0, 60000))
+    if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '').slice(0, 80))
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!user) return
@@ -74,7 +100,7 @@ export function NewCourse() {
         } catch {
           /* l'IA est facultative ici : on garde le texte tel quel plutôt que de perdre la note */
         }
-        await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : 'texte')
+        await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte')
       }
       return course.id
     })
@@ -99,13 +125,18 @@ export function NewCourse() {
         <span className="label-mono">Source</span>
         <div className="grid3">
           {SOURCES.map((s) => (
-            <button key={s.id} type="button" className="tile" aria-pressed={source === s.id} style={{ minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: source === s.id ? 'var(--btn)' : undefined }} onClick={() => { setSource(s.id); if (s.id === 'pdf') pdfInput.current?.click() }}>
+            <button key={s.id} type="button" className="tile" aria-pressed={source === s.id} style={{ minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: source === s.id ? 'var(--btn)' : undefined }} onClick={() => { setSource(s.id); if (s.id === 'pdf') pdfInput.current?.click(); if (s.id === 'photo') photoInput.current?.click(); if (s.id === 'audio') audioInput.current?.click() }}>
               <Icon name={s.icon} size={26} color="var(--book)" />
               <span style={{ fontWeight: 600, fontSize: 14 }}>{s.label}</span>
             </button>
           ))}
         </div>
         <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
+
+        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+        <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => { void pickAudio(e.target.files?.[0]); e.target.value = '' }} />
+        {source === 'audio' && <div className="notice">Choisis l'enregistrement de ton cours (MP3, M4A, WAV… 20 Mo maximum). Je le transforme en texte, puis tu peux le relire avant de créer le cours. <button type="button" className="link" onClick={() => audioInput.current?.click()}>Choisir un audio</button></div>}
+        {source === 'photo' && <div className="notice">Je lis le texte imprimé ou bien écrit. L'écriture à la main est lue moins bien : relis et corrige avant de créer le cours. <button type="button" className="link" onClick={() => photoInput.current?.click()}>Ajouter une photo</button></div>}
 
         {source === 'voix' && canDictate() && (
           <button type="button" className={'btn ' + (listening ? 'amber' : 'ghost')} onClick={toggleDictation}>
@@ -115,7 +146,7 @@ export function NewCourse() {
         {source === 'voix' && !canDictate() && <div className="notice">La dictée n'est pas disponible sur ce navigateur. Ouvre Memoa avec Chrome.</div>}
 
         <div className="field">
-          <label htmlFor="contenu">{source === 'pdf' ? 'Texte lu dans ton PDF (tu peux le corriger)' : source === 'voix' ? 'Ce que tu as dicté (tu peux le corriger)' : 'Colle ou écris tes notes (facultatif)'}</label>
+          <label htmlFor="contenu">{source === 'pdf' ? 'Texte lu dans ton PDF (tu peux le corriger)' : source === 'photo' ? 'Texte lu sur ta photo (tu peux le corriger)' : source === 'audio' ? 'Texte de ton audio (tu peux le corriger)' : source === 'voix' ? 'Ce que tu as dicté (tu peux le corriger)' : 'Colle ou écris tes notes (facultatif)'}</label>
           <textarea id="contenu" className="textarea" rows={7} placeholder="Tu peux aussi créer le cours vide et ajouter des notes plus tard." value={content} onChange={(e) => setContent(e.target.value)} />
         </div>
 
@@ -285,6 +316,15 @@ export function TpAssistant() {
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}` }))
     if (r) { setPlan(r.reply); setDoc(null) }
   }
+  async function downloadTp() {
+    if (!doc || !profile) return
+    const blob = await run(() => buildTpPdf({
+      university: profile.university, faculty: profile.faculty, department: profile.department,
+      promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl: logoUrlFor(profile.university),
+      title, course: course.data?.title ?? '', student: profile.full_name, year
+    }, doc))
+    if (blob) saveBlob(title || 'TP', blob)
+  }
   async function write() {
     const r = await run(() => askAI({ task: 'tp_write', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}\nPlan validé :\n${plan}` }))
     if (r) setDoc(r.reply)
@@ -314,7 +354,8 @@ export function TpAssistant() {
         <>
           <div className="cover">
             <small>République démocratique du Congo</small>
-            <span className="t" style={{ fontSize: 16 }}>{profile?.university}</span>
+            <span className="t" style={{ fontSize: 16 }}>{profile?.university ? universityLabel(profile.university) : ''}</span>
+            {logoUrlFor(profile?.university) && <img src={logoUrlFor(profile?.university)!} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
             <span className="s">{profile?.faculty}</span>
             <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
             <hr />
@@ -325,7 +366,7 @@ export function TpAssistant() {
           </div>
           <div className="doc-out">{doc}</div>
           <div className="notice no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
-          <button className="btn ghost no-print" type="button" onClick={() => window.print()}>Imprimer / enregistrer en PDF</button>
+          <button className="btn no-print" type="button" disabled={busy} onClick={downloadTp}>{busy ? 'Un instant…' : 'Télécharger le PDF du TP'}</button>
         </>
       )}
     </main>
