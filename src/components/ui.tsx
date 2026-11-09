@@ -2,14 +2,24 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { ANIMALS } from '../data/animals'
 
-export function Logo({ size = 32, dark = false }: { size?: number; dark?: boolean }) {
-  const main = dark ? '#3CCFB4' : '#0B5D54'
+/** Les trois livres. La couleur des deux livres droits suit le thème (Menthe en sombre, Kivu en clair). */
+export function Logo({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label="Logo Memoa" style={{ flex: 'none' }}>
-      <rect x="6" y="20" width="13" height="36" rx="4" fill={main} />
-      <rect x="22" y="8" width="13" height="48" rx="4" fill={main} />
-      <rect x="38" y="20" width="13" height="36" rx="4" fill="#F2A33A" transform="rotate(14 44.5 56)" />
+      <rect x="10" y="22" width="11" height="30" rx="3.5" style={{ fill: 'var(--book)' }} />
+      <rect x="25" y="12" width="11" height="40" rx="3.5" style={{ fill: 'var(--book)' }} />
+      <rect x="40" y="22" width="11" height="30" rx="3.5" fill="#F2A33A" transform="rotate(14 45.5 52)" />
     </svg>
+  )
+}
+
+/** Logo complet : les trois livres + le nom « memoa » à côté. */
+export function Brand({ size = 56, center = false }: { size?: number; center?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: Math.round(size * 0.22) }} aria-label="Memoa">
+      <Logo size={size} />
+      <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: Math.round(size * 0.7), letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>memoa</span>
+    </div>
   )
 }
 
