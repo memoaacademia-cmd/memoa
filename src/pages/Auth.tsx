@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Logo, ErrorBox, useAction } from '../components/ui'
+import { Brand, ErrorBox, useAction } from '../components/ui'
 import { resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -21,8 +21,10 @@ function GoogleG() {
 function Header({ title, text }: { title: string; text: string }) {
   return (
     <>
-      <Logo size={44} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ margin: '28px 0 8px' }}>
+        <Brand size={64} center />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
         <h1 className="h1 big">{title}</h1>
         <p className="lead">{text}</p>
       </div>
@@ -56,11 +58,11 @@ export function Login() {
       <form onSubmit={submit} className="card" style={{ border: 0, background: 'transparent', padding: 0, gap: 14 }} noValidate>
         <div className="field">
           <label htmlFor="email">Email</label>
-          <input id="email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="mdp">Mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="mdp" className="input" type="password" autoComplete="current-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <ErrorBox message={error} />
         <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
@@ -116,7 +118,7 @@ export function Signup() {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div className="field">
           <label htmlFor="email">Email</label>
-          <input id="email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="tel">Numéro de téléphone</label>
@@ -124,7 +126,7 @@ export function Signup() {
         </div>
         <div className="field">
           <label htmlFor="mdp">Mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="muted">8 caractères minimum.</span>
         </div>
         <ErrorBox message={error} />
@@ -180,13 +182,13 @@ export function GoogleNext() {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div className="field">
           <label htmlFor="mdp">Crée un mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <div className="bar" aria-hidden="true"><i style={{ width: st.pct + '%', background: st.pct < 50 ? '#b3261e' : st.pct < 75 ? '#f2a33a' : '#0b5d54' }} /></div>
           <span className="muted">{password ? st.label : '8 caractères minimum.'}</span>
         </div>
         <div className="field">
           <label htmlFor="mdp2">Confirme le mot de passe</label>
-          <input id="mdp2" className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <input id="mdp2" className="input" type="password" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="tel">Numéro de téléphone</label>
