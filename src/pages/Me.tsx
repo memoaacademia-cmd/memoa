@@ -57,6 +57,14 @@ export function Me() {
         <Link to="/premium" className="tile"><Icon name="crown" size={26} color="#f2a33a" /><span><span className="h2">Abonnement</span><br /><span style={{ color: '#3ccfb4', fontWeight: 600, fontSize: 14 }}>Passer à Premium</span></span></Link>
         <Link to="/parametres" className="tile"><Icon name="gear" size={26} /><span><span className="h2">Paramètres</span><br /><span className="muted">Langue, thème, compte</span></span></Link>
       </div>
+      <section className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }} aria-label="Mon Memo">
+        <MemoAvatar animal={profile?.memo_animal ?? null} size={56} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong><br />
+          <span className="muted">Ton Memo</span>
+        </div>
+        <Link to="/adoption?change=1" className="link">Changer</Link>
+      </section>
       <section className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <MemoAvatar animal={profile?.memo_animal ?? null} size={56} />
         <div><strong className="h2">Flammes</strong><br /><span className="muted">{streak} {streak > 1 ? 'jours' : 'jour'} de suite · {streakTitle(streak)}</span></div>

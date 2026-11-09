@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
@@ -164,9 +164,11 @@ export default function Onboarding() {
 /* Adoption d'un Memo : choisir un animal, puis lui donner un nom. */
 export function Adoption() {
   const nav = useNavigate()
+  const [params] = useSearchParams()
+  const changing = params.get('change') === '1'
   const { user, profile, refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
-  const [animal, setAnimal] = useState<string | null>(profile?.memo_animal ?? null)
+  const [animal, setAnimal] = useState<string | null>(changing ? null : profile?.memo_animal ?? null)
   const [name, setName] = useState(profile?.memo_name ?? '')
   const chosen = ANIMALS.find((a) => a.id === animal)
 
@@ -180,15 +182,16 @@ export function Adoption() {
       await refresh()
       return true
     })
-    if (ok) nav('/', { replace: true })
+    if (ok) nav(changing ? '/moi' : '/', { replace: true })
   }
 
   if (!chosen) {
     return (
       <main className="page" style={{ paddingBottom: 28 }}>
-        <span className="label-mono">Étape 2 sur 2</span>
-        <h1 className="h1 big">Adopte ton Memo</h1>
+        <span className="label-mono">{changing ? 'Mon Memo' : 'Étape 2 sur 2'}</span>
+        <h1 className="h1 big">{changing ? 'Change de Memo' : 'Adopte ton Memo'}</h1>
         <p className="lead">Il t'accompagne dans tes révisions. Choisis l'animal qui te ressemble.</p>
+        {changing && <Link to="/moi" className="link">Annuler</Link>}
         <div className="grid2">
           {ANIMALS.map((a) => (
             <button key={a.id} type="button" className="tile" style={{ alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 150 }} onClick={() => setAnimal(a.id)} aria-label={`Choisir ${a.name}`}>
