@@ -38,9 +38,38 @@ const SYSTEM: Record<Task, string> = {
     BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.'
 }
 
-// ---- Adaptateur fournisseur (Gemini). Pour changer de fournisseur, on ne modifie que cette fonction. ----
+// ---- Adaptateur fournisseur. Pour changer de fournisseur, on ne modifie que cette partie. ----
 interface Turn { role: 'user' | 'assistant'; content: string }
+
+// Fournisseur compatible OpenAI (OmniRoute, OpenRouter, Groq…) : actif quand AI_BASE_URL est définie.
+async function callOpenAICompatible(model: string, system: string, turns: Turn[], maxTokens: number) {
+  const base = (Deno.env.get('AI_BASE_URL') ?? '').replace(/\/+$/, '')
+  const key = Deno.env.get('AI_API_KEY')
+  if (!key) throw new Error('AI_API_KEY manquante')
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      temperature: 0.4,
+      messages: [{ role: 'system', content: system }, ...turns.map((t) => ({ role: t.role, content: t.content }))]
+    }),
+    signal: AbortSignal.timeout(55_000)
+  })
+  if (!res.ok) {
+    // On garde un extrait de la réponse du fournisseur dans les journaux pour comprendre la cause (jamais montré à l'étudiant).
+    const detail = (await res.text().catch(() => '')).slice(0, 300).replace(/\s+/g, ' ')
+    throw new Error(`fournisseur IA : HTTP ${res.status} (modèle « ${model} ») ${detail}`)
+  }
+  const data = await res.json()
+  const text = String(data.choices?.[0]?.message?.content ?? '').trim()
+  if (!text) throw new Error('réponse vide du fournisseur IA')
+  return { text, tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }
+}
+
 async function callModel(model: string, system: string, turns: Turn[], maxTokens: number) {
+  if (Deno.env.get('AI_BASE_URL')) return callOpenAICompatible(model, system, turns, maxTokens)
   const key = Deno.env.get('GEMINI_API_KEY')
   if (!key) throw new Error('GEMINI_API_KEY manquante')
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
