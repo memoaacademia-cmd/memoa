@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, Spinner, useAction, useLoad, Empty } from '../components/ui'
-import { allFaculties, PROMOTIONS } from '../data/academic'
+import { allFaculties, facultiesFor, PROMOTIONS } from '../data/academic'
 import { docDownloadUrl, listDocs, publishDoc, toggleFavorite } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { LibDoc } from '../lib/types'
@@ -42,7 +42,7 @@ export default function Library() {
       </div>
       <div className="chips" aria-label="Filtrer par faculté">
         <button type="button" className={'pill' + (fac === null ? ' on' : '')} onClick={() => setFac(null)}>Toutes les facultés</button>
-        {allFaculties().map((f) => (
+        {facultiesFor(profile?.university).map((f) => (
           <button key={f} type="button" className={'pill' + (fac === f ? ' on' : '')} onClick={() => setFac(f)}>{f.replace(/^(Faculté|École) (de la |de l’|de l'|du |des |de )?/, '')}</button>
         ))}
       </div>

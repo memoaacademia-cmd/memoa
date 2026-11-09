@@ -121,6 +121,7 @@ button { cursor: pointer; }
 .notice { border-radius: 14px; padding: 12px 14px; background: #1b2230; border: 1px solid #2b3550; color: #c9d3ff; font-size: 14px; line-height: 1.4; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.card.hero, .card.hero .h2 { color: #eef2f0; }
 .card.hero { border-radius: 26px; border-color: #4a3818; background: radial-gradient(120% 100% at 0% 0%, #3a2a0e 0%, #13211e 70%); }
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -189,3 +190,6 @@ button { cursor: pointer; }
   .shell { max-width: none; background: #fff; }
   .page { padding: 0; }
 }
+
+/* Bouton principal toujours visible au bas des formulaires longs */
+.sticky-action { position: sticky; bottom: 86px; display: flex; flex-direction: column; gap: 8px; padding: 10px 0 4px; background: linear-gradient(to top, var(--bg) 75%, transparent); z-index: 5; }

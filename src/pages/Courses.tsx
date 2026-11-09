@@ -1,16 +1,18 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { buildCoursePdf } from '../lib/pdf'
+import { extractPdfText } from '../lib/pdfimport'
+import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
+import type { Note } from '../lib/types'
 
+// On ne montre que les sources qui marchent ; audio, vidéo et photo viendront quand elles seront prêtes.
 const SOURCES = [
-  { id: 'texte', label: 'Texte', icon: 'text', ready: true },
-  { id: 'voix', label: 'Voix', icon: 'mic', ready: false },
-  { id: 'audio', label: 'Audio', icon: 'audio', ready: false },
-  { id: 'video', label: 'Vidéo', icon: 'video', ready: false },
-  { id: 'pdf', label: 'PDF', icon: 'pdf', ready: false },
-  { id: 'photo', label: 'Photo', icon: 'photo', ready: false }
+  { id: 'texte', label: 'Texte', icon: 'text' },
+  { id: 'voix', label: 'Dictée', icon: 'mic' },
+  { id: 'pdf', label: 'PDF', icon: 'pdf' }
 ]
 
 /* Onglet « Cours » : sert uniquement à créer un cours. Une fois créé, il est rangé dans le sac à dos. */
@@ -21,6 +23,39 @@ export function NewCourse() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [step, setStep] = useState('')
+  const [source, setSource] = useState('texte')
+  const [listening, setListening] = useState(false)
+  const dict = useRef<Dictation | null>(null)
+  const pdfInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => () => { dict.current?.stop() }, [])
+
+  function toggleDictation() {
+    if (listening) { dict.current?.stop(); return }
+    setError(null)
+    const d = startDictation(
+      (t) => setContent((c) => (c ? c + ' ' : '') + t),
+      (err) => {
+        setListening(false)
+        if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
+      }
+    )
+    if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
+    dict.current = d
+    setListening(true)
+  }
+
+  async function pickPdf(f: File | undefined) {
+    if (!f) return
+    if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
+    setStep('Lecture du PDF…')
+    const text = await run(() => extractPdfText(f))
+    setStep('')
+    if (text === undefined) return
+    if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
+    setContent(text.slice(0, 60000))
+    if (!title.trim()) setTitle(f.name.replace(/\.pdf$/i, '').slice(0, 80))
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -33,12 +68,13 @@ export function NewCourse() {
         setStep('Mise en forme de tes notes…')
         let structured = content.trim()
         try {
+          if (content.trim().length > 7500) throw new Error('trop long pour la mise en forme IA')
           const r = await askAI({ task: 'structure_notes', prompt: content.trim() })
           if (r.reply.trim()) structured = r.reply.trim()
         } catch {
           /* l'IA est facultative ici : on garde le texte tel quel plutôt que de perdre la note */
         }
-        await addNote(user.id, course.id, 'Notes de départ', structured, 'texte')
+        await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : 'texte')
       }
       return course.id
     })
@@ -48,9 +84,9 @@ export function NewCourse() {
 
   return (
     <main className="page">
-      <div className="topbar" style={{ justifyContent: 'space-between' }}>
-        <h1 className="h1">Nouveau cours</h1>
-        <Link to="/sac" className="btn ghost small">Mon sac à dos</Link>
+      <div className="topbar" style={{ justifyContent: 'space-between', gap: 8 }}>
+        <h1 className="h1" style={{ whiteSpace: 'nowrap' }}>Nouveau cours</h1>
+        <Link to="/sac" className="btn ghost small" style={{ whiteSpace: 'nowrap', flex: 'none' }}>Sac à dos</Link>
       </div>
       <p className="lead">Crée ton cours : il sera rangé dans ton sac à dos, où tu pourras l'enrichir et faire tes TP.</p>
 
@@ -63,22 +99,31 @@ export function NewCourse() {
         <span className="label-mono">Source</span>
         <div className="grid3">
           {SOURCES.map((s) => (
-            <button key={s.id} type="button" disabled={!s.ready} className={'tile' + (s.ready ? '' : ' soon')} style={{ minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: s.ready ? '#3ccfb4' : undefined }}>
-              <Icon name={s.icon} size={26} color="#3ccfb4" />
+            <button key={s.id} type="button" className="tile" aria-pressed={source === s.id} style={{ minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: source === s.id ? 'var(--btn)' : undefined }} onClick={() => { setSource(s.id); if (s.id === 'pdf') pdfInput.current?.click() }}>
+              <Icon name={s.icon} size={26} color="var(--book)" />
               <span style={{ fontWeight: 600, fontSize: 14 }}>{s.label}</span>
-              {!s.ready && <span className="muted" style={{ fontSize: 11 }}>Bientôt</span>}
             </button>
           ))}
         </div>
+        <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
+
+        {source === 'voix' && canDictate() && (
+          <button type="button" className={'btn ' + (listening ? 'amber' : 'ghost')} onClick={toggleDictation}>
+            <Icon name="mic" size={20} /> {listening ? 'J’écoute… touche pour arrêter' : 'Commencer la dictée'}
+          </button>
+        )}
+        {source === 'voix' && !canDictate() && <div className="notice">La dictée n'est pas disponible sur ce navigateur. Ouvre Memoa avec Chrome.</div>}
 
         <div className="field">
-          <label htmlFor="contenu">Colle ou écris tes notes (facultatif)</label>
+          <label htmlFor="contenu">{source === 'pdf' ? 'Texte lu dans ton PDF (tu peux le corriger)' : source === 'voix' ? 'Ce que tu as dicté (tu peux le corriger)' : 'Colle ou écris tes notes (facultatif)'}</label>
           <textarea id="contenu" className="textarea" rows={7} placeholder="Tu peux aussi créer le cours vide et ajouter des notes plus tard." value={content} onChange={(e) => setContent(e.target.value)} />
         </div>
 
         <ErrorBox message={error} />
-        <button className="btn" type="submit" disabled={busy}>{busy ? step || 'Un instant…' : 'Créer mon cours'}</button>
-        <span className="muted" style={{ textAlign: 'center' }}>Il sera rangé dans ton sac à dos.</span>
+        <div className="sticky-action">
+          <button className="btn" type="submit" disabled={busy}>{busy ? step || 'Un instant…' : 'Créer mon cours'}</button>
+          <span className="muted" style={{ textAlign: 'center' }}>Il sera rangé dans ton sac à dos.</span>
+        </div>
       </form>
     </main>
   )
@@ -110,19 +155,23 @@ export function Backpack() {
   )
 }
 
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }))
+function fileName(name: string) {
+  return (name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'cours') + '.pdf'
+}
+function saveBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = name.replace(/[^\p{L}\p{N} _-]/gu, '').trim() + '.md'
+  a.download = fileName(name)
   a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
 /* Un cours du sac à dos : toutes les actions sont ici (notes, TP, révision, téléchargement). */
 export function CourseDetail() {
   const { id = '' } = useParams()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const profileName = profile?.full_name ?? ''
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
   const { busy, error, setError, run } = useAction()
@@ -131,6 +180,18 @@ export function CourseDetail() {
   const [noteText, setNoteText] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+
+  useEffect(() => () => stopSpeaking(), [])
+
+  function listen() {
+    if (reading) { stopSpeaking(); setReading(false); return }
+    const all = notes.data ?? []
+    if (!all.length) return
+    const ok = speak((course.data?.title ?? '') + '. ' + all.map((n) => n.title + '. ' + n.content).join('\n'), () => setReading(false))
+    if (!ok) return setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
+    setReading(true)
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -142,6 +203,19 @@ export function CourseDetail() {
     if (ok) {
       setNoteTitle(''); setNoteText(''); setAdding(false); notes.reload(); course.reload()
     }
+  }
+
+  async function pdf(mode: 'read' | 'save') {
+    if (!course.data || !notes.data?.length) return
+    // La fenêtre de lecture s'ouvre tout de suite (sinon le téléphone la bloque), puis reçoit le PDF.
+    const w = mode === 'read' ? window.open('', '_blank') : null
+    const blob = await run(() => buildCoursePdf(course.data!.title, profileName, notes.data as Note[]))
+    if (!blob) { w?.close(); return }
+    if (w) {
+      const url = URL.createObjectURL(blob)
+      w.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } else saveBlob(course.data.title, blob)
   }
 
   async function revise() {
@@ -161,8 +235,9 @@ export function CourseDetail() {
         <button type="button" className="tile" onClick={() => setAdding((v) => !v)}><Icon name="plus" size={26} color="#3ccfb4" /><span className="h2">Ajouter une note</span></button>
         <Link to={`/tp/${id}`} className="tile"><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Assistant TP</span></Link>
         <button type="button" className="tile" onClick={revise} disabled={busy}><Icon name="check" size={26} color="#3ccfb4" /><span className="h2">{busy ? 'Un instant…' : 'Réviser'}</span></button>
-        <button type="button" className="tile" onClick={() => download(course.data!.title, `# ${course.data!.title}\n\n` + all.map((n) => `## ${n.title}\n\n${n.content}`).join('\n\n'))} disabled={!all.length}><Icon name="download" size={26} color="#3ccfb4" /><span className="h2">Télécharger</span></button>
-        <button type="button" className="tile soon" disabled><Icon name="headphones" size={26} color="#3ccfb4" /><span className="h2">Podcast</span><span className="muted">Bientôt</span></button>
+        <button type="button" className="tile" onClick={() => void pdf('read')} disabled={!all.length || busy}><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Lire le PDF</span></button>
+        <button type="button" className="tile" onClick={() => void pdf('save')} disabled={!all.length || busy}><Icon name="download" size={26} color="#3ccfb4" /><span className="h2">Télécharger</span></button>
+        {canSpeak() && <button type="button" className="tile" onClick={listen} disabled={!all.length}><Icon name="headphones" size={26} color="#3ccfb4" /><span className="h2">{reading ? 'Arrêter' : 'Écouter'}</span></button>}
       </div>
 
       <ErrorBox message={error} />

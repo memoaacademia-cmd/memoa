@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
 import { askAI, listConversations, listCourses, listMessages } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
@@ -17,6 +18,31 @@ export default function Assistant() {
   const [text, setText] = useState('')
   const [history, setHistory] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
+  const [listening, setListening] = useState(false)
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const dict = useRef<Dictation | null>(null)
+
+  useEffect(() => () => { dict.current?.stop(); stopSpeaking() }, [])
+
+  function toggleMic() {
+    if (listening) { dict.current?.stop(); return }
+    setError(null)
+    const d = startDictation(
+      (t) => setText((x) => (x ? x + ' ' : '') + t),
+      (err) => {
+        setListening(false)
+        if (err === 'not-allowed' || err === 'service-not-allowed') setError('Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.')
+      }
+    )
+    if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
+    dict.current = d
+    setListening(true)
+  }
+  function readAloud(m: Message) {
+    if (speakingId === m.id) { stopSpeaking(); setSpeakingId(null); return }
+    if (speak(m.content, () => setSpeakingId(null))) setSpeakingId(m.id)
+    else setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
+  }
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages, busy])
 
@@ -43,12 +69,12 @@ export default function Assistant() {
   return (
     <main className="page" style={{ paddingBottom: 170 }}>
       <div className="topbar" style={{ justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <MemoAvatar animal={profile?.memo_animal ?? null} size={40} />
           <div><div className="h1" style={{ fontSize: 20, lineHeight: '24px' }}>Assistant</div><span className="muted">avec {profile?.memo_name ?? 'Memo'}</span></div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn ghost small" onClick={() => setHistory((v) => !v)}><Icon name="clock" size={18} /> Historique</button>
+        <div style={{ display: 'flex', gap: 8, flex: 'none' }}>
+          <button type="button" className="icon-btn" onClick={() => setHistory((v) => !v)} aria-label="Historique des conversations"><Icon name="clock" size={20} /></button>
           <button type="button" className="icon-btn" style={{ background: '#3ccfb4', border: 0 }} onClick={fresh} aria-label="Nouvelle conversation"><Icon name="plus" size={20} color="#0b1513" stroke={2.4} /></button>
         </div>
       </div>
@@ -72,8 +98,16 @@ export default function Assistant() {
         </section>
       ) : (
         <div className="chat" aria-live="polite">
-          {!messages.length && <div className="chips" style={{ flexWrap: 'wrap' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => send(s)}>{s}</button>)}</div>}
-          {messages.map((m) => <div key={m.id} className={'bubble ' + (m.role === 'user' ? 'user' : 'ai')}>{m.content}</div>)}
+          {!messages.length && !courseId && <span className="muted">Choisis un cours ci-dessus pour que je m'appuie sur tes notes, ou pose-moi une question libre.</span>}
+          {!messages.length && !!courseId && <div className="chips" style={{ flexWrap: 'wrap' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => send(s)}>{s}</button>)}</div>}
+          {messages.map((m) => (
+            <div key={m.id} className={'bubble ' + (m.role === 'user' ? 'user' : 'ai')}>
+              {m.content}
+              {m.role !== 'user' && canSpeak() && (
+                <div><button type="button" className="link" style={{ fontSize: 14, marginTop: 8 }} onClick={() => readAloud(m)}>{speakingId === m.id ? 'Arrêter la lecture' : 'Écouter'}</button></div>
+              )}
+            </div>
+          ))}
           {busy && <div className="bubble ai muted">Réflexion…</div>}
           <div ref={bottom} />
         </div>
@@ -82,8 +116,9 @@ export default function Assistant() {
 
       <form onSubmit={submit} style={{ position: 'fixed', bottom: 78, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 440, padding: '10px 20px', display: 'flex', gap: 10, background: 'var(--bg)' }}>
         <label htmlFor="q" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ta question</label>
-        <input id="q" className="input" style={{ borderRadius: 26 }} placeholder="Pose une question sur ton cours" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
-        <button type="submit" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', background: '#3ccfb4', border: 0 }} aria-label="Envoyer" disabled={busy}><Icon name="send" color="#0b1513" stroke={2} /></button>
+        <input id="q" className="input" style={{ borderRadius: 26, minWidth: 0 }} placeholder="Pose une question sur ton cours" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
+        {canDictate() && <button type="button" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: listening ? 'var(--braise)' : undefined }} onClick={toggleMic} aria-label={listening ? 'Arrêter la dictée' : 'Dicter ma question'}><Icon name="mic" /></button>}
+        <button type="submit" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: '#3ccfb4', border: 0 }} aria-label="Envoyer" disabled={busy}><Icon name="send" color="#0b1513" stroke={2} /></button>
       </form>
     </main>
   )

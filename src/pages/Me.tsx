@@ -7,6 +7,12 @@ import { initialsOf } from '../lib/names'
 import { usePref } from '../lib/prefs'
 import { currentStreak, streakTitle } from '../lib/streak'
 
+const LANGUAGES: [string, string][] = [
+  ['fr', 'Français'], ['en', 'English'], ['ln', 'Lingála'], ['sw', 'Kiswahili'], ['kg', 'Kikongo'], ['lua', 'Tshiluba'],
+  ['pt', 'Português'], ['es', 'Español'], ['ar', 'العربية'], ['de', 'Deutsch'], ['it', 'Italiano'], ['nl', 'Nederlands'],
+  ['zh', '中文'], ['hi', 'हिन्दी'], ['ru', 'Русский'], ['tr', 'Türkçe'], ['yo', 'Yorùbá'], ['ha', 'Hausa'], ['am', 'አማርኛ'], ['rw', 'Kinyarwanda']
+]
+
 export function Me() {
   const { user, profile, refresh } = useAuth()
   const { error, run } = useAction()
@@ -86,6 +92,7 @@ export function Settings() {
   const nav = useNavigate()
   const { user, profile } = useAuth()
   const [theme, setTheme] = usePref('theme', 'dark')
+  const [lang, setLang] = usePref('lang', 'fr')
   const [notif, setNotif] = usePref('notif', '1')
   const [saver, setSaver] = usePref('datasaver', '0')
   const [confirm, setConfirm] = useState(false)
@@ -96,9 +103,13 @@ export function Settings() {
     <main className="page">
       <BackLink to="/moi" title="Paramètres" />
       <section className="card"><span className="label-mono">Langue</span>
-        {[['Français', true], ['English', false], ['Lingala', false], ['Swahili', false]].map(([l, ok]) => (
-          <div key={String(l)} className="list-row"><span>{l}</span>{ok ? <span className="badge">Actuelle</span> : <span className="muted">Bientôt</span>}</div>
-        ))}
+        <div className="field">
+          <label htmlFor="lang" className="muted">Langue de l'application</label>
+          <select id="lang" className="select" value={lang} onChange={(e) => setLang(e.target.value)}>
+            {LANGUAGES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+          </select>
+        </div>
+        {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : les autres langues arriveront peu à peu.</div>}
       </section>
       <section className="card"><span className="label-mono">Thème</span>
         <div className="chips" role="radiogroup" aria-label="Thème">

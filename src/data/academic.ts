@@ -142,3 +142,10 @@ export function allFaculties(): string[] {
   Object.values(CATALOGUE).forEach((u) => Object.keys(u).forEach((f) => set.add(f)))
   return [...set].sort((a, b) => a.localeCompare(b, 'fr'))
 }
+
+/** Facultés de l'université de l'étudiant d'abord, puis les autres. */
+export function facultiesFor(university: string | undefined): string[] {
+  const own = university && CATALOGUE[university] ? Object.keys(CATALOGUE[university]) : []
+  const rest = allFaculties().filter((f) => !own.includes(f))
+  return [...own.sort((a, b) => a.localeCompare(b, 'fr')), ...rest]
+}
