@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { NavBar, Spinner } from './components/ui'
 import { Confirmation, GoogleNext, Login, Signup } from './pages/Auth'
@@ -12,11 +12,6 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
-/** Écrans d'accès : thème clair (décision de design). */
-function LightShell({ children }: { children: ReactNode }) {
-  return <div className="shell light">{children}</div>
-}
-
 function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   const { user, profile, loading } = useAuth()
   const loc = useLocation()
@@ -24,15 +19,12 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
 
   if (need === 'public') {
     if (user && !user.needsPassword && loc.pathname !== '/google-suite' && profile?.memo_animal) return <Navigate to="/" replace />
-    return <LightShell><Outlet /></LightShell>
+    return <div className="shell"><Outlet /></div>
   }
   if (!user) return <Navigate to="/connexion" replace />
   // Compte créé via Google : mot de passe + téléphone d'abord.
   if (user.needsPassword) return <Navigate to="/google-suite" replace />
-  if (need === 'auth') {
-    const light = loc.pathname === '/inscription'
-    return light ? <LightShell><Outlet /></LightShell> : <div className="shell app"><Outlet /></div>
-  }
+  if (need === 'auth') return <div className="shell app"><Outlet /></div>
   if (!profile || !profile.university) return <Navigate to="/inscription" replace />
   if (!profile.memo_animal) return <Navigate to="/adoption" replace />
   return (
