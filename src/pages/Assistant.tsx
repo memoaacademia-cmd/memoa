@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import RichText from '../components/RichText'
 import { ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
 import { askAI, listConversations, listCourses, listMessages } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -6,6 +7,9 @@ import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
+
+/** Passe à true quand le secret SEARCH_API_KEY (Tavily) est présent dans Supabase : le bouton réapparaît. */
+const WEB_SEARCH_ENABLED = false
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
 
@@ -21,7 +25,7 @@ export default function Assistant() {
   const [history, setHistory] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
   const [listening, setListening] = useState(false)
-  const [web, setWeb] = useState(true)
+  const [web, setWeb] = useState(WEB_SEARCH_ENABLED)
   const [attach, setAttach] = useState<{ name: string; text: string } | null>(null)
   const [menu, setMenu] = useState(false)
   const [reading, setReading] = useState('')
@@ -111,9 +115,9 @@ export default function Assistant() {
         </select>
       </div>
 
-      <div className="chips">
+      {WEB_SEARCH_ENABLED && <div className="chips">
         <button type="button" role="switch" aria-checked={web} className={'pill' + (web ? ' on' : '')} onClick={() => setWeb((v) => !v)}>Recherche web : {web ? 'oui' : 'non'}</button>
-      </div>
+      </div>}
 
       {history ? (
         <section className="card" aria-label="Historique des conversations">
@@ -130,7 +134,7 @@ export default function Assistant() {
           {!messages.length && !!courseId && <div className="chips" style={{ flexWrap: 'wrap' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => send(s)}>{s}</button>)}</div>}
           {messages.map((m) => (
             <div key={m.id} className={'bubble ' + (m.role === 'user' ? 'user' : 'ai')}>
-              {m.content}
+              {m.role === 'user' ? m.content : <RichText text={m.content} />}
               {m.role !== 'user' && canSpeak() && (
                 <div><button type="button" className="link" style={{ fontSize: 14, marginTop: 8 }} onClick={() => readAloud(m)}>{speakingId === m.id ? 'Arrêter la lecture' : 'Écouter'}</button></div>
               )}

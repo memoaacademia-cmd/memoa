@@ -18,6 +18,22 @@ function clean(s: string): string {
     .replace(/[^\n\x20-\x7EÀ-ÿ]/g, '')
 }
 
+/** Retire ce que l'IA glisse parfois autour d'un texte : phrases d'introduction ou de conclusion, séparateurs --- et consignes entre crochets. */
+export function stripAiNoise(text: string): string {
+  const lines = text.replace(/\r/g, '').split('\n')
+  const chatty = /^(voici|bien sûr|bien sur|d'accord|certainement|avec plaisir|j'espère|n'hésite|n'hesite|si tu veux|souhaites-tu|veux-tu|dis-moi|je reste|peux-tu)/i
+  const out: string[] = []
+  for (const raw of lines) {
+    const t = raw.trim()
+    if (/^[-_*=]{3,}$/.test(t)) continue
+    if (/^\[[^\]]*(saut de page|insérer|inserer|insert|page break)[^\]]*\]$/i.test(t)) continue
+    out.push(raw.replace(/\[(insérer|inserer|insert)[^\]]*\]/gi, ''))
+  }
+  while (out.length && (!out[0].trim() || chatty.test(out[0].trim()))) out.shift()
+  while (out.length && (!out[out.length - 1].trim() || chatty.test(out[out.length - 1].trim()))) out.pop()
+  return out.join('\n')
+}
+
 const W = 210
 const H = 297
 const M = 20
@@ -56,7 +72,7 @@ function writer(doc: Doc) {
   }
   /** Écrit un texte simple (titres #, listes - et 1.) comme l'IA les produit. */
   const body = (content: string) => {
-    for (const raw of content.split('\n')) {
+    for (const raw of stripAiNoise(content).split('\n')) {
       const t = raw.trim()
       if (!t) { y += 2.5; continue }
       const h = /^(#{1,4})\s+(.*)$/.exec(t)
@@ -172,15 +188,30 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
 
   /** Texte centré, avec espacement entre les lettres si demandé ; renvoie le y après la dernière ligne. */
   const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: [number, number, number], space = 0, maxW = 140, up = false) => {
-    doc.setFont('helvetica', style)
-    doc.setFontSize(size)
-    doc.setTextColor(color[0], color[1], color[2])
     const t = clean(up ? text.toUpperCase() : text)
-    const lh = size * 0.5
-    const lines = doc.splitTextToSize(t, maxW) as string[]
+    doc.setFont('helvetica', style)
+    doc.setTextColor(color[0], color[1], color[2])
+    // Largeur réelle d'une ligne, espacement entre lettres compris.
+    const widthOf = (l: string, sz: number) => {
+      doc.setFontSize(sz)
+      return doc.getTextWidth(l) + space * Math.max(0, l.length - 1) * 0.3528
+    }
+    // Retour à la ligne mot par mot sur la vraie largeur.
+    const words = t.split(/\s+/)
+    const lines: string[] = []
+    let cur = ''
+    for (const wd of words) {
+      const test = cur ? `${cur} ${wd}` : wd
+      if (cur && widthOf(test, size) > maxW) { lines.push(cur); cur = wd } else cur = test
+    }
+    if (cur) lines.push(cur)
+    // Si un mot seul est trop large, on réduit la taille.
+    let sz = size
+    while (sz > 7 && lines.some(l => widthOf(l, sz) > maxW)) sz -= 0.5
+    doc.setFontSize(sz)
+    const lh = sz * 0.5
     lines.forEach((l, i) => {
-      const width = doc.getTextWidth(l) + space * Math.max(0, l.length - 1) * 0.3528
-      doc.text(l, cx - width / 2, y + i * lh, space ? { charSpace: space } : undefined)
+      doc.text(l, cx - widthOf(l, sz) / 2, y + i * lh, space ? { charSpace: space } : undefined)
     })
     return y + lines.length * lh
   }
@@ -202,7 +233,7 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   y = center('RÉPUBLIQUE DÉMOCRATIQUE DU CONGO', 10, 'bold', y, [60, 60, 70], 1.2, 150)
   rule(y + 5, 30, 0.7)
   y = center(universityOnly(c.university), 15, 'bold', y + 16, NAVY, 0.3, 150, true)
-  y = center(`${c.faculty}`, 11.5, 'bold', y + 3, GOLD, 0.8, 150, true)
+  y = center(`${c.faculty}`, 11.5, 'bold', y + 3, GOLD, 0.5, 140, true)
   if (c.department) y = center(`Département : ${c.department}`, 10, 'normal', y + 3, [90, 90, 100], 0, 150)
 
   // Logo (hauteur max 55 mm, largeur max 70 mm)
@@ -211,13 +242,13 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
     const ratio = logo.w / logo.h
     let lw = 70
     let lh = lw / ratio
-    if (lh > 55) { lh = 55; lw = lh * ratio }
+    if (lh > 48) { lh = 48; lw = lh * ratio }
     doc.addImage(logo.data, 'PNG', cx - lw / 2, y + 12, lw, lh)
     logoBottom = y + 12 + lh
   }
 
   // Bandeau bleu : type de document et titre
-  const bandTop = Math.max(logoBottom + 14, 150)
+  const bandTop = Math.max(logoBottom + 10, 132)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
   const titleLines = doc.splitTextToSize(clean(c.title).toUpperCase(), 148) as string[]
@@ -234,32 +265,33 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   doc.setTextColor(255, 255, 255)
   titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, bandTop + 18 + i * 9.5))
 
-  // Bloc « présenté par » : étiquettes dorées, valeurs bleues, trait vertical doré
+  // Bloc « présenté par » : étiquettes dorées à gauche, trait vertical doré, valeurs bleues à droite
   const rows: Array<[string, string]> = [['PRÉSENTÉ PAR', c.student]]
   if (c.course) rows.push(['COURS', c.course])
   rows.push(['PROMOTION', [c.promotion, c.department].filter(Boolean).join(' / ')])
   if (c.vacation) rows.push(['VACATION', c.vacation.replace(/^Vacation\s+/i, '')])
-  let ry = bandTop + bandH + 22
-  const lineX = 78
+  const lineX = 74
+  const valueW = W - lineX - 28
+  const yearY = H - 46
+  let ry = bandTop + bandH + 16
   const startY = ry - 5
   rows.forEach(([label, value]) => {
+    // Étiquette alignée à droite, collée avant le trait (sans espacement de lettres : largeur exacte)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.5)
     doc.setTextColor(GOLD[0], GOLD[1], GOLD[2])
-    const lw = doc.getTextWidth(label) + 1.6 * (label.length - 1) * 0.3528
-    doc.text(label, lineX - 5 - lw, ry, { charSpace: 1.6 })
-    doc.setFontSize(11.5)
+    doc.text(label, lineX - 6, ry, { align: 'right' })
+    doc.setFontSize(11)
     doc.setTextColor(NAVY[0], NAVY[1], NAVY[2])
-    const vl = doc.splitTextToSize(clean(value), W - lineX - 30) as string[]
-    vl.forEach((l, i) => doc.text(l, lineX + 5, ry + i * 5.2))
-    ry += Math.max(1, vl.length) * 5.2 + 5
+    const vl = doc.splitTextToSize(clean(value), valueW) as string[]
+    vl.forEach((l, i) => doc.text(l, lineX + 6, ry + i * 5))
+    ry += Math.max(1, vl.length) * 5 + 4.5
   })
   doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2])
   doc.setLineWidth(0.5)
-  doc.line(lineX, startY, lineX, ry - 8)
+  doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
 
   // Année académique entre deux filets dorés
-  const yearY = H - 46
   rule(yearY - 7, 46, 0.5)
   center(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`, 10, 'bold', yearY, NAVY, 1.6, 150)
   rule(yearY + 6, 46, 0.5)

@@ -20,6 +20,8 @@ export interface Course {
   title: string
   created_at: string
   notes_count: number
+  /** Rempli quand le cours est dans la corbeille (restaurable 30 jours). */
+  deleted_at?: string | null
 }
 
 export interface Note {

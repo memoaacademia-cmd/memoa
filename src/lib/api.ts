@@ -205,10 +205,13 @@ export async function uploadAvatar(userId: string, original: File): Promise<stri
 
 /* ------------------------ COURS / SAC À DOS ------------------------ */
 
+export const TRASH_DAYS = 30
+
 export async function listCourses(userId: string): Promise<Course[]> {
   if (!isConfigured) {
     const db = loadDemo()
     return db.courses
+      .filter((c) => !c.deleted_at)
       .map((c) => ({ ...c, notes_count: db.notes.filter((n) => n.course_id === c.id).length }))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
   }
@@ -216,11 +219,52 @@ export async function listCourses(userId: string): Promise<Course[]> {
   const { data, error } = await sb()
     .from('courses')
     .select('id,title,created_at,notes(count)')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []).map((c: any) => ({
     id: c.id, title: c.title, created_at: c.created_at, notes_count: c.notes?.[0]?.count ?? 0
   }))
+}
+
+/** Cours dans la corbeille (30 jours). Efface d'abord pour de bon ceux dont le délai est passé. */
+export async function listTrashedCourses(): Promise<Course[]> {
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString()
+  if (!isConfigured) {
+    const db = loadDemo()
+    const gone = db.courses.filter((c) => c.deleted_at && c.deleted_at < cutoff).map((c) => c.id)
+    if (gone.length) {
+      db.courses = db.courses.filter((c) => !gone.includes(c.id))
+      db.notes = db.notes.filter((n) => !gone.includes(n.course_id))
+      saveDemo(db)
+    }
+    return db.courses
+      .filter((c) => c.deleted_at)
+      .map((c) => ({ ...c, notes_count: db.notes.filter((n) => n.course_id === c.id).length }))
+  }
+  await sb().from('courses').delete().lt('deleted_at', cutoff) // les règles RLS limitent à ses propres cours
+  const { data, error } = await sb()
+    .from('courses')
+    .select('id,title,created_at,deleted_at,notes(count)')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((c: any) => ({
+    id: c.id, title: c.title, created_at: c.created_at, deleted_at: c.deleted_at, notes_count: c.notes?.[0]?.count ?? 0
+  }))
+}
+
+/** Met un cours à la corbeille (restaurable pendant 30 jours) ou le restaure. */
+export async function setCourseTrashed(id: string, trashed: boolean): Promise<void> {
+  const value = trashed ? new Date().toISOString() : null
+  if (!isConfigured) {
+    const db = loadDemo()
+    const c = db.courses.find((x) => x.id === id)
+    if (c) { c.deleted_at = value; saveDemo(db) }
+    return
+  }
+  const { error } = await sb().from('courses').update({ deleted_at: value }).eq('id', id)
+  if (error) throw error
 }
 
 export async function getCourse(id: string): Promise<Course | null> {

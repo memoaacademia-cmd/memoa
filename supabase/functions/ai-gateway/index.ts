@@ -40,7 +40,8 @@ const SYSTEM: Record<Task, string> = {
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
   tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes.",
   tp_write:
-    BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.'
+    BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.' +
+      " Réponds uniquement avec le document demandé : aucune phrase d'introduction (« Voici… »), aucune conclusion adressée à l'étudiant, aucune ligne de séparation ---, aucune consigne entre crochets comme [Insérer un saut de page]. N'écris ni astérisques de mise en forme ni symboles décoratifs."
 }
 
 // ---- Recherche web (facultative) : active seulement si le secret SEARCH_API_KEY existe (service Tavily). ----

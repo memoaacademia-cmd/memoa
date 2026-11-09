@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import RichText from '../components/RichText'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
-import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, transcribeAudio } from '../lib/api'
+import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdf } from '../lib/pdf'
+import { buildCoursePdf, buildTpPdf, stripAiNoise } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
@@ -18,6 +19,18 @@ const SOURCES = [
   { id: 'photo', label: 'Photo', icon: 'photo' },
   { id: 'audio', label: 'Audio', icon: 'audio' }
 ]
+
+// « Ajouter une note » propose toutes les méthodes : on y ajoute l'enregistrement direct et la vidéo (réduite à sa voix par la transcription).
+const NOTE_SOURCES = [
+  { id: 'texte', label: 'Texte', icon: 'text' },
+  { id: 'voix', label: 'Dictée', icon: 'mic' },
+  { id: 'enreg', label: 'Enregistrer', icon: 'mic' },
+  { id: 'audio', label: 'Audio', icon: 'audio' },
+  { id: 'video', label: 'Vidéo', icon: 'video' },
+  { id: 'pdf', label: 'PDF', icon: 'pdf' },
+  { id: 'photo', label: 'Photo', icon: 'photo' }
+]
+const MAX_MEDIA_MB = 20
 
 /* Onglet « Cours » : sert uniquement à créer un cours. Une fois créé, il est rangé dans le sac à dos. */
 export function NewCourse() {
@@ -160,14 +173,25 @@ export function NewCourse() {
   )
 }
 
-/* Sac à dos : l'étagère de tous les cours, chacun nommé. */
+/* Sac à dos : l'étagère de tous les cours, chacun nommé. Corbeille de 30 jours pour les cours supprimés. */
 export function Backpack() {
   const { user } = useAuth()
-  const { data, loading, error } = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
+  const { data, loading, error, reload } = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
+  const trash = useLoad(listTrashedCourses, [])
+  const { busy, error: actionError, run } = useAction()
+  const [showTrash, setShowTrash] = useState(false)
+  const trashed = trash.data ?? []
+
+  async function restore(id: string) {
+    const ok = await run(async () => { await setCourseTrashed(id, false); return true })
+    if (ok) { trash.reload(); reload() }
+  }
+  const daysLeft = (d?: string | null) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(d ?? Date.now()).getTime()) / 86400000))
+
   return (
     <main className="page">
       <BackLink to="/cours" title="Mon sac à dos" />
-      <ErrorBox message={error} />
+      <ErrorBox message={error || actionError} />
       {loading ? <Spinner /> : !data?.length ? (
         <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici.">
           <Link to="/cours" className="btn small">Créer un cours</Link>
@@ -181,6 +205,24 @@ export function Backpack() {
             </Link>
           ))}
         </div>
+      )}
+      {trashed.length > 0 && (
+        <>
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setShowTrash((v) => !v)} aria-expanded={showTrash}>
+            Corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
+          </button>
+          {showTrash && (
+            <section className="card" aria-label="Cours supprimés">
+              <span className="muted">Un cours supprimé reste ici {TRASH_DAYS} jours, puis il est effacé pour de bon.</span>
+              {trashed.map((c) => (
+                <div key={c.id} className="list-row" style={{ justifyContent: 'space-between', gap: 10 }}>
+                  <span style={{ minWidth: 0 }}><b>{c.title}</b><br /><span className="muted">{daysLeft(c.deleted_at)} j restants</span></span>
+                  <button type="button" className="btn ghost small" disabled={busy} onClick={() => void restore(c.id)}>Restaurer</button>
+                </div>
+              ))}
+            </section>
+          )}
+        </>
       )}
     </main>
   )
@@ -212,8 +254,107 @@ export function CourseDetail() {
   const [open, setOpen] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
+  const nav = useNavigate()
+  const [noteSource, setNoteSource] = useState('texte')
+  const [noteStep, setNoteStep] = useState('')
+  const [listening, setListening] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const dict = useRef<Dictation | null>(null)
+  const recorder = useRef<MediaRecorder | null>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
+  const audioRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => () => stopSpeaking(), [])
+  useEffect(() => () => { stopSpeaking(); dict.current?.stop(); recorder.current?.stream.getTracks().forEach((t) => t.stop()) }, [])
+
+  function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
+
+  function toggleDictation() {
+    if (listening) { dict.current?.stop(); return }
+    setError(null)
+    const d = startDictation(
+      (t) => setNoteText((x) => (x ? x + ' ' : '') + t),
+      (err) => {
+        setListening(false)
+        if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
+      }
+    )
+    if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
+    dict.current = d
+    setListening(true)
+  }
+
+  async function transcribeFile(f: File, kind: 'audio' | 'video') {
+    if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
+    setNoteStep('Transcription en cours… cela peut prendre une minute.')
+    const text = await run(() => transcribeAudio(f))
+    setNoteStep('')
+    if (text === undefined) return
+    appendText(text)
+    if (!noteTitle.trim()) setNoteTitle(f.name.replace(/\.[^.]+$/, '').slice(0, 80))
+  }
+
+  async function toggleRecording() {
+    if (recording) { recorder.current?.stop(); return }
+    setError(null)
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return setError("L'enregistrement n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const chunks: Blob[] = []
+      const rec = new MediaRecorder(stream)
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        setRecording(false)
+        const type = rec.mimeType || 'audio/webm'
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'
+        const file = new File(chunks, `enregistrement.${ext}`, { type })
+        if (file.size) void transcribeFile(file, 'audio')
+      }
+      recorder.current = rec
+      rec.start()
+      setRecording(true)
+    } catch {
+      setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
+    }
+  }
+
+  async function pickPdf(f: File | undefined) {
+    if (!f) return
+    if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
+    setNoteStep('Lecture du PDF…')
+    const text = await run(() => extractPdfText(f))
+    setNoteStep('')
+    if (text === undefined) return
+    if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
+    appendText(text)
+    if (!noteTitle.trim()) setNoteTitle(f.name.replace(/\.pdf$/i, '').slice(0, 80))
+  }
+
+  async function pickPhoto(f: File | undefined) {
+    if (!f) return
+    const text = await run(() => readPhotoText(f, setNoteStep))
+    setNoteStep('')
+    if (text === undefined) return
+    if (text.length < 15) return setError("Je n'arrive pas à lire de texte sur cette photo. Prends-la bien droite, avec de la lumière, ou choisis un texte imprimé.")
+    appendText(text)
+  }
+
+  function chooseSource(id: string) {
+    setNoteSource(id)
+    setError(null)
+    if (id === 'pdf') pdfRef.current?.click()
+    if (id === 'photo') photoRef.current?.click()
+    if (id === 'audio') audioRef.current?.click()
+    if (id === 'video') videoRef.current?.click()
+  }
+
+  async function trashCourse() {
+    if (!window.confirm(`Supprimer « ${course.data?.title ?? 'ce cours'} » ? Tu pourras le restaurer pendant ${TRASH_DAYS} jours depuis la corbeille du sac à dos.`)) return
+    const ok = await run(async () => { await setCourseTrashed(id, true); return true })
+    if (ok) nav('/sac')
+  }
 
   function listen() {
     if (reading) { stopSpeaking(); setReading(false); return }
@@ -227,12 +368,14 @@ export function CourseDetail() {
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!user) return
+    dict.current?.stop()
+    const src = noteSource === 'enreg' ? 'audio' : noteSource === 'video' ? 'audio' : noteSource === 'voix' ? 'voix' : noteSource
     const ok = await run(async () => {
-      await addNote(user.id, id, noteTitle, noteText.trim())
+      await addNote(user.id, id, noteTitle, noteText.trim(), src)
       return true
     })
     if (ok) {
-      setNoteTitle(''); setNoteText(''); setAdding(false); notes.reload(); course.reload()
+      setNoteTitle(''); setNoteText(''); setNoteSource('texte'); setAdding(false); notes.reload(); course.reload()
     }
   }
 
@@ -275,13 +418,36 @@ export function CourseDetail() {
 
       {adding && (
         <form onSubmit={save} className="card" noValidate>
+          <span className="label-mono">Comment veux-tu ajouter ta note ?</span>
+          <div className="grid3">
+            {NOTE_SOURCES.map((o) => (
+              <button key={o.id} type="button" className="tile" aria-pressed={noteSource === o.id} style={{ minHeight: 84, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: noteSource === o.id ? 'var(--btn)' : undefined }} onClick={() => chooseSource(o.id)}>
+                <Icon name={o.icon} size={24} color="var(--book)" />
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{o.label}</span>
+              </button>
+            ))}
+          </div>
+          <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
+          <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+          <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
+          <input ref={videoRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
+
+          {noteSource === 'voix' && (canDictate()
+            ? <button type="button" className={'btn ' + (listening ? 'amber' : 'ghost')} onClick={toggleDictation}><Icon name="mic" size={20} /> {listening ? 'J’écoute… touche pour arrêter' : 'Commencer la dictée'}</button>
+            : <div className="notice">La dictée n'est pas disponible sur ce navigateur. Ouvre Memoa avec Chrome.</div>)}
+          {noteSource === 'enreg' && <button type="button" className={'btn ' + (recording ? 'amber' : 'ghost')} onClick={() => void toggleRecording()} disabled={!!noteStep}><Icon name="mic" size={20} /> {recording ? 'Enregistrement… touche pour arrêter' : 'Démarrer l’enregistrement'}</button>}
+          {noteSource === 'audio' && <div className="notice">Choisis un enregistrement (MP3, M4A, WAV… {MAX_MEDIA_MB} Mo maximum). <button type="button" className="link" onClick={() => audioRef.current?.click()}>Choisir un audio</button></div>}
+          {noteSource === 'video' && <div className="notice">Je garde uniquement la voix de la vidéo et je la transforme en texte ({MAX_MEDIA_MB} Mo maximum : préfère une vidéo courte). <button type="button" className="link" onClick={() => videoRef.current?.click()}>Choisir une vidéo</button></div>}
+          {noteSource === 'photo' && <div className="notice">Je lis le texte imprimé ou bien écrit. L'écriture à la main est lue moins bien : relis et corrige. <button type="button" className="link" onClick={() => photoRef.current?.click()}>Ajouter une photo</button></div>}
+          {noteStep && <span className="muted">{noteStep}</span>}
+
           <div className="field"><label htmlFor="nt">Titre</label><input id="nt" className="input" maxLength={80} placeholder="Ex. Chapitre 2" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} /></div>
-          <div className="field"><label htmlFor="nc">Ta note</label><textarea id="nc" className="textarea" rows={6} value={noteText} onChange={(e) => setNoteText(e.target.value)} /></div>
-          <button className="btn" type="submit" disabled={busy}>Enregistrer la note</button>
+          <div className="field"><label htmlFor="nc">Ta note (tu peux la corriger)</label><textarea id="nc" className="textarea" rows={6} value={noteText} onChange={(e) => setNoteText(e.target.value)} /></div>
+          <button className="btn" type="submit" disabled={busy || recording}>Enregistrer la note</button>
         </form>
       )}
 
-      {quiz && <section className="card"><span className="label-mono">Révision</span><div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{quiz}</div></section>}
+      {quiz && <section className="card"><span className="label-mono">Révision</span><div style={{ lineHeight: 1.5 }}><RichText text={quiz} /></div></section>}
 
       <span className="label-mono">Mes notes</span>
       {notes.loading ? <Spinner /> : !all.length ? (
@@ -292,9 +458,11 @@ export function CourseDetail() {
             <span className="h2">{n.title}</span><br />
             <span className="muted">{new Date(n.created_at).toLocaleDateString('fr-FR')} · {open === n.id ? 'Masquer' : 'Lire'}</span>
           </button>
-          {open === n.id && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.content}</div>}
+          {open === n.id && <div style={{ lineHeight: 1.5 }}><RichText text={n.content} /></div>}
         </article>
       ))}
+
+      <button type="button" className="link" style={{ alignSelf: 'center', marginTop: 16, color: 'var(--danger, #c0392b)' }} onClick={() => void trashCourse()} disabled={busy}>Supprimer ce cours</button>
     </main>
   )
 }
@@ -327,7 +495,7 @@ export function TpAssistant() {
   }
   async function write() {
     const r = await run(() => askAI({ task: 'tp_write', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}\nPlan validé :\n${plan}` }))
-    if (r) setDoc(r.reply)
+    if (r) setDoc(stripAiNoise(r.reply))
   }
 
   return (
