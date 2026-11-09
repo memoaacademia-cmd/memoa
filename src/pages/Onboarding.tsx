@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ErrorBox, Logo, MemoAvatar, useAction } from '../components/ui'
+import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
 import { saveProfile } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { composeFullName, titleCase } from '../lib/names'
 import type { Profile } from '../lib/types'
 
 /** Retrouve la valeur à afficher dans la liste : la valeur connue, sinon « Autre » + texte libre. */
@@ -13,7 +14,9 @@ function initial(p: Profile | null) {
   const facKnown = univKnown && CATALOGUE[p!.university][p!.faculty]
   const depKnown = facKnown && CATALOGUE[p!.university][p!.faculty].includes(p!.department)
   return {
-    name: p?.full_name ?? '',
+    last: p?.last_name ?? '',
+    post: p?.post_name ?? '',
+    first: p?.first_name ?? '',
     univ: !p?.university ? Object.keys(CATALOGUE)[0] : univKnown ? p.university : OTHER_UNIV,
     univTxt: p?.university && !univKnown ? p.university : '',
     fac: !p?.faculty ? '' : facKnown ? p.faculty : OTHER_FAC,
@@ -21,7 +24,7 @@ function initial(p: Profile | null) {
     dep: !p?.department ? '' : depKnown ? p.department : OTHER_DEP,
     depTxt: p?.department && !depKnown ? p.department : '',
     promo: p?.promotion ?? 'L1',
-    vac: p?.vacation ?? 'Vacation jour'
+    vac: p?.vacation ?? ''
   }
 }
 
@@ -55,13 +58,18 @@ export default function Onboarding() {
     const university = (univAutre ? f.univTxt : f.univ).trim()
     const faculty = (facAutre ? f.facTxt : f.fac).trim()
     const department = (depAutre ? f.depTxt : f.dep).trim()
-    if (f.name.trim().length < 2) return setError('Entre ton nom complet.')
+    const last = titleCase(f.last)
+    const post = titleCase(f.post)
+    const first = titleCase(f.first)
+    if (last.length < 2) return setError('Écris ton nom (2 lettres minimum).')
+    if (first.length < 2) return setError('Écris ton prénom (2 lettres minimum).')
     if (!university) return setError("Écris le nom de ton université.")
     if (!faculty) return setError(facAutre ? 'Écris le nom de ta faculté.' : 'Choisis ta faculté.')
     if (!department) return setError(depAutre ? 'Écris le nom de ton département.' : 'Choisis ton département.')
     const ok = await run(async () => {
       await saveProfile(user.id, {
-        full_name: f.name.trim(),
+        full_name: composeFullName(last, post, first),
+        last_name: last, post_name: post, first_name: first,
         phone: profile?.phone ?? user.phone,
         university, faculty, department,
         promotion: f.promo, vacation: f.vac
@@ -74,8 +82,8 @@ export default function Onboarding() {
 
   return (
     <main className="page auth">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Logo size={32} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+        <Brand size={44} />
         <span className="label-mono">{editing ? 'Mon parcours' : 'Étape 1 sur 2'}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -84,8 +92,16 @@ export default function Onboarding() {
       </div>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
         <div className="field">
-          <label htmlFor="nom">Nom complet</label>
-          <input id="nom" className="input" autoComplete="name" value={f.name} onChange={(e) => set({ name: e.target.value })} />
+          <label htmlFor="nom">Nom</label>
+          <input id="nom" className="input" autoComplete="family-name" placeholder="ex. Kasongo" value={f.last} onChange={(e) => set({ last: e.target.value })} />
+        </div>
+        <div className="field">
+          <label htmlFor="postnom">Post-nom</label>
+          <input id="postnom" className="input" autoComplete="additional-name" placeholder="ex. Mutombo" value={f.post} onChange={(e) => set({ post: e.target.value })} />
+        </div>
+        <div className="field">
+          <label htmlFor="prenom">Prénom</label>
+          <input id="prenom" className="input" autoComplete="given-name" placeholder="ex. Jean" value={f.first} onChange={(e) => set({ first: e.target.value })} />
         </div>
 
         <div className="field">
@@ -129,8 +145,9 @@ export default function Onboarding() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="vac">Vacation</label>
+            <label htmlFor="vac">Vacation (facultatif)</label>
             <select id="vac" className="select" value={f.vac} onChange={(e) => set({ vac: e.target.value })}>
+              <option value="">Je ne précise pas</option>
               {VACATIONS.map((v) => <option key={v}>{v}</option>)}
             </select>
           </div>

@@ -25,6 +25,17 @@ export function Brand({ size = 56, center = false }: { size?: number; center?: b
 
 export function MemoAvatar({ animal, size = 64 }: { animal: string | null; size?: number }) {
   const a = ANIMALS.find((x) => x.id === animal) ?? ANIMALS[0]
+  // Pas d'illustration : l'emoji est posé dans un rond doux, pour que tous les Memo aient la même taille.
+  if (!a.svg) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(size * 0.56), lineHeight: 1 }}
+      >
+        {a.emoji}
+      </span>
+    )
+  }
   // Les illustrations sont des constantes statiques du dépôt (jamais du contenu utilisateur).
   return <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden="true" dangerouslySetInnerHTML={{ __html: a.svg }} />
 }

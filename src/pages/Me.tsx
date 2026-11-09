@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { BackLink, ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
 import { hasPremium, listActivity, listPayments, PRICES, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { initialsOf } from '../lib/names'
 import { usePref } from '../lib/prefs'
 import { currentStreak, streakTitle } from '../lib/streak'
 
@@ -12,7 +13,7 @@ export function Me() {
   const act = useLoad(() => listActivity(user?.id ?? ''), [user?.id])
   const file = useRef<HTMLInputElement>(null)
   const streak = currentStreak(act.data ?? [])
-  const initials = (profile?.full_name ?? '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()
+  const initials = initialsOf(profile)
 
   async function pick(f: File | undefined) {
     if (!f || !user) return
@@ -25,7 +26,7 @@ export function Me() {
 
   const rows: [string, string | undefined][] = [
     ['Université', profile?.university], ['Faculté', profile?.faculty], ['Département', profile?.department],
-    ['Promotion', profile?.promotion], ['Vacation', profile?.vacation]
+    ['Promotion', profile?.promotion], ['Vacation', profile?.vacation || 'Non précisée']
   ]
 
   return (

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Icon, MemoAvatar, useLoad } from '../components/ui'
 import { listActivity, listCourses } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { firstNameOf } from '../lib/names'
 import { currentStreak, factOfTheDay, lastWeek, memoMood, streakTitle } from '../lib/streak'
 
 export default function Home() {
@@ -12,7 +13,7 @@ export default function Home() {
   const days = act.data ?? []
   const streak = currentStreak(days)
   const mood = memoMood(days)
-  const first = (profile?.full_name ?? '').split(' ')[0] || 'toi'
+  const first = firstNameOf(profile) || 'toi'
   const last = courses.data?.[0]
 
   return (

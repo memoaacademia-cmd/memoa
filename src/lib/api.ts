@@ -168,8 +168,8 @@ export async function saveProfile(userId: string, patch: Partial<Omit<Profile, '
     let p = db.profiles.find((x) => x.id === userId)
     if (!p) {
       p = {
-        id: userId, full_name: '', phone: null, university: '', faculty: '', department: '',
-        promotion: 'L1', vacation: 'Vacation jour', avatar_url: null, memo_animal: null, memo_name: null
+        id: userId, full_name: '', last_name: '', post_name: '', first_name: '', phone: null, university: '', faculty: '', department: '',
+        promotion: 'L1', vacation: '', avatar_url: null, memo_animal: null, memo_name: null
       }
       db.profiles.push(p)
     }

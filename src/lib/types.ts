@@ -1,6 +1,9 @@
 export interface Profile {
   id: string
   full_name: string
+  last_name: string
+  post_name: string
+  first_name: string
   phone: string | null
   university: string
   faculty: string

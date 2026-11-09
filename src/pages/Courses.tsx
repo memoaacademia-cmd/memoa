@@ -241,7 +241,7 @@ export function TpAssistant() {
             <small>République démocratique du Congo</small>
             <span className="t" style={{ fontSize: 16 }}>{profile?.university}</span>
             <span className="s">{profile?.faculty}</span>
-            <span className="s">Département : {profile?.department} · {profile?.promotion} · {profile?.vacation}</span>
+            <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
             <hr />
             <span className="t">{title}</span>
             <span className="s">Cours : {course.data?.title}</span>
