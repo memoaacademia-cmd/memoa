@@ -450,20 +450,25 @@ export async function listActivity(userId: string): Promise<string[]> {
 /* ------------------------------- IA ------------------------------- */
 
 /** Appelle une fonction serveur et remonte le message d'erreur lisible qu'elle renvoie (JSON { error }). */
+/** Le serveur a refusé parce que les points gratuits sont épuisés : l'application propose alors « Passer en Premium ». */
+export class LimitError extends Error {}
+
 async function invoke<T>(name: string, body: unknown, fallback: string): Promise<T> {
   const { data, error } = await sb().functions.invoke(name, { body: body as Record<string, unknown> })
   if (!error) return data as T
   let msg = fallback
+  let limit = false
   const ctx = (error as { context?: Response }).context
   if (ctx && typeof ctx.json === 'function') {
     try {
       const j = await ctx.json()
       if (j && typeof j.error === 'string') msg = j.error
+      if (j && j.code === 'premium_required') limit = true
     } catch {
       /* corps illisible : on garde le message générique */
     }
   }
-  throw new Error(msg)
+  throw limit ? new LimitError(msg) : new Error(msg)
 }
 
 

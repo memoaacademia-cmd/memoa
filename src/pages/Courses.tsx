@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
-import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
+import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise } from '../lib/pdf'
@@ -101,18 +101,22 @@ export function NewCourse() {
     if (!user) return
     if (!title.trim()) return setError('Donne un nom à ton cours.')
     const id = await run(async () => {
+      // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
+      let structured = content.trim()
+      if (structured) {
+        setStep('Mise en forme de tes notes…')
+        try {
+          if (structured.length > 7500) throw new Error('trop long pour la mise en forme IA')
+          const r = await askAI({ task: 'structure_notes', prompt: structured })
+          if (r.reply.trim()) structured = r.reply.trim()
+        } catch (e) {
+          if (e instanceof LimitError) throw e
+          /* l'IA est facultative ici : on garde le texte tel quel plutôt que de perdre la note */
+        }
+      }
       setStep('Création du cours…')
       const course = await createCourse(user.id, title)
       if (content.trim()) {
-        setStep('Mise en forme de tes notes…')
-        let structured = content.trim()
-        try {
-          if (content.trim().length > 7500) throw new Error('trop long pour la mise en forme IA')
-          const r = await askAI({ task: 'structure_notes', prompt: content.trim() })
-          if (r.reply.trim()) structured = r.reply.trim()
-        } catch {
-          /* l'IA est facultative ici : on garde le texte tel quel plutôt que de perdre la note */
-        }
         await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte')
       }
       return course.id

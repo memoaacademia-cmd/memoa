@@ -109,6 +109,7 @@ export function ErrorBox({ message }: { message: string | null }) {
   return (
     <div className="error" role="alert">
       {message}
+      {/Premium/.test(message) && <div style={{ marginTop: 10 }}><Link to="/premium" className="btn small">Passer en Premium</Link></div>}
     </div>
   )
 }

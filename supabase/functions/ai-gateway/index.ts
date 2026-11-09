@@ -10,12 +10,66 @@ const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write']
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
 const PER_MINUTE = num('AI_LIMIT_PER_MINUTE', 8) // anti-rafale pour tous
-const FREE_PER_DAY = num('AI_FREE_PER_DAY', 10) // sans abonnement
 const PREMIUM_PER_DAY = num('AI_PREMIUM_PER_DAY', 300) // « généreux » mais plafonné
 const MAX_PROMPT = 8000
 const MAX_CONTEXT_CHARS = 12000
 const MAX_ATTACHMENT = 8000
 const MAX_ALL_COURSES_CHARS = 6000
+
+// ---- Règles d'accès (décidées uniquement ici, côté serveur) ----
+// Essai : 5 jours calendaires (heure de Kinshasa, UTC+1) avec toute l'IA, plafond technique caché.
+// Après l'essai : « points » sur une fenêtre glissante. Limite atteinte : attendre ou passer à Premium.
+const TRIAL_DAYS = num('TRIAL_DAYS', 5)
+const TRIAL_HIDDEN_PER_DAY = num('TRIAL_HIDDEN_PER_DAY', 150) // plafond technique, jamais montré
+const FREE_POINTS = num('AI_FREE_POINTS', 20) // points par fenêtre — valeur provisoire à ajuster après mesure des coûts
+const WINDOW_HOURS = num('AI_WINDOW_HOURS', 5)
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, transcribe: 3 }
+const KIN_OFFSET_MS = 3_600_000
+const premiumMsg = (wait: string) => `Tu as utilisé tes points gratuits. Reviens dans ${wait} ou passe à Premium pour continuer sans attendre.`
+
+async function trialStart(admin: ReturnType<typeof adminClient>, userId: string): Promise<Date> {
+  const { data: prof } = await admin.from('profiles').select('phone,created_at').eq('id', userId).maybeSingle()
+  const own = prof?.created_at ? new Date(prof.created_at) : new Date()
+  const phone = String(prof?.phone ?? '').replace(/\D/g, '')
+  if (phone.length < 9) return own
+  // Le premier compte qui a utilisé ce numéro fixe le début de l'essai, même si l'étudiant refait un compte.
+  await admin.from('trial_phones').upsert({ phone, started_at: own.toISOString() }, { onConflict: 'phone', ignoreDuplicates: true })
+  const { data } = await admin.from('trial_phones').select('started_at').eq('phone', phone).maybeSingle()
+  return data?.started_at ? new Date(data.started_at) : own
+}
+
+/** Renvoie null si l'accès est permis, sinon { status, error } à renvoyer tel quel. */
+async function checkAccess(admin: ReturnType<typeof adminClient>, userId: string, task: string, sub: { expires_at: string } | null) {
+  const now = Date.now()
+  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
+  if (sub) {
+    const { count } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart.toISOString())
+    return (count ?? 0) >= PREMIUM_PER_DAY ? { status: 429, error: "Tu as atteint la limite d'utilisation d'aujourd'hui. Elle se renouvelle demain." } : null
+  }
+  // Fin de l'essai = minuit (Kinshasa) à la fin du dernier jour calendaire.
+  const start = await trialStart(admin, userId)
+  const kinDay = new Date(start.getTime() + KIN_OFFSET_MS); kinDay.setUTCHours(0, 0, 0, 0)
+  const trialEnd = kinDay.getTime() + TRIAL_DAYS * 86_400_000 - KIN_OFFSET_MS
+  if (now < trialEnd) {
+    const { count } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart.toISOString())
+    return (count ?? 0) >= TRIAL_HIDDEN_PER_DAY ? { status: 429, error: "Beaucoup de demandes aujourd'hui : fais une pause et reviens demain." } : null
+  }
+  const since = new Date(now - WINDOW_HOURS * 3_600_000).toISOString()
+  const { data: rows } = await admin.from('ai_usage').select('task,created_at').eq('user_id', userId).gte('created_at', since).order('created_at', { ascending: true })
+  const cost = POINTS[task] ?? 1
+  let used = (rows ?? []).reduce((s, r) => s + (POINTS[r.task] ?? 1), 0)
+  if (used + cost <= FREE_POINTS) return null
+  // Quand les plus anciennes demandes sortent de la fenêtre, assez de points reviennent : on calcule l'attente.
+  let freeAt = now
+  for (const r of rows ?? []) {
+    used -= POINTS[r.task] ?? 1
+    freeAt = new Date(r.created_at).getTime() + WINDOW_HOURS * 3_600_000
+    if (used + cost <= FREE_POINTS) break
+  }
+  const mins = Math.max(1, Math.ceil((freeAt - now) / 60_000))
+  const wait = mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}` : `${mins} min`
+  return { status: 429, error: premiumMsg(wait), code: 'premium_required' }
+}
 
 // ---- Modèle par tâche : tâches simples → modèle économique ; rédaction longue → modèle plus fort ----
 // Vérifie les noms de modèles disponibles chez ton fournisseur avant la mise en production.
@@ -119,8 +173,6 @@ async function callModel(model: string, system: string, turns: Turn[], maxTokens
 // ---- Audio vers texte : un fichier audio (cours enregistré) devient du texte. Utilise un fournisseur compatible OpenAI
 // (par défaut le même que l'IA ; pour un autre, définir TRANSCRIBE_BASE_URL, TRANSCRIBE_API_KEY, TRANSCRIBE_MODEL). ----
 const TRANSCRIBE_MAX_MB = num('TRANSCRIBE_MAX_MB', 20)
-const TRANSCRIBE_FREE_PER_DAY = num('TRANSCRIBE_FREE_PER_DAY', 3)
-const TRANSCRIBE_PREMIUM_PER_DAY = num('TRANSCRIBE_PREMIUM_PER_DAY', 30)
 
 async function transcribe(req: Request, userId: string) {
   let form: FormData
@@ -130,14 +182,9 @@ async function transcribe(req: Request, userId: string) {
   if (file.size > TRANSCRIBE_MAX_MB * 1024 * 1024) return json(req, 413, { error: `Ce fichier est trop lourd (${TRANSCRIBE_MAX_MB} Mo maximum). Coupe l'enregistrement en plusieurs parties.` })
 
   const admin = adminClient()
-  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
-  const [{ count: today }, { data: sub }] = await Promise.all([
-    admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'transcribe').gte('created_at', dayStart.toISOString()),
-    admin.from('subscriptions').select('expires_at').eq('user_id', userId).gt('expires_at', new Date().toISOString()).maybeSingle()
-  ])
-  if ((today ?? 0) >= (sub ? TRANSCRIBE_PREMIUM_PER_DAY : TRANSCRIBE_FREE_PER_DAY)) {
-    return json(req, 429, { error: sub ? "Tu as atteint la limite d'audios d'aujourd'hui. Elle se renouvelle demain." : "Tu as utilisé tes audios gratuits du jour. Passe à Premium pour en envoyer plus, ou reviens demain." })
-  }
+  const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).gt('expires_at', new Date().toISOString()).maybeSingle()
+  const denied = await checkAccess(admin, userId, 'transcribe', sub)
+  if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
 
   const base = (Deno.env.get('TRANSCRIBE_BASE_URL') ?? Deno.env.get('AI_BASE_URL') ?? '').replace(/\/+$/, '')
   const key = Deno.env.get('TRANSCRIBE_API_KEY') ?? Deno.env.get('AI_API_KEY')
@@ -191,19 +238,15 @@ Deno.serve(async (req) => {
 
   const admin = adminClient()
 
-  // ---- Quotas : rafale (par minute) puis plafond journalier selon l'abonnement ----
+  // ---- Quotas : rafale (par minute) puis règles d'accès (essai, points, Premium) ----
   const minuteAgo = new Date(Date.now() - 60_000).toISOString()
-  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
-  const [{ count: lastMinute }, { count: today }, { data: sub }] = await Promise.all([
+  const [{ count: lastMinute }, { data: sub }] = await Promise.all([
     admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', minuteAgo),
-    admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', dayStart.toISOString()),
     admin.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
   ])
   if ((lastMinute ?? 0) >= PER_MINUTE) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
-  const limit = sub ? PREMIUM_PER_DAY : FREE_PER_DAY
-  if ((today ?? 0) >= limit) {
-    return json(req, 429, { error: sub ? "Tu as atteint la limite d'utilisation d'aujourd'hui. Elle se renouvelle demain." : "Tu as utilisé tes demandes gratuites du jour. Passe à Premium pour continuer, ou reviens demain." })
-  }
+  const denied = await checkAccess(admin, user.id, task, sub)
+  if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
 
   // ---- Contexte du cours : lu avec les droits de l'étudiant (RLS) → impossible de lire le cours d'un autre ----
   const uc = userClient(req)

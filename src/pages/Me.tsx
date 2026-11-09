@@ -7,11 +7,7 @@ import { initialsOf } from '../lib/names'
 import { usePref } from '../lib/prefs'
 import { currentStreak, streakTitle } from '../lib/streak'
 
-const LANGUAGES: [string, string][] = [
-  ['fr', 'Français'], ['en', 'English'], ['ln', 'Lingála'], ['sw', 'Kiswahili'], ['kg', 'Kikongo'], ['lua', 'Tshiluba'],
-  ['pt', 'Português'], ['es', 'Español'], ['ar', 'العربية'], ['de', 'Deutsch'], ['it', 'Italiano'], ['nl', 'Nederlands'],
-  ['zh', '中文'], ['hi', 'हिन्दी'], ['ru', 'Русский'], ['tr', 'Türkçe'], ['yo', 'Yorùbá'], ['ha', 'Hausa'], ['am', 'አማርኛ'], ['rw', 'Kinyarwanda']
-]
+const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
 
 export function Me() {
   const { user, profile, refresh } = useAuth()
@@ -92,7 +88,8 @@ export function Settings() {
   const nav = useNavigate()
   const { user, profile } = useAuth()
   const [theme, setTheme] = usePref('theme', 'dark')
-  const [lang, setLang] = usePref('lang', 'fr')
+  const [storedLang, setLang] = usePref('lang', 'fr')
+  const lang = LANGUAGES.some(([c]) => c === storedLang) ? storedLang : 'fr'
   const [notif, setNotif] = usePref('notif', '1')
   const [saver, setSaver] = usePref('datasaver', '0')
   const [confirm, setConfirm] = useState(false)
@@ -124,7 +121,7 @@ export function Settings() {
             {LANGUAGES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
           </select>
         </div>
-        {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : les autres langues arriveront peu à peu.</div>}
+        {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
       </section>
       <section className="card"><span className="label-mono">Thème</span>
         <div className="chips" role="radiogroup" aria-label="Thème">
