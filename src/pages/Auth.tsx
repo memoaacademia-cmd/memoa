@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, useAction } from '../components/ui'
-import { resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp } from '../lib/api'
+import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -63,6 +63,9 @@ export function Login() {
         <div className="field">
           <label htmlFor="mdp">Mot de passe</label>
           <input id="mdp" className="input" type="password" autoComplete="current-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <Link className="link" to="/mot-de-passe-oublie">Mot de passe oublié ?</Link>
         </div>
         <ErrorBox message={error} />
         <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
@@ -241,6 +244,103 @@ export function Confirmation({ email }: { email: string }) {
       <ErrorBox message={error} />
       <button className="btn ghost" type="button" onClick={() => void refresh()}>J'ai confirmé mon email</button>
       <p className="muted" style={{ textAlign: 'center' }}>Après confirmation, tu reviens ici et on continue.</p>
+    </main>
+  )
+}
+
+/* Mot de passe oublié : envoie un lien par email. */
+export function ForgotPassword() {
+  const { busy, error, setError, run } = useAction()
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    const mail = email.trim().toLowerCase()
+    if (!EMAIL_RE.test(mail)) return setError('Entre une adresse email valide.')
+    const ok = await run(async () => {
+      await requestPasswordReset(mail)
+      return true
+    })
+    if (ok) setSent(true)
+  }
+
+  return (
+    <main className="page auth">
+      <Header title="Mot de passe oublié" text="Entre ton email : on t'envoie un lien pour en choisir un nouveau." />
+      {sent ? (
+        <>
+          <div className="notice">Si un compte existe avec cet email, un lien vient d'être envoyé. Pense à regarder dans les courriers indésirables.</div>
+          <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
+        </>
+      ) : (
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <ErrorBox message={error} />
+          <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le lien'}</button>
+        </form>
+      )}
+      <p className="muted" style={{ textAlign: 'center' }}>
+        <Link className="link" to="/connexion">Retour à la connexion</Link>
+      </p>
+    </main>
+  )
+}
+
+/* Arrivée par le lien reçu par email : choisir le nouveau mot de passe. */
+export function NewPassword() {
+  const nav = useNavigate()
+  const { user, loading, recovery, endRecovery } = useAuth()
+  const { busy, error, setError, run } = useAction()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const st = strength(password)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
+    if (password !== confirm) return setError('Les deux mots de passe ne sont pas identiques.')
+    const ok = await run(async () => {
+      await updatePassword(password)
+      return true
+    })
+    if (ok) {
+      endRecovery()
+      nav('/', { replace: true })
+    }
+  }
+
+  // Lien expiré, déjà utilisé, ou page ouverte sans passer par l'email.
+  if (!loading && (!user || !recovery)) {
+    return (
+      <main className="page auth">
+        <Header title="Lien non valide" text="Ce lien a expiré ou a déjà été utilisé. Demande-en un nouveau." />
+        <Link className="btn primary-light" to="/mot-de-passe-oublie" replace>Recevoir un nouveau lien</Link>
+        <p className="muted" style={{ textAlign: 'center' }}><Link className="link" to="/connexion">Retour à la connexion</Link></p>
+      </main>
+    )
+  }
+
+  return (
+    <main className="page auth">
+      <Header title="Nouveau mot de passe" text="Choisis un mot de passe que tu retiendras." />
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+        <div className="field">
+          <label htmlFor="mdp">Nouveau mot de passe</label>
+          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="bar" aria-hidden="true"><i style={{ width: st.pct + '%', background: st.pct < 50 ? '#b3261e' : st.pct < 75 ? '#f2a33a' : '#0b5d54' }} /></div>
+          <span className="muted">{password ? st.label : '8 caractères minimum.'}</span>
+        </div>
+        <div className="field">
+          <label htmlFor="mdp2">Confirme le mot de passe</label>
+          <input id="mdp2" className="input" type="password" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
+        <ErrorBox message={error} />
+        <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+      </form>
     </main>
   )
 }

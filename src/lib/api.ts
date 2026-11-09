@@ -56,12 +56,13 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
-export function onAuthChange(cb: () => void): () => void {
+export function onAuthChange(cb: (event?: string) => void): () => void {
   if (!isConfigured) {
-    window.addEventListener('memoa-demo-auth', cb)
-    return () => window.removeEventListener('memoa-demo-auth', cb)
+    const handler = () => cb()
+    window.addEventListener('memoa-demo-auth', handler)
+    return () => window.removeEventListener('memoa-demo-auth', handler)
   }
-  const { data } = sb().auth.onAuthStateChange(() => cb())
+  const { data } = sb().auth.onAuthStateChange((event) => cb(event))
   return () => data.subscription.unsubscribe()
 }
 
@@ -124,6 +125,46 @@ export async function signInWithGoogle(): Promise<void> {
 export async function resendConfirmation(email: string): Promise<void> {
   if (!isConfigured) return
   const { error } = await sb().auth.resend({ type: 'signup', email })
+  if (error) throw error
+}
+
+/** Envoie le lien de réinitialisation. Ne révèle pas si l'email a un compte (réponse identique). */
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (!isConfigured) return
+  const { error } = await sb().auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  })
+  if (error) throw error
+}
+
+/** Après le clic sur le lien reçu par email : choisit le nouveau mot de passe. */
+export async function updatePassword(password: string): Promise<void> {
+  if (!isConfigured) {
+    const db = loadDemo()
+    const u = db.users.find((x) => x.id === db.session)
+    if (u) {
+      u.password = password
+      saveDemo(db)
+    }
+    return
+  }
+  const { error } = await sb().auth.updateUser({ password, data: { password_set: true } })
+  if (error) throw error
+}
+
+/* ------------------------- AVIS ET SIGNALEMENTS ------------------------- */
+
+export type FeedbackKind = 'bug' | 'idea' | 'other' | 'rating'
+
+export async function sendFeedback(userId: string, kind: FeedbackKind, message: string, rating?: number): Promise<void> {
+  if (!isConfigured) return
+  const { error } = await sb().from('feedback').insert({
+    user_id: userId,
+    kind,
+    rating: rating ?? null,
+    message: message.trim().slice(0, 2000),
+    user_agent: navigator.userAgent.slice(0, 300)
+  })
   if (error) throw error
 }
 

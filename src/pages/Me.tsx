@@ -96,6 +96,21 @@ export function Settings() {
   const [notif, setNotif] = usePref('notif', '1')
   const [saver, setSaver] = usePref('datasaver', '0')
   const [confirm, setConfirm] = useState(false)
+  const [shared, setShared] = useState(false)
+
+  async function share() {
+    const url = window.location.origin + window.location.pathname
+    const data = { title: 'Memoa', text: 'Memoa : étudie plus intelligemment.', url }
+    try {
+      if (navigator.share) await navigator.share(data)
+      else {
+        await navigator.clipboard.writeText(url)
+        setShared(true)
+      }
+    } catch {
+      /* partage annulé : rien à faire */
+    }
+  }
 
   async function logout() { await signOut(); nav('/connexion', { replace: true }) }
 
@@ -119,6 +134,16 @@ export function Settings() {
       <section className="card"><span className="label-mono">Notifications et données</span>
         <Switch label="Notifications « Le savais-tu ? »" on={notif === '1'} set={(v) => setNotif(v ? '1' : '0')} />
         <Switch label="Économie de données" on={saver === '1'} set={(v) => setSaver(v ? '1' : '0')} />
+      </section>
+      <section className="card"><span className="label-mono">Aide et informations</span>
+        <Link to="/aide" className="list-row"><span>Centre d'aide</span><Icon name="back" size={18} /></Link>
+        <Link to="/signaler" className="list-row"><span>Signaler un problème</span><Icon name="back" size={18} /></Link>
+        <Link to="/avis" className="list-row"><span>Noter l'application</span><Icon name="back" size={18} /></Link>
+        <button type="button" className="list-row" style={{ background: 'none', border: 0, color: 'inherit', textAlign: 'left', width: '100%' }} onClick={share}><span>Partager Memoa</span><Icon name="upload" size={18} /></button>
+        {shared && <div className="notice">Lien copié. Colle-le dans WhatsApp ou ailleurs.</div>}
+        <Link to="/confidentialite" className="list-row"><span>Politique de confidentialité</span><Icon name="back" size={18} /></Link>
+        <Link to="/conditions" className="list-row"><span>Conditions d'utilisation</span><Icon name="back" size={18} /></Link>
+        <Link to="/a-propos" className="list-row"><span>À propos de Memoa</span><Icon name="back" size={18} /></Link>
       </section>
       <section className="card"><span className="label-mono">Compte</span>
         <div className="list-row"><span className="muted">Email</span><span style={{ overflowWrap: 'anywhere', textAlign: 'right' }}>{user?.email}</span></div>

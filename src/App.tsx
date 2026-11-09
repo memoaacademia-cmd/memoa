@@ -1,21 +1,24 @@
 import { useEffect } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { NavBar, Spinner } from './components/ui'
-import { Confirmation, GoogleNext, Login, Signup } from './pages/Auth'
+import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import Home from './pages/Home'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
 import Assistant from './pages/Assistant'
 import { Me, Premium, Settings } from './pages/Me'
+import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
 import { AuthProvider, useAuth } from './lib/auth'
 import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
 function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, recovery } = useAuth()
   const loc = useLocation()
   if (loading) return <div className="shell"><Spinner /></div>
+  // Arrivée par le lien « mot de passe oublié » : on ne laisse rien d'autre tant que le nouveau mot de passe n'est pas choisi.
+  if (recovery && user) return <Navigate to="/nouveau-mot-de-passe" replace />
 
   if (need === 'public') {
     if (user && !user.needsPassword && loc.pathname !== '/google-suite' && profile?.memo_animal) return <Navigate to="/" replace />
@@ -59,8 +62,10 @@ export default function App() {
             <Route path="/connexion" element={<Login />} />
             <Route path="/creer-un-compte" element={<Signup />} />
             <Route path="/google-suite" element={<GoogleNext />} />
+            <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
             <Route path="/confirmation" element={<ConfirmationRoute />} />
           </Route>
+          <Route path="/nouveau-mot-de-passe" element={<div className="shell"><NewPassword /></div>} />
           <Route element={<Guard need="auth" />}>
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
@@ -77,6 +82,12 @@ export default function App() {
             <Route path="/moi" element={<Me />} />
             <Route path="/parametres" element={<Settings />} />
             <Route path="/premium" element={<Premium />} />
+            <Route path="/aide" element={<Help />} />
+            <Route path="/signaler" element={<Feedback mode="report" />} />
+            <Route path="/avis" element={<Feedback mode="rating" />} />
+            <Route path="/confidentialite" element={<Privacy />} />
+            <Route path="/conditions" element={<Terms />} />
+            <Route path="/a-propos" element={<About />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
