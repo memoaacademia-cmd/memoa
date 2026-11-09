@@ -21,7 +21,7 @@ function GoogleG() {
 function Header({ title, text }: { title: string; text: string }) {
   return (
     <>
-      <div style={{ margin: '28px 0 8px' }}>
+      <div style={{ margin: '56px 0 12px' }}>
         <Brand size={64} center />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>

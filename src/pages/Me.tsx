@@ -36,7 +36,7 @@ export function Me() {
         <button type="button" className="icon-btn" style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', padding: 0 }} onClick={() => file.current?.click()} aria-label="Changer ma photo (facultatif)">
           {profile?.avatar_url ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="h2">{initials}</span>}
         </button>
-        <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pick(e.target.files?.[0])} />
+        <input ref={file} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <strong className="h2">{profile?.full_name}</strong>
           <span className="muted" style={{ overflowWrap: 'anywhere' }}>{user?.email}</span>

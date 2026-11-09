@@ -4,6 +4,7 @@
 // Les pages n'appellent QUE ce fichier : changer de backend ne touche pas à l'interface.
 import { isConfigured, supabase } from './supabase'
 import { loadDemo, saveDemo, uid } from './demo'
+import { shrinkImage } from './image'
 import type { AiTask, Conversation, Course, LibDoc, Message, Note, Payment, Profile } from './types'
 
 export interface AuthUser {
@@ -182,9 +183,11 @@ export async function saveProfile(userId: string, patch: Partial<Omit<Profile, '
   return data as Profile
 }
 
-export async function uploadAvatar(userId: string, file: File): Promise<string> {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) fail('Choisis une image JPG, PNG ou WebP.')
-  if (file.size > 3 * 1024 * 1024) fail('La photo ne doit pas dépasser 3 Mo.')
+export async function uploadAvatar(userId: string, original: File): Promise<string> {
+  if (!original.type.startsWith('image/')) fail('Choisis une image (JPG, PNG ou WebP).')
+  const file = await shrinkImage(original)
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) fail('Ce format n’est pas pris en charge. Choisis une photo JPG, PNG ou WebP.')
+  if (file.size > 3 * 1024 * 1024) fail('Cette photo est trop lourde. Choisis-en une autre.')
   if (!isConfigured) {
     return new Promise((resolve, reject) => {
       const r = new FileReader()
