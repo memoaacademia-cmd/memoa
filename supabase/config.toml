@@ -1,4 +1,0 @@
-# Le webhook de paiement est appelé par l'opérateur (pas par un étudiant connecté) :
-# il est protégé par une signature secrète vérifiée dans le code, pas par un jeton utilisateur.
-[functions.payments-webhook]
-verify_jwt = false
