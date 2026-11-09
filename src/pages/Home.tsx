@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Icon, MemoAvatar, useLoad } from '../components/ui'
+import FactCard from '../components/FactCard'
 import { listActivity, listCourses } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
@@ -58,10 +59,7 @@ export default function Home() {
         <Link to="/assistant" className="tile"><Icon name="chat" size={26} color="#3ccfb4" /><span className="h2">Poser une question</span></Link>
       </div>
 
-      <section className="card" aria-label="Le savais-tu ?">
-        <span className="label-mono">Le savais-tu ?</span>
-        <span style={{ lineHeight: 1.45 }}>{factOfTheDay()}</span>
-      </section>
+      <FactCard fact={factOfTheDay()} memoName={profile?.memo_name ?? 'Memo'} animal={profile?.memo_animal ?? null} />
     </main>
   )
 }

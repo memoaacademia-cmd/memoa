@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
+import DictateButton from '../components/Dictate'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -258,6 +259,9 @@ export function CourseDetail() {
   const [open, setOpen] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
+  const [listenOpen, setListenOpen] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
+  const [summary, setSummary] = useState<string | null>(null)
   const nav = useNavigate()
   const [noteSource, setNoteSource] = useState('texte')
   const [noteStep, setNoteStep] = useState('')
@@ -360,13 +364,30 @@ export function CourseDetail() {
     if (ok) nav('/sac')
   }
 
-  function listen() {
+  function togglePanel() {
     if (reading) { stopSpeaking(); setReading(false); return }
-    const all = notes.data ?? []
-    if (!all.length) return
-    const ok = speak((course.data?.title ?? '') + '. ' + all.map((n) => n.title + '. ' + n.content).join('\n'), () => setReading(false))
+    if (!listenOpen) setPicked((notes.data ?? []).map((n) => n.id))
+    setListenOpen((v) => !v)
+  }
+  function togglePick(nid: string) {
+    setPicked((p) => (p.includes(nid) ? p.filter((x) => x !== nid) : [...p, nid]))
+  }
+  async function listenChosen(summarize: boolean) {
+    const chosen = (notes.data ?? []).filter((n) => picked.includes(n.id))
+    if (!chosen.length) return setError('Choisis au moins une note à écouter.')
+    const full = chosen.map((n) => n.title + '. ' + n.content).join('\n')
+    let text = (course.data?.title ?? '') + '. ' + full
+    setSummary(null)
+    if (summarize) {
+      const r = await run(() => askAI({ task: 'summary', prompt: full.slice(0, 12000) }))
+      if (!r) return
+      text = stripAiNoise(r.reply)
+      setSummary(text)
+    }
+    const ok = speak(text, () => setReading(false))
     if (!ok) return setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
     setReading(true)
+    setListenOpen(false)
   }
 
   async function save(e: FormEvent) {
@@ -415,10 +436,27 @@ export function CourseDetail() {
         <button type="button" className="tile" onClick={revise} disabled={busy}><Icon name="check" size={26} color="#3ccfb4" /><span className="h2">{busy ? 'Un instant…' : 'Réviser'}</span></button>
         <button type="button" className="tile" onClick={() => void pdf('read')} disabled={!all.length || busy}><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Lire le PDF</span></button>
         <button type="button" className="tile" onClick={() => void pdf('save')} disabled={!all.length || busy}><Icon name="download" size={26} color="#3ccfb4" /><span className="h2">Télécharger</span></button>
-        {canSpeak() && <button type="button" className="tile" onClick={listen} disabled={!all.length}><Icon name="headphones" size={26} color="#3ccfb4" /><span className="h2">{reading ? 'Arrêter' : 'Écouter'}</span></button>}
+        {canSpeak() && <button type="button" className="tile" onClick={togglePanel} disabled={!all.length}><Icon name="headphones" size={26} color="#3ccfb4" /><span className="h2">{reading ? 'Arrêter' : 'Écouter'}</span></button>}
       </div>
 
       <ErrorBox message={error} />
+
+      {listenOpen && !reading && (
+        <section className="card">
+          <span className="label-mono">Que veux-tu écouter ?</span>
+          {all.map((n) => (
+            <label key={n.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input type="checkbox" checked={picked.includes(n.id)} onChange={() => togglePick(n.id)} />
+              <span>{n.title}</span>
+            </label>
+          ))}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn ghost small" onClick={() => void listenChosen(false)} disabled={busy}>Lire tel quel</button>
+            <button type="button" className="btn small" onClick={() => void listenChosen(true)} disabled={busy}>{busy ? 'Un instant…' : 'Résumé puis lecture'}</button>
+          </div>
+        </section>
+      )}
+      {summary && <section className="card"><span className="label-mono">Résumé</span><div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{summary}</div></section>}
 
       {adding && (
         <form onSubmit={save} className="card" noValidate>
@@ -480,6 +518,7 @@ export function TpAssistant() {
   const [title, setTitle] = useState('')
   const [brief, setBrief] = useState('')
   const [plan, setPlan] = useState<string | null>(null)
+  const [remarks, setRemarks] = useState('')
   const [doc, setDoc] = useState<string | null>(null)
   const year = (() => { const y = new Date().getFullYear(), m = new Date().getMonth(); return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}` })()
 
@@ -487,6 +526,12 @@ export function TpAssistant() {
     if (!title.trim() || !brief.trim()) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}` }))
     if (r) { setPlan(r.reply); setDoc(null) }
+  }
+  async function adjustPlan() {
+    if (!plan) return
+    if (!remarks.trim()) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
+    const r = await run(() => askAI({ task: 'tp_revise', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${remarks}` }))
+    if (r) { setPlan(stripAiNoise(r.reply)); setRemarks('') }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -509,7 +554,7 @@ export function TpAssistant() {
 
       <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="field"><label htmlFor="tpt">Titre du travail</label><input id="tpt" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. TP 1 · Le substrat gaulois" /></div>
-        <div className="field"><label htmlFor="tpc">Énoncé et consignes</label><textarea id="tpc" className="textarea" rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} /></div>
+        <div className="field"><label htmlFor="tpc">Énoncé et consignes</label><textarea id="tpc" className="textarea" rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} /><DictateButton onText={(t) => setBrief((b) => (b ? b + ' ' : '') + t)} label="Dicter l’énoncé" /></div>
         <ErrorBox message={error} />
         <button className="btn" type="button" onClick={makePlan} disabled={busy}>{busy && !plan ? 'Un instant…' : 'Proposer un plan'}</button>
       </div>
@@ -518,6 +563,12 @@ export function TpAssistant() {
         <section className="card no-print">
           <span className="label-mono">Plan proposé</span>
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{plan}</div>
+          <div className="field">
+            <label htmlFor="tpr">Un changement à demander ?</label>
+            <textarea id="tpr" className="textarea" rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Ex. Ajoute une partie sur les exemples, enlève la 3e partie…" />
+            <DictateButton onText={(t) => setRemarks((b) => (b ? b + ' ' : '') + t)} label="Dicter le changement" />
+            <button className="btn ghost" type="button" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</button>
+          </div>
           <button className="btn amber" type="button" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : 'Valider et rédiger le TP'}</button>
         </section>
       )}

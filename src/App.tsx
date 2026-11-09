@@ -4,6 +4,7 @@ import { NavBar, Spinner } from './components/ui'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import Home from './pages/Home'
+import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
 import Assistant from './pages/Assistant'
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
             <Route path="/confirmation" element={<ConfirmationRoute />} />
           </Route>
+          <Route path="/installer" element={<div className="shell"><Install /></div>} />
           <Route path="/nouveau-mot-de-passe" element={<div className="shell"><NewPassword /></div>} />
           <Route element={<Guard need="auth" />}>
             <Route path="/inscription" element={<Onboarding />} />

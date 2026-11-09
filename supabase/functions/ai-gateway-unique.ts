@@ -45,8 +45,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 
-type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write'
-const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write']
+type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary'
+const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_revise', 'summary']
 
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
@@ -64,7 +64,7 @@ const TRIAL_DAYS = num('TRIAL_DAYS', 5)
 const TRIAL_HIDDEN_PER_DAY = num('TRIAL_HIDDEN_PER_DAY', 150) // plafond technique, jamais montré
 const FREE_POINTS = num('AI_FREE_POINTS', 20) // points par fenêtre — valeur provisoire à ajuster après mesure des coûts
 const WINDOW_HOURS = num('AI_WINDOW_HOURS', 5)
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, transcribe: 3 }
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, tp_revise: 3, summary: 3, transcribe: 3 }
 const KIN_OFFSET_MS = 3_600_000
 const premiumMsg = (wait: string) => `Tu as utilisé tes points gratuits. Reviens dans ${wait} ou passe à Premium pour continuer sans attendre.`
 
@@ -116,7 +116,7 @@ async function checkAccess(admin: ReturnType<typeof adminClient>, userId: string
 // Vérifie les noms de modèles disponibles chez ton fournisseur avant la mise en production.
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
-const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_plan' ? MODEL_STRONG : MODEL_FAST)
+const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
 const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'structure_notes' ? 3072 : 1536)
 
 const BASE =
@@ -134,6 +134,10 @@ const SYSTEM: Record<Task, string> = {
     BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
   tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes.",
+  tp_revise:
+    BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs.",
+  summary:
+    BASE + " Fais un résumé clair du texte fourni, pensé pour être lu à voix haute : phrases courtes, pas de titres, pas de listes, pas de symboles. Ne rajoute aucune information absente du texte. Réponds uniquement avec le résumé.",
   tp_write:
     BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.' +
       " Réponds uniquement avec le document demandé : aucune phrase d'introduction (« Voici… »), aucune conclusion adressée à l'étudiant, aucune ligne de séparation ---, aucune consigne entre crochets comme [Insérer un saut de page]. N'écris ni astérisques de mise en forme ni symboles décoratifs."
