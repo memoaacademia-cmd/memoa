@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
-import { saveProfile } from '../lib/api'
+import { saveProfile, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { composeFullName, titleCase } from '../lib/names'
+import { composeFullName, initialsOf, titleCase } from '../lib/names'
 import type { Profile } from '../lib/types'
 
 /** Retrouve la valeur à afficher dans la liste : la valeur connue, sinon « Autre » + texte libre. */
@@ -84,7 +84,7 @@ export default function Onboarding() {
     <main className="page auth">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
         <Brand size={44} />
-        <span className="label-mono">{editing ? 'Mon parcours' : 'Étape 1 sur 2'}</span>
+        <span className="label-mono">{editing ? 'Mon parcours' : 'Étape 1 sur 3'}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <h1 className="h1 big">Où étudies-tu ?</h1>
@@ -182,13 +182,13 @@ export function Adoption() {
       await refresh()
       return true
     })
-    if (ok) nav(changing ? '/moi' : '/', { replace: true })
+    if (ok) nav(changing ? '/moi' : '/photo', { replace: true })
   }
 
   if (!chosen) {
     return (
       <main className="page" style={{ paddingBottom: 28 }}>
-        <span className="label-mono">{changing ? 'Mon Memo' : 'Étape 2 sur 2'}</span>
+        <span className="label-mono">{changing ? 'Mon Memo' : 'Étape 2 sur 3'}</span>
         <h1 className="h1 big">{changing ? 'Change de Memo' : 'Adopte ton Memo'}</h1>
         <p className="lead">Il t'accompagne dans tes révisions. Choisis l'animal qui te ressemble.</p>
         {changing && <Link to="/moi" className="link">Annuler</Link>}
@@ -221,6 +221,54 @@ export function Adoption() {
         {busy ? 'Un instant…' : `C'est parti${name.trim() ? ', ' + name.trim() : ''}`}
       </button>
       <button className="link" type="button" onClick={() => setAnimal(null)}>Choisir un autre animal</button>
+    </main>
+  )
+}
+
+/* Étape 3, facultative : une photo de profil. « Passer » mène directement à l'accueil. */
+export function PhotoStep() {
+  const nav = useNavigate()
+  const { user, profile, refresh } = useAuth()
+  const { busy, error, run } = useAction()
+  const file = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+
+  async function pick(f: File | undefined) {
+    if (!f || !user) return
+    const ok = await run(async () => {
+      const url = await uploadAvatar(user.id, f)
+      await saveProfile(user.id, { avatar_url: url })
+      await refresh()
+      return url
+    })
+    if (ok) setPreview(ok)
+  }
+
+  const shown = preview ?? profile?.avatar_url ?? null
+
+  return (
+    <main className="page" style={{ paddingBottom: 28, alignItems: 'center', textAlign: 'center' }}>
+      <span className="label-mono">Étape 3 sur 3 · facultative</span>
+      <h1 className="h1 big">Ajoute ta photo</h1>
+      <p className="lead">Pour que Memoa soit à ton image. Tu peux aussi le faire plus tard, dans Moi.</p>
+      <button type="button" className="icon-btn" style={{ width: 160, height: 160, borderRadius: '50%', overflow: 'hidden', padding: 0 }} onClick={() => file.current?.click()} disabled={busy} aria-label="Choisir une photo de profil">
+        {shown ? <img src={shown} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="h1 big">{initialsOf(profile)}</span>}
+      </button>
+      <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = '' }} />
+      <ErrorBox message={error} />
+      <div style={{ marginTop: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {shown ? (
+          <>
+            <button className="btn" type="button" onClick={() => nav('/', { replace: true })} disabled={busy}>Continuer</button>
+            <button className="link" type="button" onClick={() => file.current?.click()} disabled={busy}>Choisir une autre photo</button>
+          </>
+        ) : (
+          <>
+            <button className="btn" type="button" onClick={() => file.current?.click()} disabled={busy}>{busy ? 'Un instant…' : 'Choisir une photo'}</button>
+            <button className="link" type="button" onClick={() => nav('/', { replace: true })} disabled={busy}>Passer</button>
+          </>
+        )}
+      </div>
     </main>
   )
 }

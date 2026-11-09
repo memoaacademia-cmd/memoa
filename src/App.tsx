@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { NavBar, Spinner } from './components/ui'
 import { Confirmation, GoogleNext, Login, Signup } from './pages/Auth'
-import Onboarding, { Adoption } from './pages/Onboarding'
+import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import Home from './pages/Home'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
@@ -64,6 +64,7 @@ export default function App() {
           <Route element={<Guard need="auth" />}>
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
+            <Route path="/photo" element={<PhotoStep />} />
           </Route>
           <Route element={<Guard need="onboarded" />}>
             <Route path="/" element={<Home />} />
