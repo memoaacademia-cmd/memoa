@@ -45,8 +45,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 
-type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary'
-const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_revise', 'summary']
+type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note'
+const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_revise', 'summary', 'enrich_note']
 
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
@@ -64,7 +64,7 @@ const TRIAL_DAYS = num('TRIAL_DAYS', 5)
 const TRIAL_HIDDEN_PER_DAY = num('TRIAL_HIDDEN_PER_DAY', 150) // plafond technique, jamais montré
 const FREE_POINTS = num('AI_FREE_POINTS', 20) // points par fenêtre — valeur provisoire à ajuster après mesure des coûts
 const WINDOW_HOURS = num('AI_WINDOW_HOURS', 5)
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, tp_revise: 3, summary: 3, transcribe: 3 }
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, tp_revise: 3, summary: 3, enrich_note: 3, transcribe: 3 }
 const KIN_OFFSET_MS = 3_600_000
 const premiumMsg = (wait: string) => `Tu as utilisé tes points gratuits. Reviens dans ${wait} ou passe à Premium pour continuer sans attendre.`
 
@@ -117,7 +117,7 @@ async function checkAccess(admin: ReturnType<typeof adminClient>, userId: string
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
 const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
-const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'structure_notes' ? 3072 : 1536)
+const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : 1536)
 
 const BASE =
   "Tu es Memo, le compagnon d'étude d'un étudiant universitaire en République démocratique du Congo. " +
@@ -136,6 +136,8 @@ const SYSTEM: Record<Task, string> = {
   tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes.",
   tp_revise:
     BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs.",
+  enrich_note:
+    BASE + " L'étudiant te donne des consignes pour créer ou compléter une note de cours, et parfois un texte de départ. Rédige le contenu de la note avec tes connaissances et, s'il y en a, les <resultats_web> fournis : titres courts, points clés, définitions, exemples. Quand une information vient du web, cite l'adresse (URL) ; sinon n'invente aucune source. Ne répète pas le texte de départ : écris seulement ce qui le complète. Réponds uniquement avec le contenu de la note, sans phrase d'introduction.",
   summary:
     BASE + " Fais un résumé clair du texte fourni, pensé pour être lu à voix haute : phrases courtes, pas de titres, pas de listes, pas de symboles. Ne rajoute aucune information absente du texte. Réponds uniquement avec le résumé.",
   tp_write:
@@ -300,7 +302,7 @@ Deno.serve(async (req) => {
     const { data: course } = await uc.from('courses').select('title').eq('id', courseId).maybeSingle()
     if (!course) return json(req, 404, { error: 'Cours introuvable.' })
     const { data: notes } = await uc.from('notes').select('title,content').eq('course_id', courseId).order('created_at', { ascending: false }).limit(20)
-    const joined = (notes ?? []).map((n) => `## ${n.title}\n${n.content}`).join('\n\n').slice(0, MAX_CONTEXT_CHARS)
+    const joined = (notes ?? []).slice().reverse().map((n) => `## ${n.title}\n${n.content}`).join('\n\n').slice(0, MAX_CONTEXT_CHARS)
     context = `Cours : ${course.title}\n<materiel_du_cours>\n${joined || '(aucune note pour le moment)'}\n</materiel_du_cours>`
   } else if (task === 'chat') {
     // Aucun cours choisi : l'assistant connaît quand même la liste des cours et des notes de l'étudiant.
@@ -323,7 +325,7 @@ Deno.serve(async (req) => {
   // ---- Pièce jointe (document ou photo lu sur le téléphone) et recherche web ----
   const attachment = typeof body.attachment === 'string' ? body.attachment.trim().slice(0, MAX_ATTACHMENT) : ''
   if (attachment) context += `${context ? '\n\n' : ''}<piece_jointe>\n${attachment}\n</piece_jointe>`
-  if (task === 'chat' && body.web === true) {
+  if ((task === 'chat' || task === 'enrich_note') && body.web === true) {
     const found = await webSearch(prompt)
     context += found
       ? `${context ? '\n\n' : ''}<resultats_web>\n${found}\n</resultats_web>`

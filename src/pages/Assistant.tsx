@@ -7,9 +7,9 @@ import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
+import { WEB_SEARCH_ENABLED } from '../lib/features'
 
 /** Passe à true quand le secret SEARCH_API_KEY (Tavily) est présent dans Supabase : le bouton réapparaît. */
-const WEB_SEARCH_ENABLED = false
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
 

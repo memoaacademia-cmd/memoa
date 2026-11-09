@@ -330,9 +330,9 @@ export async function createCourse(userId: string, title: string): Promise<Cours
 
 export async function listNotes(courseId: string): Promise<Note[]> {
   if (!isConfigured) {
-    return loadDemo().notes.filter((n) => n.course_id === courseId).sort((a, b) => b.created_at.localeCompare(a.created_at))
+    return loadDemo().notes.filter((n) => n.course_id === courseId).sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
-  const { data, error } = await sb().from('notes').select('*').eq('course_id', courseId).order('created_at', { ascending: false })
+  const { data, error } = await sb().from('notes').select('*').eq('course_id', courseId).order('created_at', { ascending: true })
   if (error) throw error
   return data as Note[]
 }

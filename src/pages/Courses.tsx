@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
+import { WEB_SEARCH_ENABLED } from '../lib/features'
 import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -256,6 +257,8 @@ export function CourseDetail() {
   const [adding, setAdding] = useState(false)
   const [noteTitle, setNoteTitle] = useState('')
   const [noteText, setNoteText] = useState('')
+  const [noteGuide, setNoteGuide] = useState('')
+  const [noteWeb, setNoteWeb] = useState(true)
   const [open, setOpen] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
@@ -395,12 +398,23 @@ export function CourseDetail() {
     if (!user) return
     dict.current?.stop()
     const src = noteSource === 'enreg' ? 'audio' : noteSource === 'video' ? 'audio' : noteSource === 'voix' ? 'voix' : noteSource
+    const base = noteText.trim()
+    const guide = noteGuide.trim()
+    if (!base && !guide) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
+    let content = base
+    if (guide) {
+      const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${base || '(aucun)'}` }))
+      if (!r) return
+      const extra = stripAiNoise(r.reply).trim()
+      content = base ? `${base}\n\nComplément de Memo :\n${extra}` : extra
+    }
+    const title = noteTitle.trim() || (guide ? guide.slice(0, 50) : '')
     const ok = await run(async () => {
-      await addNote(user.id, id, noteTitle, noteText.trim(), src)
+      await addNote(user.id, id, title, content, src)
       return true
     })
     if (ok) {
-      setNoteTitle(''); setNoteText(''); setNoteSource('texte'); setAdding(false); notes.reload(); course.reload()
+      setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setAdding(false); notes.reload(); course.reload()
     }
   }
 
@@ -485,7 +499,14 @@ export function CourseDetail() {
 
           <div className="field"><label htmlFor="nt">Titre</label><input id="nt" className="input" maxLength={80} placeholder="Ex. Chapitre 2" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} /></div>
           <div className="field"><label htmlFor="nc">Ta note (tu peux la corriger)</label><textarea id="nc" className="textarea" rows={6} value={noteText} onChange={(e) => setNoteText(e.target.value)} /></div>
-          <button className="btn" type="submit" disabled={busy || recording}>Enregistrer la note</button>
+          <div className="field">
+            <label htmlFor="ng">Consignes pour l’IA (facultatif)</label>
+            <textarea id="ng" className="textarea" rows={3} value={noteGuide} onChange={(e) => setNoteGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." />
+            <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
+            {WEB_SEARCH_ENABLED && <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={noteWeb} onChange={(e) => setNoteWeb(e.target.checked)} /> Chercher aussi sur le web</label>}
+            <span className="muted">Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points).</span>
+          </div>
+          <button className="btn" type="submit" disabled={busy || recording}>{busy ? 'Un instant…' : 'Enregistrer la note'}</button>
         </form>
       )}
 
