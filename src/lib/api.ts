@@ -622,7 +622,7 @@ export async function startPayment(provider: string, phone: string, currency: 'U
     saveDemo(db)
     return { message: 'Mode démo : paiement simulé, en attente.' }
   }
-  return invoke<{ message: string }>('payments-initiate', { provider, phone, currency, plan: 'monthly' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+  return invoke<{ message: string }>('swift-worker', { provider, phone, currency, plan: 'monthly' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
 }
 
 export async function hasPremium(userId: string): Promise<boolean> {
