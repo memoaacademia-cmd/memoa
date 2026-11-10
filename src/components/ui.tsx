@@ -153,6 +153,14 @@ export function useAction() {
 }
 
 /** Charge des données au montage et lorsque `deps` change. */
+/** Message clair quand le réseau est coupé ou instable (au lieu de « Failed to fetch »). */
+function friendlyError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return 'Pas de connexion : ça se mettra à jour dès que le réseau revient.'
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) return 'Connexion instable : réessaie dans un instant.'
+  return msg
+}
+
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -163,12 +171,18 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
     setLoading(true)
     fn()
       .then((d) => alive && (setData(d), setError(null)))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => alive && setError(friendlyError(e)))
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick])
+  // Quand la connexion revient, tout se recharge tout seul.
+  useEffect(() => {
+    const on = () => setTick((t) => t + 1)
+    window.addEventListener('online', on)
+    return () => window.removeEventListener('online', on)
+  }, [])
   return { data, error, loading, reload: () => setTick((t) => t + 1) }
 }

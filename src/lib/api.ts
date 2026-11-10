@@ -355,15 +355,16 @@ export async function addNote(userId: string, courseId: string, title: string, c
 
 /* ---------------------------- LIBRAIRIE ---------------------------- */
 
-export async function listDocs(promotion: string, faculty: string | null): Promise<LibDoc[]> {
+export async function listDocs(promotion: string | null, faculty: string | null): Promise<LibDoc[]> {
   if (!isConfigured) {
     const db = loadDemo()
     return db.docs
-      .filter((d) => d.promotion === promotion && (!faculty || d.faculty === faculty))
+      .filter((d) => (!promotion || d.promotion === promotion) && (!faculty || d.faculty === faculty))
       .map((d) => ({ ...d, is_favorite: db.favs.includes(d.id) }))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
   }
-  let q = sb().from('library_documents').select('*').eq('promotion', promotion).order('created_at', { ascending: false })
+  let q = sb().from('library_documents').select('*').order('created_at', { ascending: false }).limit(300)
+  if (promotion) q = q.eq('promotion', promotion)
   if (faculty) q = q.eq('faculty', faculty)
   const [docs, favs] = await Promise.all([q, sb().from('library_favorites').select('document_id')])
   if (docs.error) throw docs.error
@@ -376,7 +377,7 @@ const MAX_DOC_BYTES = 20 * 1024 * 1024
 
 export async function publishDoc(
   userId: string,
-  input: { title: string; doc_type: string; university: string; faculty: string; promotion: string; course_title: string },
+  input: { title: string; doc_type: string; university: string; faculty: string; department?: string; promotion: string; course_title: string },
   file: File | null
 ): Promise<void> {
   if (!input.title.trim()) fail('Donne un titre à ton document.')

@@ -39,6 +39,7 @@ export interface LibDoc {
   doc_type: string
   university: string
   faculty: string
+  department?: string
   promotion: string
   course_title: string
   file_path: string | null
