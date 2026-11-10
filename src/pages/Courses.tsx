@@ -382,7 +382,7 @@ export function CourseDetail() {
     let text = (course.data?.title ?? '') + '. ' + full
     setSummary(null)
     if (summarize) {
-      const r = await run(() => askAI({ task: 'summary', prompt: full.slice(0, 12000) }))
+      const r = await run(() => askAI({ task: 'summary', prompt: full.slice(0, 60000) }))
       if (!r) return
       text = stripAiNoise(r.reply)
       setSummary(text)

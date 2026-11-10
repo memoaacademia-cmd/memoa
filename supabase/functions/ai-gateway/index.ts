@@ -12,6 +12,9 @@ const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
 const PER_MINUTE = num('AI_LIMIT_PER_MINUTE', 8) // anti-rafale pour tous
 const PREMIUM_PER_DAY = num('AI_PREMIUM_PER_DAY', 300) // « généreux » mais plafonné
 const MAX_PROMPT = 8000
+const MAX_LONG_TEXT = 60000 // résumé et mise en forme de notes : environ 15 pages
+const CHUNK_CHARS = 18000
+const LONG_TASKS: string[] = ['summary', 'structure_notes']
 const MAX_CONTEXT_CHARS = 12000
 const MAX_ATTACHMENT = 8000
 const MAX_ALL_COURSES_CHARS = 6000
@@ -222,6 +225,29 @@ async function transcribe(req: Request, userId: string) {
   }
 }
 
+
+// ---- Texte très long (cours de ~15 pages) : on résume par parties, puis on fusionne les résumés ----
+async function summarizeLong(model: string, text: string) {
+  const parts: string[] = []
+  for (let i = 0; i < text.length; i += CHUNK_CHARS) parts.push(text.slice(i, i + CHUNK_CHARS))
+  let tokensIn = 0
+  let tokensOut = 0
+  const partials: string[] = []
+  for (const p of parts) {
+    const r = await callModel(model, SYSTEM.summary, [{ role: 'user', content: p }], 900)
+    partials.push(r.text)
+    tokensIn += r.tokensIn
+    tokensOut += r.tokensOut
+  }
+  const last = await callModel(
+    model,
+    SYSTEM.summary,
+    [{ role: 'user', content: "Voici les résumés successifs des parties d'un même cours. Fais-en un seul résumé fluide et complet :\n\n" + partials.join('\n\n') }],
+    maxTokensFor('summary')
+  )
+  return { text: last.text, tokensIn: tokensIn + last.tokensIn, tokensOut: tokensOut + last.tokensOut }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
   if (req.method !== 'POST') return json(req, 405, { error: 'Méthode non autorisée.' })
@@ -240,7 +266,9 @@ Deno.serve(async (req) => {
   const conversationId = typeof body.conversationId === 'string' && UUID.test(body.conversationId) ? body.conversationId : null
   if (!TASKS.includes(task)) return json(req, 400, { error: 'Tâche inconnue.' })
   if (!prompt) return json(req, 400, { error: 'Écris ta demande.' })
-  if (prompt.length > MAX_PROMPT) return json(req, 400, { error: 'Ta demande est trop longue.' })
+  if (LONG_TASKS.includes(task)) {
+    if (prompt.length > MAX_LONG_TEXT) return json(req, 400, { error: 'Ce texte est trop long (environ 15 pages au maximum). Choisis moins de notes à la fois.' })
+  } else if (prompt.length > MAX_PROMPT) return json(req, 400, { error: 'Ta demande est trop longue.' })
 
   const admin = adminClient()
 
@@ -305,7 +333,9 @@ Deno.serve(async (req) => {
   const model = modelFor(task)
   let result
   try {
-    result = await callModel(model, SYSTEM[task], turns, maxTokensFor(task))
+    result = task === 'summary' && prompt.length > CHUNK_CHARS * 1.3
+      ? await summarizeLong(model, prompt)
+      : await callModel(model, SYSTEM[task], turns, maxTokensFor(task))
   } catch (e) {
     console.error('ai-gateway', task, (e as Error).message) // jamais le contenu de l'étudiant dans les logs
     return json(req, 502, { error: "L'assistant est momentanément indisponible. Réessaie dans un instant." })

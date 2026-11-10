@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Brand } from '../components/ui'
 
@@ -36,9 +36,13 @@ export default function Install() {
   const [ev, setEv] = useState<InstallPromptEvent | null>(null)
   const [done, setDone] = useState(false)
   const [note, setNote] = useState('')
+  const [hl, setHl] = useState(false)
+  const [shareNote, setShareNote] = useState('')
+  const stepsRef = useRef<HTMLDivElement | null>(null)
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
   const isIos = /iPhone|iPad|iPod/i.test(ua)
   const isAndroid = /Android/i.test(ua)
+  const standalone = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true)
 
   useEffect(() => {
     const onPrompt = (e: Event) => { e.preventDefault(); setEv(e as InstallPromptEvent) }
@@ -57,20 +61,30 @@ export default function Install() {
     setEv(null)
   }
 
+  /** Un seul gros bouton pour tout le monde : installe directement quand le navigateur le permet, sinon montre les étapes. */
+  async function installNow() {
+    setNote('')
+    if (ev) return install()
+    if (isIos) setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
+    else setNote('Ton navigateur ne propose pas l’installation directe ici. Ouvre cette page dans Chrome, ou suis les étapes ci-dessous.')
+    setHl(true)
+    stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.setTimeout(() => setHl(false), 2500)
+  }
+
   async function shareLink() {
     const url = window.location.origin + window.location.pathname + '#/installer'
     try {
       if (typeof navigator.share === 'function') await navigator.share({ title: 'Memoa', text: 'Installe Memoa sur ton téléphone :', url })
-      else { await navigator.clipboard.writeText(url); setNote('Lien copié.') }
+      else { await navigator.clipboard.writeText(url); setShareNote('Lien copié.') }
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setNote('Copie le lien depuis la barre d’adresse du navigateur.')
+      if ((e as Error).name !== 'AbortError') setShareNote('Copie le lien depuis la barre d’adresse du navigateur.')
     }
   }
 
   const android = (
     <section className="card" aria-label="Android">
       <strong className="h2">Android (Chrome)</strong>
-      {ev && !done && <button type="button" className="btn" onClick={() => void install()}>Installer Memoa</button>}
       {done && <span className="muted">Memoa est installée. Cherche son icône sur ton écran d’accueil.</span>}
       <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Step n={1}>Ouvre cette page dans <b>Chrome</b>.</Step>
@@ -107,9 +121,34 @@ export default function Install() {
       <Brand size={48} center />
       <h1 className="h1" style={{ textAlign: 'center' }}>Installe Memoa</h1>
       <p className="lead" style={{ textAlign: 'center' }}>Garde Memoa sur ton écran d’accueil, comme une application. Étudiez plus intelligemment.</p>
-      {isIos ? <>{iphone}{android}{desktop}</> : isAndroid ? <>{android}{iphone}{desktop}</> : <>{desktop}{android}{iphone}</>}
+      {standalone || done ? (
+        <div className="notice" role="status">Memoa est déjà installée sur cet appareil. Cherche son icône sur ton écran d’accueil.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }} aria-hidden="true">
+            <span style={{ flex: 1, height: 2, borderRadius: 2, background: 'var(--line-strong)' }} />
+            <span className="label-mono" style={{ letterSpacing: '0.14em' }}>INSTALLER</span>
+            <span style={{ flex: 1, height: 2, borderRadius: 2, background: 'var(--line-strong)' }} />
+          </div>
+          <button type="button" className="btn" style={{ minHeight: 60, fontSize: 19, fontWeight: 700, width: '100%' }} onClick={() => void installNow()}>
+            Installer Memoa
+          </button>
+          <span className="muted" style={{ textAlign: 'center' }}>
+            {ev ? 'Un seul geste : ton téléphone te demande de confirmer.' : isIos ? 'Sur iPhone, Apple demande 3 touches : voici lesquelles.' : 'Touche le bouton : on t’installe l’application ou on te montre comment.'}
+          </span>
+          {note && <div className="notice" role="status">{note}</div>}
+        </>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+        <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+        <span className="label-mono">Comment ça marche</span>
+        <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+      </div>
+      <div ref={stepsRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, borderRadius: 16, outline: hl ? '3px solid var(--btn)' : '3px solid transparent', outlineOffset: 4, transition: 'outline-color .3s' }}>
+        {isIos ? <>{iphone}{android}{desktop}</> : isAndroid ? <>{android}{iphone}{desktop}</> : <>{desktop}{android}{iphone}</>}
+      </div>
       <button type="button" className="btn ghost" onClick={() => void shareLink()}>Partager ce lien</button>
-      {note && <span className="muted" role="status">{note}</span>}
+      {shareNote && <span className="muted" role="status" style={{ textAlign: 'center' }}>{shareNote}</span>}
       <Link to="/" className="link" style={{ textAlign: 'center' }}>Ouvrir Memoa</Link>
     </main>
   )
