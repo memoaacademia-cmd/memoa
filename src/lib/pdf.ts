@@ -106,7 +106,7 @@ function footers(doc: Doc, label: string) {
   }
 }
 
-export async function buildCoursePdf(title: string, author: string, notes: Note[]): Promise<Blob> {
+export async function buildCoursePdf(title: string, author: string, notes: Note[], kind = 'NOTES DE COURS'): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const w = writer(doc)
@@ -114,7 +114,7 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
   doc.setFillColor(11, 93, 84)
   doc.rect(0, 0, W, 8, 'F')
   w.y = 60
-  w.write('MEMOA · NOTES DE COURS', 10, 'bold', 0, 6, 11)
+  w.write(`MEMOA · ${clean(kind)}`, 10, 'bold', 0, 6, 11)
   w.write(clean(title), 26, 'bold', 0, 6, 20)
   doc.setDrawColor(11, 93, 84)
   doc.setLineWidth(0.8)

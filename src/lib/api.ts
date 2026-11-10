@@ -379,7 +379,7 @@ export async function publishDoc(
   userId: string,
   input: { title: string; doc_type: string; university: string; faculty: string; department?: string; promotion: string; course_title: string },
   file: File | null
-): Promise<void> {
+): Promise<string | null> {
   if (!input.title.trim()) fail('Donne un titre à ton document.')
   if (file) {
     if (!ALLOWED_DOC_TYPES.includes(file.type)) fail('Seuls les fichiers PDF sont acceptés pour le moment.')
@@ -387,9 +387,10 @@ export async function publishDoc(
   }
   if (!isConfigured) {
     const db = loadDemo()
-    db.docs.push({ id: uid(), ...input, file_path: null, owner_id: userId, status: 'published', created_at: new Date().toISOString() })
+    const id = uid()
+    db.docs.push({ id, ...input, file_path: null, owner_id: userId, status: 'published', created_at: new Date().toISOString() })
     saveDemo(db)
-    return
+    return id
   }
   let file_path: string | null = null
   if (file) {
@@ -397,9 +398,24 @@ export async function publishDoc(
     const { error } = await sb().storage.from('library').upload(file_path, file, { contentType: 'application/pdf' })
     if (error) throw error
   }
-  // Statut forcé à « pending » par la base : un administrateur Memoa valide avant publication.
-  const { error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path })
+  // Publié tout de suite ; retiré ensuite si la vérification automatique le refuse ou si plusieurs étudiants le signalent.
+  const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'published' }).select('id').single()
   if (error) throw error
+  return (data as { id: string }).id
+}
+
+export const REPORT_REASONS = [
+  { id: 'inapproprie', label: 'Contenu inapproprié' },
+  { id: 'pas_un_cours', label: 'Ce n’est pas un document d’étude' },
+  { id: 'droit_auteur', label: 'Droits d’auteur' },
+  { id: 'autre', label: 'Autre problème' }
+] as const
+
+/** Signale un document. Un même étudiant ne peut signaler qu'une fois : un doublon est accepté sans erreur. */
+export async function reportDoc(userId: string, docId: string, reason: string): Promise<void> {
+  if (!isConfigured) return
+  const { error } = await sb().from('library_reports').insert({ user_id: userId, document_id: docId, reason })
+  if (error && (error as { code?: string }).code !== '23505') throw error
 }
 
 export async function toggleFavorite(userId: string, docId: string, on: boolean): Promise<void> {
@@ -418,9 +434,10 @@ export async function toggleFavorite(userId: string, docId: string, on: boolean)
   }
 }
 
-export async function docDownloadUrl(path: string | null): Promise<string | null> {
+/** Adresse temporaire d'un document. Avec `saveAs`, le navigateur télécharge le fichier au lieu de l'ouvrir. */
+export async function docDownloadUrl(path: string | null, saveAs?: string): Promise<string | null> {
   if (!path || !isConfigured) return null
-  const { data, error } = await sb().storage.from('library').createSignedUrl(path, 60)
+  const { data, error } = await sb().storage.from('library').createSignedUrl(path, 120, saveAs ? { download: saveAs } : undefined)
   if (error) throw error
   return data.signedUrl
 }
@@ -489,6 +506,8 @@ export async function askAI(args: {
   attachment?: string
   /** Autorise l'assistant à chercher sur le web. */
   web?: boolean
+  /** Vérification d'un document de la Librairie (tâche review_doc). */
+  docId?: string
 }): Promise<AiResult> {
   if (!isConfigured) {
     await new Promise((r) => setTimeout(r, 600))

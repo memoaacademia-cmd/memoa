@@ -44,7 +44,7 @@ export interface LibDoc {
   course_title: string
   file_path: string | null
   owner_id: string
-  status: 'pending' | 'published'
+  status: 'pending' | 'published' | 'rejected'
   created_at: string
   is_favorite?: boolean
 }
@@ -72,4 +72,4 @@ export interface Payment {
   created_at: string
 }
 
-export type AiTask = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note'
+export type AiTask = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'

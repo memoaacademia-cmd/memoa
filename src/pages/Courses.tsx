@@ -265,6 +265,8 @@ export function CourseDetail() {
   const [listenOpen, setListenOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [summary, setSummary] = useState<string | null>(null)
+  const [summaryOpen, setSummaryOpen] = useState(true)
+  const [summaryScope, setSummaryScope] = useState('')
   const nav = useNavigate()
   const [noteSource, setNoteSource] = useState('texte')
   const [noteStep, setNoteStep] = useState('')
@@ -369,9 +371,10 @@ export function CourseDetail() {
 
   function togglePanel() {
     if (reading) { stopSpeaking(); setReading(false); return }
-    if (!listenOpen) setPicked((notes.data ?? []).map((n) => n.id))
+    if (!listenOpen) { setPicked((notes.data ?? []).map((n) => n.id)); setAdding(false) }
     setListenOpen((v) => !v)
   }
+  function stopReading() { stopSpeaking(); setReading(false) }
   function togglePick(nid: string) {
     setPicked((p) => (p.includes(nid) ? p.filter((x) => x !== nid) : [...p, nid]))
   }
@@ -386,6 +389,8 @@ export function CourseDetail() {
       if (!r) return
       text = stripAiNoise(r.reply)
       setSummary(text)
+      setSummaryOpen(true)
+      setSummaryScope(chosen.map((n) => n.title).join(', '))
     }
     const ok = speak(text, () => setReading(false))
     if (!ok) return setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
@@ -431,6 +436,14 @@ export function CourseDetail() {
     } else saveBlob(course.data.title, blob)
   }
 
+  async function downloadSummary() {
+    if (!course.data || !summary) return
+    const scope = summaryScope ? `Portée du résumé : ${summaryScope}.\n\n` : ''
+    const note: Note = { id: 'resume', course_id: id, title: 'Résumé', content: scope + summary, source: 'ia', created_at: new Date().toISOString() }
+    const blob = await run(() => buildCoursePdf(`Résumé — ${course.data!.title}`, profileName, [note], 'RÉSUMÉ'))
+    if (blob) saveBlob(`Résumé ${course.data.title}`, blob)
+  }
+
   async function revise() {
     if (!notes.data?.length) return setError("Ajoute d'abord une note pour pouvoir réviser.")
     const r = await run(() => askAI({ task: 'quiz', courseId: id, prompt: 'Fais-moi un quiz de 5 questions sur ce cours, avec les réponses à la fin.' }))
@@ -445,7 +458,7 @@ export function CourseDetail() {
     <main className="page">
       <BackLink to="/sac" title={course.data.title} />
       <div className="grid2">
-        <button type="button" className="tile" onClick={() => setAdding((v) => !v)}><Icon name="plus" size={26} color="#3ccfb4" /><span className="h2">Ajouter une note</span></button>
+        <button type="button" className="tile" onClick={() => { setAdding((v) => !v); setListenOpen(false) }}><Icon name="plus" size={26} color="#3ccfb4" /><span className="h2">Ajouter une note</span></button>
         <Link to={`/tp/${id}`} className="tile"><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Assistant TP</span></Link>
         <button type="button" className="tile" onClick={revise} disabled={busy}><Icon name="check" size={26} color="#3ccfb4" /><span className="h2">{busy ? 'Un instant…' : 'Réviser'}</span></button>
         <button type="button" className="tile" onClick={() => void pdf('read')} disabled={!all.length || busy}><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Lire le PDF</span></button>
@@ -458,19 +471,51 @@ export function CourseDetail() {
       {listenOpen && !reading && (
         <section className="card">
           <span className="label-mono">Que veux-tu écouter ?</span>
-          {all.map((n) => (
-            <label key={n.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <input type="checkbox" checked={picked.includes(n.id)} onChange={() => togglePick(n.id)} />
-              <span>{n.title}</span>
-            </label>
-          ))}
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {all.map((n) => (
+              <label key={n.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input type="checkbox" checked={picked.includes(n.id)} onChange={() => togglePick(n.id)} />
+                <span>{n.title}</span>
+              </label>
+            ))}
+          </div>
+          {all.length > 3 && (
+            <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setPicked(picked.length === all.length ? [] : all.map((n) => n.id))}>
+              {picked.length === all.length ? 'Tout décocher' : 'Tout cocher'}
+            </button>
+          )}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" className="btn ghost small" onClick={() => void listenChosen(false)} disabled={busy}>Lire tel quel</button>
             <button type="button" className="btn small" onClick={() => void listenChosen(true)} disabled={busy}>{busy ? 'Un instant…' : 'Résumé puis lecture'}</button>
           </div>
         </section>
       )}
-      {summary && <section className="card"><span className="label-mono">Résumé</span><div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{summary}</div></section>}
+      {summary && (
+        <section className="card" aria-label="Résumé">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span className="label-mono">Résumé{summaryScope ? ' · ' + (summaryScope.length > 40 ? summaryScope.slice(0, 40) + '…' : summaryScope) : ''}</span>
+            <button type="button" className="link" onClick={() => setSummaryOpen((v) => !v)} aria-expanded={summaryOpen}>{summaryOpen ? 'Masquer' : 'Afficher'}</button>
+          </div>
+          {summaryOpen && (
+            <>
+              <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{summary}</div>
+              <button type="button" className="btn small" onClick={() => void downloadSummary()} disabled={busy}>
+                <Icon name="download" size={18} /> Télécharger le résumé (PDF)
+              </button>
+            </>
+          )}
+        </section>
+      )}
+      {reading && (
+        <div className="no-print" role="status" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 88, width: 'calc(100% - 24px)', maxWidth: 416, zIndex: 11, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 16, background: 'var(--surface-2)', border: '1px solid var(--line-strong)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' }}>
+          <Icon name="headphones" size={22} color="var(--link)" />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <b>Lecture en cours</b>
+            <span className="muted" style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary ? 'Résumé · ' : ''}{course.data.title}</span>
+          </span>
+          <button type="button" className="btn small" onClick={stopReading}>Arrêter</button>
+        </div>
+      )}
 
       {adding && (
         <form onSubmit={save} className="card" noValidate>

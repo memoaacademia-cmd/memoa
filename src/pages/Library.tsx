@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
-import { docDownloadUrl, listDocs, publishDoc, toggleFavorite } from '../lib/api'
+import { askAI, docDownloadUrl, listDocs, publishDoc, REPORT_REASONS, reportDoc, toggleFavorite } from '../lib/api'
+import { extractPdfText } from '../lib/pdfimport'
 import { useAuth } from '../lib/auth'
 import type { LibDoc } from '../lib/types'
 
@@ -24,6 +25,8 @@ export default function Library() {
   const [promo, setPromo] = useState('')
   const [fac, setFac] = useState('')
   const [publishing, setPublishing] = useState(false)
+  const [reporting, setReporting] = useState<string | null>(null)
+  const [thanks, setThanks] = useState('')
   const { data, loading, error, reload } = useLoad(() => listDocs(promo || null, fac || null), [promo, fac])
   const act = useAction()
   const faculties = useMemo(() => allFaculties(), [])
@@ -45,10 +48,29 @@ export default function Library() {
     await act.run(() => toggleFavorite(user.id, d.id, !d.is_favorite))
     reload()
   }
-  async function open(d: LibDoc) {
-    const url = await act.run(() => docDownloadUrl(d.file_path))
-    if (url) window.open(url, '_blank', 'noopener')
-    else if (url === null) act.setError("Ce document n'a pas de fichier à télécharger.")
+  /** « Voir » ouvre le PDF dans le navigateur ; « Télécharger » l'enregistre sur le téléphone. */
+  async function openDoc(d: LibDoc, mode: 'view' | 'download') {
+    const w = mode === 'view' ? window.open('', '_blank') : null // ouverte tout de suite, sinon le téléphone la bloque
+    const name = (d.title.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'document') + '.pdf'
+    const url = await act.run(() => docDownloadUrl(d.file_path, mode === 'download' ? name : undefined))
+    if (!url) {
+      w?.close()
+      if (url === null) act.setError("Ce document n'a pas de fichier.")
+      return
+    }
+    if (w) w.location.href = url
+    else {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+    }
+  }
+  async function report(d: LibDoc, reason: string) {
+    if (!user) return
+    const ok = await act.run(async () => { await reportDoc(user.id, d.id, reason); return true })
+    setReporting(null)
+    if (ok) setThanks('Merci : ton signalement est enregistré.')
   }
 
   return (
@@ -84,6 +106,7 @@ export default function Library() {
       {publishing && <PublishForm defaultPromo={promo || 'L1'} onDone={() => { setPublishing(false); reload() }} />}
 
       <ErrorBox message={error ?? act.error} />
+      {thanks && <div className="notice" role="status">{thanks}</div>}
       {loading ? <Spinner /> : !shown.length ? (
         <Empty
           title={filtered ? 'Aucun document ne correspond' : "Aucun document pour l'instant"}
@@ -106,8 +129,18 @@ export default function Library() {
               {d.course_title && <span className="muted">{d.course_title}</span>}
               <span className="muted" style={{ fontSize: 13 }}>{d.faculty}{d.department ? ' · ' + d.department : ''}</span>
               {d.university && <span className="muted" style={{ fontSize: 13 }}>{universityLabel(d.university)}</span>}
-              {d.status === 'pending' && <span className="badge amber">En attente de validation</span>}
-              {d.file_path && <button type="button" className="link" onClick={() => open(d)}>Télécharger</button>}
+              {d.status === 'rejected' && <span className="badge amber">Retiré après vérification</span>}
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'view')}>Voir</button>}
+                {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'download')}>Télécharger</button>}
+                {d.owner_id !== user?.id && <button type="button" className="link" style={{ color: 'var(--text-3)' }} onClick={() => { setThanks(''); setReporting(reporting === d.id ? null : d.id) }}>Signaler</button>}
+              </div>
+              {reporting === d.id && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  <span className="muted" style={{ fontSize: 13 }}>Pourquoi ?</span>
+                  {REPORT_REASONS.map((r) => <button key={r.id} type="button" className="btn ghost small" disabled={act.busy} onClick={() => void report(d, r.id)}>{r.label}</button>)}
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -139,7 +172,16 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
     if (!faculty) return setError('Indique la faculté concernée.')
     const department = writeDep ? depTxt.trim() : dep
     const ok = await run(async () => {
-      await publishDoc(user.id, { title, doc_type: type, university: profile.university, faculty, department, promotion: promo, course_title: course.trim() }, file)
+      const id = await publishDoc(user.id, { title, doc_type: type, university: profile.university, faculty, department, promotion: promo, course_title: course.trim() }, file)
+      // Vérification légère en arrière-plan : on ne retire le document que s'il est clairement n'importe quoi.
+      if (file && id) {
+        void (async () => {
+          try {
+            const text = await extractPdfText(file, 3)
+            if (text.length >= 40) await askAI({ task: 'review_doc', docId: id, prompt: text.slice(0, 3000) })
+          } catch { /* en cas de doute, le document reste en ligne */ }
+        })()
+      }
       return true
     })
     if (ok) onDone()
@@ -174,7 +216,7 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
         {writeDep && <input className="input" aria-label="Nom du département" placeholder="Écris le nom du département" maxLength={160} value={depTxt} onChange={(e) => setDepTxt(e.target.value)} />}
       </div>
       <div className="field"><label htmlFor="pfile">Fichier PDF (20 Mo max)</label><input id="pfile" type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></div>
-      <div className="notice">Ne publie que des documents que tu as le droit de partager. Un administrateur Memoa vérifie chaque document avant sa mise en ligne.</div>
+      <div className="notice">Ton document est publié tout de suite. Ne partage que ce que tu as le droit de partager : un document clairement hors sujet ou signalé par plusieurs étudiants est retiré.</div>
       <ErrorBox message={error} />
       <button className="btn" type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Publier'}</button>
     </form>
