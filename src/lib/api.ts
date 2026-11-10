@@ -359,11 +359,11 @@ export async function listDocs(promotion: string | null, faculty: string | null)
   if (!isConfigured) {
     const db = loadDemo()
     return db.docs
-      .filter((d) => (!promotion || d.promotion === promotion) && (!faculty || d.faculty === faculty))
+      .filter((d) => !d.deleted_at && (!promotion || d.promotion === promotion) && (!faculty || d.faculty === faculty))
       .map((d) => ({ ...d, is_favorite: db.favs.includes(d.id) }))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
   }
-  let q = sb().from('library_documents').select('*').order('created_at', { ascending: false }).limit(300)
+  let q = sb().from('library_documents').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300)
   if (promotion) q = q.eq('promotion', promotion)
   if (faculty) q = q.eq('faculty', faculty)
   const [docs, favs] = await Promise.all([q, sb().from('library_favorites').select('document_id')])
@@ -402,6 +402,48 @@ export async function publishDoc(
   const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'published' }).select('id').single()
   if (error) throw error
   return (data as { id: string }).id
+}
+
+/** Documents que l'étudiant a supprimés (corbeille de 30 jours). Efface d'abord pour de bon ceux dont le délai est passé. */
+export async function listMyTrashedDocs(userId: string): Promise<LibDoc[]> {
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString()
+  if (!isConfigured) {
+    const db = loadDemo()
+    db.docs = db.docs.filter((d) => !(d.deleted_at && d.deleted_at < cutoff))
+    saveDemo(db)
+    return db.docs.filter((d) => d.deleted_at && d.owner_id === userId)
+  }
+  const { data, error } = await sb().from('library_documents').select('*').eq('owner_id', userId).not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
+  if (error) throw error
+  const all = data as LibDoc[]
+  const expired = all.filter((d) => d.deleted_at && d.deleted_at < cutoff)
+  for (const d of expired) await deleteDocForever(d)
+  return all.filter((d) => !expired.includes(d))
+}
+
+/** Met un de ses documents à la corbeille (masqué pour tous, restaurable pendant 30 jours) ou le restaure. */
+export async function setDocTrashed(id: string, trashed: boolean): Promise<void> {
+  if (!isConfigured) {
+    const db = loadDemo()
+    const d = db.docs.find((x) => x.id === id)
+    if (d) { d.deleted_at = trashed ? new Date().toISOString() : null; saveDemo(db) }
+    return
+  }
+  const { error } = await sb().rpc('library_trash', { doc_id: id, trashed })
+  if (error) throw error
+}
+
+/** Efface pour de bon un de ses documents : la ligne et le fichier PDF. */
+export async function deleteDocForever(doc: LibDoc): Promise<void> {
+  if (!isConfigured) {
+    const db = loadDemo()
+    db.docs = db.docs.filter((x) => x.id !== doc.id)
+    saveDemo(db)
+    return
+  }
+  if (doc.file_path) await sb().storage.from('library').remove([doc.file_path])
+  const { error } = await sb().from('library_documents').delete().eq('id', doc.id)
+  if (error) throw error
 }
 
 export const REPORT_REASONS = [

@@ -46,6 +46,7 @@ export interface LibDoc {
   owner_id: string
   status: 'pending' | 'published' | 'rejected'
   created_at: string
+  deleted_at?: string | null
   is_favorite?: boolean
 }
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
-import { askAI, docDownloadUrl, listDocs, publishDoc, REPORT_REASONS, reportDoc, toggleFavorite } from '../lib/api'
+import { askAI, deleteDocForever, docDownloadUrl, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
 import { extractPdfText } from '../lib/pdfimport'
 import { useAuth } from '../lib/auth'
 import type { LibDoc } from '../lib/types'
@@ -28,7 +28,11 @@ export default function Library() {
   const [reporting, setReporting] = useState<string | null>(null)
   const [thanks, setThanks] = useState('')
   const { data, loading, error, reload } = useLoad(() => listDocs(promo || null, fac || null), [promo, fac])
+  const trash = useLoad(() => listMyTrashedDocs(user?.id ?? ''), [user?.id])
+  const [showTrash, setShowTrash] = useState(false)
   const act = useAction()
+  const trashed = trash.data ?? []
+  const daysLeft = (d?: string | null) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(d ?? Date.now()).getTime()) / 86400000))
   const faculties = useMemo(() => allFaculties(), [])
 
   const shown = useMemo(() => {
@@ -65,6 +69,20 @@ export default function Library() {
       a.download = name
       a.click()
     }
+  }
+  async function remove(d: LibDoc) {
+    if (!window.confirm(`Supprimer « ${d.title} » de la Librairie ? Les autres étudiants ne le verront plus. Tu pourras le restaurer pendant ${TRASH_DAYS} jours depuis ta corbeille.`)) return
+    const ok = await act.run(async () => { await setDocTrashed(d.id, true); return true })
+    if (ok) { setThanks('Document supprimé. Il est dans ta corbeille pendant ' + TRASH_DAYS + ' jours.'); reload(); trash.reload() }
+  }
+  async function restore(d: LibDoc) {
+    const ok = await act.run(async () => { await setDocTrashed(d.id, false); return true })
+    if (ok) { setThanks('Document restauré : il est de nouveau dans la Librairie.'); reload(); trash.reload() }
+  }
+  async function eraseNow(d: LibDoc) {
+    if (!window.confirm(`Effacer « ${d.title} » pour de bon ? Cette action est définitive.`)) return
+    const ok = await act.run(async () => { await deleteDocForever(d); return true })
+    if (ok) trash.reload()
   }
   async function report(d: LibDoc, reason: string) {
     if (!user) return
@@ -133,6 +151,7 @@ export default function Library() {
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'view')}>Voir</button>}
                 {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'download')}>Télécharger</button>}
+                {d.owner_id === user?.id && <button type="button" className="link" style={{ color: 'var(--danger, #c0392b)' }} disabled={act.busy} onClick={() => void remove(d)}>Supprimer</button>}
                 {d.owner_id !== user?.id && <button type="button" className="link" style={{ color: 'var(--text-3)' }} onClick={() => { setThanks(''); setReporting(reporting === d.id ? null : d.id) }}>Signaler</button>}
               </div>
               {reporting === d.id && (
@@ -144,6 +163,28 @@ export default function Library() {
             </article>
           ))}
         </div>
+      )}
+
+      {trashed.length > 0 && (
+        <>
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setShowTrash((v) => !v)} aria-expanded={showTrash}>
+            Ma corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
+          </button>
+          {showTrash && (
+            <section className="card" aria-label="Documents supprimés">
+              <span className="muted">Un document supprimé reste ici {TRASH_DAYS} jours, invisible des autres étudiants, puis il est effacé pour de bon.</span>
+              {trashed.map((d) => (
+                <div key={d.id} className="list-row" style={{ alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{ minWidth: 0, flex: '1 1 auto' }}><b>{d.title}</b><br /><span className="muted">{daysLeft(d.deleted_at)} j restants</span></span>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 'none' }}>
+                    <button type="button" className="btn ghost small" disabled={act.busy} onClick={() => void restore(d)}>Restaurer</button>
+                    <button type="button" className="link" style={{ color: 'var(--danger, #c0392b)' }} disabled={act.busy} onClick={() => void eraseNow(d)}>Effacer</button>
+                  </span>
+                </div>
+              ))}
+            </section>
+          )}
+        </>
       )}
     </main>
   )
