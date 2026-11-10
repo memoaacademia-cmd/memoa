@@ -1,4 +1,26 @@
 // Dictée vocale et lecture à voix haute : tout se fait avec le navigateur du téléphone, sans serveur ni coût.
+import { useSyncExternalStore } from 'react'
+
+/** Lecture en cours (une seule à la fois). Partagée par toute l'application : le mini-lecteur la montre sur tous les écrans. */
+export interface Voice {
+  label: string
+  sub?: string
+  /** Identifiant de ce qui est lu (ex. un message de l'Assistant), pour afficher « Arrêter » au bon endroit. */
+  id?: string
+}
+let current: Voice | null = null
+let session = 0
+const listeners = new Set<() => void>()
+const setCurrent = (v: Voice | null) => {
+  current = v
+  listeners.forEach((f) => f())
+}
+const subscribe = (f: () => void) => {
+  listeners.add(f)
+  return () => { listeners.delete(f) }
+}
+/** Vaut null quand rien n'est lu. */
+export const useVoice = () => useSyncExternalStore(subscribe, () => current)
 
 interface RecognitionEvent {
   resultIndex: number
@@ -58,9 +80,10 @@ function plain(text: string): string {
 }
 
 /** Lit le texte à voix haute en français. Les textes longs sont coupés en morceaux (sinon certains téléphones s'arrêtent). */
-export function speak(text: string, onEnd?: () => void): boolean {
+export function speak(text: string, onEnd?: () => void, meta: Voice = { label: 'Lecture en cours' }): boolean {
   if (!canSpeak()) return false
   const synth = window.speechSynthesis
+  const my = ++session // les anciens morceaux annulés ne doivent plus rien déclencher
   synth.cancel()
   const chunks = plain(text).match(/[^.!?\n]+[.!?]*\s*/g) ?? []
   const parts: string[] = []
@@ -69,20 +92,28 @@ export function speak(text: string, onEnd?: () => void): boolean {
     if ((cur + c).length > 220) { if (cur) parts.push(cur); cur = c } else cur += c
   }
   if (cur) parts.push(cur)
-  if (!parts.length) return false
+  if (!parts.length) { setCurrent(null); return false }
+  const done = () => {
+    if (my !== session) return
+    setCurrent(null)
+    onEnd?.()
+  }
   const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith('fr'))
+  setCurrent(meta)
   parts.forEach((p, i) => {
     const u = new SpeechSynthesisUtterance(p)
     u.lang = 'fr-FR'
     if (voice) u.voice = voice
     u.rate = 1
-    if (i === parts.length - 1) u.onend = () => onEnd?.()
-    u.onerror = () => onEnd?.()
+    if (i === parts.length - 1) u.onend = done
+    u.onerror = done
     synth.speak(u)
   })
   return true
 }
 
 export function stopSpeaking() {
+  session++
   if (canSpeak()) window.speechSynthesis.cancel()
+  if (current) setCurrent(null)
 }

@@ -10,7 +10,7 @@ import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
-import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
+import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
 // On ne montre que les sources qui marchent ; audio, vidéo et photo viendront quand elles seront prêtes.
@@ -261,7 +261,7 @@ export function CourseDetail() {
   const [noteWeb, setNoteWeb] = useState(true)
   const [open, setOpen] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<string | null>(null)
-  const [reading, setReading] = useState(false)
+  const reading = useVoice() !== null
   const [listenOpen, setListenOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [summary, setSummary] = useState<string | null>(null)
@@ -279,7 +279,7 @@ export function CourseDetail() {
   const audioRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => () => { stopSpeaking(); dict.current?.stop(); recorder.current?.stream.getTracks().forEach((t) => t.stop()) }, [])
+  useEffect(() => () => { dict.current?.stop(); recorder.current?.stream.getTracks().forEach((t) => t.stop()) }, [])
 
   function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
 
@@ -370,12 +370,11 @@ export function CourseDetail() {
   }
 
   function togglePanel() {
-    if (reading) { stopSpeaking(); setReading(false); return }
+    if (reading) { stopSpeaking(); return }
     if (!listenOpen) { setPicked((notes.data ?? []).map((n) => n.id)); setAdding(false) }
     setListenOpen((v) => !v)
   }
-  function stopReading() { stopSpeaking(); setReading(false) }
-  function togglePick(nid: string) {
+    function togglePick(nid: string) {
     setPicked((p) => (p.includes(nid) ? p.filter((x) => x !== nid) : [...p, nid]))
   }
   async function listenChosen(summarize: boolean) {
@@ -392,9 +391,8 @@ export function CourseDetail() {
       setSummaryOpen(true)
       setSummaryScope(chosen.map((n) => n.title).join(', '))
     }
-    const ok = speak(text, () => setReading(false))
+    const ok = speak(text, undefined, { label: 'Lecture en cours', sub: (summarize ? 'Résumé · ' : '') + (course.data?.title ?? '') })
     if (!ok) return setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
-    setReading(true)
     setListenOpen(false)
   }
 
@@ -506,17 +504,6 @@ export function CourseDetail() {
           )}
         </section>
       )}
-      {reading && (
-        <div className="no-print" role="status" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 88, width: 'calc(100% - 24px)', maxWidth: 416, zIndex: 11, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 16, background: 'var(--surface-2)', border: '1px solid var(--line-strong)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' }}>
-          <Icon name="headphones" size={22} color="var(--link)" />
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <b>Lecture en cours</b>
-            <span className="muted" style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary ? 'Résumé · ' : ''}{course.data.title}</span>
-          </span>
-          <button type="button" className="btn small" onClick={stopReading}>Arrêter</button>
-        </div>
-      )}
-
       {adding && (
         <form onSubmit={save} className="card" noValidate>
           <span className="label-mono">Comment veux-tu ajouter ta note ?</span>

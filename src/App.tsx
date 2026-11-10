@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Brand, NavBar, Spinner } from './components/ui'
+import MiniPlayer from './components/MiniPlayer'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import Home from './pages/Home'
@@ -81,6 +82,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <Outlet />
+      <MiniPlayer />
       <NavBar />
     </div>
   )

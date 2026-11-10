@@ -5,7 +5,7 @@ import { askAI, listConversations, listCourses, listMessages } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
-import { canDictate, canSpeak, speak, startDictation, stopSpeaking, type Dictation } from '../lib/speech'
+import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
 
@@ -31,10 +31,10 @@ export default function Assistant() {
   const [reading, setReading] = useState('')
   const photoRef = useRef<HTMLInputElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
-  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const speakingId = useVoice()?.id ?? null
   const dict = useRef<Dictation | null>(null)
 
-  useEffect(() => () => { dict.current?.stop(); stopSpeaking() }, [])
+  useEffect(() => () => { dict.current?.stop() }, [])
 
   function toggleMic() {
     if (listening) { dict.current?.stop(); return }
@@ -65,9 +65,9 @@ export default function Assistant() {
     setAttach({ name: f.name || 'photo', text: text.slice(0, 6500) })
   }
   function readAloud(m: Message) {
-    if (speakingId === m.id) { stopSpeaking(); setSpeakingId(null); return }
-    if (speak(m.content, () => setSpeakingId(null))) setSpeakingId(m.id)
-    else setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
+    if (speakingId === m.id) { stopSpeaking(); return }
+    if (!speak(m.content, undefined, { label: 'Réponse de Memo', id: m.id }))
+      setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
   }
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages, busy])
