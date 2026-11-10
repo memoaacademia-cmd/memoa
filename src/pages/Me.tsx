@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BackLink, ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
 import { hasPremium, listActivity, listPayments, PRICES, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf } from '../lib/names'
+import { VAPID_PUBLIC_KEY } from '../lib/features'
+import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
 import { currentStreak, streakTitle } from '../lib/streak'
 
@@ -90,8 +92,19 @@ export function Settings() {
   const [theme, setTheme] = usePref('theme', 'dark')
   const [storedLang, setLang] = usePref('lang', 'fr')
   const lang = LANGUAGES.some(([c]) => c === storedLang) ? storedLang : 'fr'
-  const [notif, setNotif] = usePref('notif', '1')
+  const [pushOn, setPushOn] = useState(false)
+  const [pushMsg, setPushMsg] = useState<string | null>(null)
   const [saver, setSaver] = usePref('datasaver', '0')
+
+  useEffect(() => { void isSubscribed().then(setPushOn) }, [])
+  async function togglePush(want: boolean) {
+    setPushMsg(null)
+    if (!want) { await disablePush(); setPushOn(false); return }
+    if (!user) return
+    const r = await enablePush(user.id)
+    setPushOn(r.ok)
+    if (!r.ok) setPushMsg(r.message)
+  }
   const [confirm, setConfirm] = useState(false)
   const [shared, setShared] = useState(false)
 
@@ -129,7 +142,8 @@ export function Settings() {
         </div>
       </section>
       <section className="card"><span className="label-mono">Notifications et données</span>
-        <Switch label="Notifications « Le savais-tu ? »" on={notif === '1'} set={(v) => setNotif(v ? '1' : '0')} />
+        {VAPID_PUBLIC_KEY && <Switch label="Notifications « Le savais-tu ? »" on={pushOn} set={(v) => void togglePush(v)} />}
+        {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
         <Switch label="Économie de données" on={saver === '1'} set={(v) => setSaver(v ? '1' : '0')} />
       </section>
       <section className="card"><span className="label-mono">Aide et informations</span>

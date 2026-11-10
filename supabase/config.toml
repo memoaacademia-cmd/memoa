@@ -2,3 +2,8 @@
 # il est protégé par une signature secrète vérifiée dans le code, pas par un jeton utilisateur.
 [functions.payments-webhook]
 verify_jwt = false
+
+# La notification quotidienne est lancée par la planification de Supabase (pas par un étudiant) :
+# elle est protégée par le secret CRON_SECRET vérifié dans le code.
+[functions.daily-fact-push]
+verify_jwt = false

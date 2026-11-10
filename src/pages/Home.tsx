@@ -4,7 +4,7 @@ import FactCard from '../components/FactCard'
 import { listActivity, listCourses } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
-import { currentStreak, factOfTheDay, lastWeek, memoMood, streakTitle } from '../lib/streak'
+import { currentStreak, lastWeek, memoMood, streakTitle } from '../lib/streak'
 
 export default function Home() {
   const { user, profile } = useAuth()
@@ -59,7 +59,7 @@ export default function Home() {
         <Link to="/assistant" className="tile"><Icon name="chat" size={26} color="#3ccfb4" /><span className="h2">Poser une question</span></Link>
       </div>
 
-      <FactCard fact={factOfTheDay()} memoName={profile?.memo_name ?? 'Memo'} animal={profile?.memo_animal ?? null} />
+      <FactCard memoName={profile?.memo_name ?? 'Memo'} animal={profile?.memo_animal ?? null} />
     </main>
   )
 }

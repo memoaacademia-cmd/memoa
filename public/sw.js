@@ -35,3 +35,31 @@ self.addEventListener('fetch', (e) => {
     })
   )
 })
+
+// Notifications « Le savais-tu ? » : le serveur envoie un petit message, on l'affiche, et un toucher ouvre Memoa.
+self.addEventListener('push', (e) => {
+  let data = {}
+  try { data = e.data ? e.data.json() : {} } catch (_) { data = {} }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Memoa', {
+      body: data.body || '',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      tag: 'memoa-savais-tu',
+      data: { url: data.url || './' }
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) return c.focus()
+      }
+      return self.clients.openWindow(target)
+    })
+  )
+})

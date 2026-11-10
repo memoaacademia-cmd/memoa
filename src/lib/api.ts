@@ -630,3 +630,18 @@ export async function hasPremium(userId: string): Promise<boolean> {
   const { data } = await sb().from('subscriptions').select('expires_at').gt('expires_at', new Date().toISOString()).limit(1)
   return (data ?? []).length > 0
 }
+
+/* ------------------- NOTIFICATIONS « LE SAVAIS-TU ? » ------------------- */
+
+export async function savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void> {
+  if (!isConfigured) return
+  void userId // l'identité vient du jeton de connexion, côté serveur
+  const { error } = await sb().rpc('register_push', { p_endpoint: sub.endpoint, p_p256dh: sub.p256dh, p_auth: sub.auth })
+  if (error) throw error
+}
+
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  if (!isConfigured) return
+  const { error } = await sb().from('push_subscriptions').delete().eq('endpoint', endpoint)
+  if (error) throw error
+}
