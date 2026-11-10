@@ -5,7 +5,7 @@
 // choisi : tant que PAYMENT_PROVIDER_ENABLED n'est pas "true", la fonction refuse proprement au lieu de simuler un paiement.
 import { adminClient, corsHeaders, json, requireUser } from '../_shared/common.ts'
 
-const PRICES = { USD: 4.5, CDF: 10500 } as const // à valider avec les tests de prix (voir MASTER CONTEXT §18)
+const PRICES = { USD: 4.99, CDF: 11000 } as const // prix décidés le 10 novembre 2026
 const PROVIDERS = ['orange', 'airtel', 'mpesa']
 
 // TODO (quand l'agrégateur est choisi) : envoyer la demande de paiement et récupérer la référence de transaction.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BackLink, ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
-import { hasPremium, listActivity, listPayments, PRICES, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
+import { hasPremium, listActivity, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
@@ -208,8 +208,8 @@ export function Premium() {
       <section className="card hero">
         <span className="label-mono" style={{ color: '#f2a33a' }}>Abonnement mensuel</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 44, lineHeight: 1 }}>4,50 USD</span>
-          <span className="muted" style={{ color: '#b9c8c2', fontSize: 16 }}>ou 10 500 FC</span>
+          <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 44, lineHeight: 1 }}>{PRICE_LABEL.USD}</span>
+          <span className="muted" style={{ color: '#b9c8c2', fontSize: 16 }}>ou {PRICE_LABEL.CDF}</span>
         </div>
         {prem.data && <span className="badge">Abonnement actif</span>}
         {BENEFITS.map((b) => <div key={b} style={{ display: 'flex', gap: 10 }}><Icon name="check" size={20} color="#3ccfb4" stroke={2.4} /><span style={{ fontSize: 15, lineHeight: 1.4 }}>{b}</span></div>)}
@@ -224,12 +224,12 @@ export function Premium() {
         ))}
       </div>
       <div className="chips" role="radiogroup" aria-label="Devise">
-        {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}>{c === 'USD' ? '4,50 USD' : '10 500 FC'}</button>)}
+        {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}>{PRICE_LABEL[c]}</button>)}
       </div>
       <div className="field"><label htmlFor="mm">Numéro Mobile Money</label><div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="8X XXX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} /></div></div>
       <ErrorBox message={error} />
       {info && <div className="notice">{info}</div>}
-      <button type="button" className="btn amber" onClick={go} disabled={busy}>{busy ? 'Un instant…' : `Payer maintenant · ${cur === 'USD' ? PRICES.USD + ' USD' : PRICES.CDF + ' FC'}`}</button>
+      <button type="button" className="btn amber" onClick={go} disabled={busy}>{busy ? 'Un instant…' : `Payer maintenant · ${PRICE_LABEL[cur]}`}</button>
       <span className="muted" style={{ textAlign: 'center' }}>Tu valides le paiement sur ton téléphone. Aucune donnée bancaire n'est stockée dans l'app.</span>
 
       <span className="label-mono">Historique des paiements</span>

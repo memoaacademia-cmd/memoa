@@ -607,7 +607,8 @@ export async function listPayments(): Promise<Payment[]> {
   return data as Payment[]
 }
 
-export const PRICES = { USD: 4.5, CDF: 10500 } as const // affichage seulement : le serveur fixe le vrai montant
+export const PRICES = { USD: 4.99, CDF: 11000 } as const // affichage seulement : le serveur fixe le vrai montant
+export const PRICE_LABEL = { USD: '4,99 USD', CDF: '11 000 FC' } as const
 
 /** Le navigateur n'envoie PAS le montant : le serveur le déduit du plan et de la devise. */
 export async function startPayment(provider: string, phone: string, currency: 'USD' | 'CDF'): Promise<{ message: string }> {
