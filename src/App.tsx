@@ -4,6 +4,7 @@ import { Brand, NavBar, Spinner } from './components/ui'
 import MiniPlayer from './components/MiniPlayer'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
+import { NotifStep, TrialStep, Welcome } from './pages/Welcome'
 import Home from './pages/Home'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
@@ -121,6 +122,9 @@ export default function App() {
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
             <Route path="/photo" element={<PhotoStep />} />
+            <Route path="/bienvenue" element={<Welcome />} />
+            <Route path="/essai" element={<TrialStep />} />
+            <Route path="/notifications-etape" element={<NotifStep />} />
           </Route>
           <Route element={<Guard need="onboarded" />}>
             <Route path="/" element={<Home />} />
