@@ -68,7 +68,9 @@ const ICONS: Record<string, string> = {
   play: 'M8 5 L19 12 L8 19 Z',
   chevdown: 'M6 9 L12 15 L18 9',
   chevup: 'M6 15 L12 9 L18 15',
-  chevright: 'M9 5 L16 12 L9 19'
+  chevright: 'M9 5 L16 12 L9 19',
+  speaker: 'M4 9 H8 L13 5 V19 L8 15 H4 Z M16 9 A4 4 0 0 1 16 15 M18.5 6.5 A8 8 0 0 1 18.5 17.5',
+  stop: 'M7 7 H17 V17 H7 Z'
 }
 
 export function Icon({ name, size = 22, color = 'currentColor', stroke = 1.9 }: { name: string; size?: number; color?: string; stroke?: number }) {
