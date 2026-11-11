@@ -75,7 +75,9 @@ const ICONS: Record<string, string> = {
   sparkle: 'M12 3 L13.8 9.2 L20 11 L13.8 12.8 L12 19 L10.2 12.8 L4 11 L10.2 9.2 Z M19 3 V7 M17 5 H21',
   pause: 'M8 5 V19 M16 5 V19',
   quiz: 'M5 4 H19 V20 H5 Z M9 9 H15 M9 13 H13',
-  trash: 'M5 7 H19 M9 7 V4 H15 V7 M7 7 L8 20 H16 L17 7'
+  trash: 'M5 7 H19 M9 7 V4 H15 V7 M7 7 L8 20 H16 L17 7',
+  menu: 'M4 7 H20 M4 12 H20 M4 17 H20',
+  copy: 'M9 9 H20 V20 H9 Z M5 15 V4 H16'
 }
 
 export function Icon({ name, size = 22, color = 'currentColor', stroke = 1.9 }: { name: string; size?: number; color?: string; stroke?: number }) {
@@ -123,14 +125,15 @@ export function ErrorBox({ message }: { message: string | null }) {
   return (
     <div className="error" role="alert">
       {message}
-      {/Premium/.test(message) && <div style={{ marginTop: 10 }}><Link to="/premium" className="btn small">Passer en Premium</Link></div>}
+      {/Premium/.test(message) && <div style={{ marginTop: 10 }}><Link to="/premium" className="pill-btn sm">Passer en Premium</Link></div>}
     </div>
   )
 }
 
 export function Spinner({ label = 'Chargement…' }: { label?: string }) {
   return (
-    <div className="muted" role="status" style={{ padding: 24, textAlign: 'center' }}>
+    <div className="spin-wrap" role="status">
+      <span className="spin" aria-hidden="true" />
       {label}
     </div>
   )
@@ -138,9 +141,9 @@ export function Spinner({ label = 'Chargement…' }: { label?: string }) {
 
 export function Empty({ title, text, children }: { title: string; text: string; children?: ReactNode }) {
   return (
-    <div className="card" style={{ textAlign: 'center', alignItems: 'center' }}>
-      <strong className="h2">{title}</strong>
-      <span className="muted">{text}</span>
+    <div className="empty-state">
+      <strong>{title}</strong>
+      <span>{text}</span>
       {children}
     </div>
   )
