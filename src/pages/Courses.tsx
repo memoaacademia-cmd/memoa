@@ -249,8 +249,8 @@ export function Backpack() {
       )}
       {trashed.length > 0 && (
         <>
-          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setShowTrash((v) => !v)} aria-expanded={showTrash}>
-            Corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
+          <button type="button" className="pill-btn outline" style={{ color: 'var(--text)', borderColor: 'var(--line-strong)' }} onClick={() => setShowTrash((v) => !v)} aria-expanded={showTrash}>
+            <Icon name="trash" size={20} />Corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
           </button>
           {showTrash && (
             <section className="card" aria-label="Cours supprimés">
@@ -551,7 +551,7 @@ export function CourseDetail() {
         ))}
       </RowGroup>
 
-      <button type="button" className="link" style={{ alignSelf: 'center', marginTop: 16, color: 'var(--danger, #c0392b)' }} onClick={() => void trashCourse()} disabled={busy}>Supprimer ce cours</button>
+      <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
 
       {/* Sélecteurs de fichiers : toujours présents, ouverts par « Continuer » ou par les boutons de l'éditeur. */}
       <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
