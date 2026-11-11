@@ -1,5 +1,5 @@
 // Banque « Le savais-tu ? » de Memo : 3 volumes fournis par Alexandre (v1, volume 3, volume 4), fusionnés et uniformisés.
-// Tout vient de la banque relue, jamais inventé par l'IA. Champs : i = identifiant, c = catégorie, k = type (savoir, enigme, humour),
+// Tout vient de la banque relue (volumes 1 à 5, doublons retirés le 11 novembre 2026), jamais inventé par l'IA. Champs : i = identifiant, c = catégorie, k = type (savoir, enigme, humour),
 // t = titre, s = sous-titre, x = texte, q = question à se poser, h = indice (énigmes), a = réponse (énigmes), n = « à retenir » / chute.
 // Les cartes viennent des fichiers au statut draft_review : à relire avant diffusion large (voir la note dans le message de livraison).
 export interface Fact {
@@ -35,16 +35,6 @@ export const FACTS: Fact[] = [
 "x": "Dans l'Antiquité, Alexandrie abritait une bibliothèque célèbre, associée à un vaste projet de rassemblement des savoirs. Des savants y étudiaient les mathématiques, l'astronomie, la médecine et la littérature. Son histoire est entourée de récits, notamment celui d'une destruction unique, alors que son déclin fut probablement progressif et complexe.",
 "q": "Que retiens-tu de cette histoire ?",
 "n": "Le savoir est un trésor collectif : le préserver est une responsabilité de chaque génération."
-},
-{
-"i": "hist_003",
-"c": "Histoire",
-"k": "savoir",
-"t": "Le manuscrit qui a résisté au temps",
-"s": "Les manuscrits de Tombouctou",
-"x": "Pendant des siècles, Tombouctou fut un centre intellectuel important en Afrique de l'Ouest. Des familles et des bibliothèques y ont conservé des manuscrits portant sur le droit, la médecine, les mathématiques, la poésie, la religion et l'astronomie. Ces documents rappellent que l'histoire du savoir africain est riche et diverse.",
-"q": "Que retiens-tu de cette histoire ?",
-"n": "Une civilisation se raconte aussi à travers les livres qu'elle choisit de transmettre."
 },
 {
 "i": "hist_004",
@@ -187,16 +177,6 @@ export const FACTS: Fact[] = [
 "n": "Le meilleur cadeau n'est pas toujours le plus spectaculaire; c'est parfois celui qui sert longtemps."
 },
 {
-"i": "myth_006",
-"c": "Mythologie",
-"k": "savoir",
-"t": "Anansi, l'araignée conteuse",
-"s": "Le gardien des histoires",
-"x": "Dans plusieurs traditions akan d'Afrique de l'Ouest et de la diaspora, Anansi est une araignée rusée associée aux contes, à l'intelligence et aux retournements de situation. Les récits varient selon les communautés et les époques.",
-"q": "Que retiens-tu de cette histoire ?",
-"n": "L'intelligence peut ouvrir des portes que la force ne peut pas pousser."
-},
-{
 "i": "enig_001",
 "c": "Énigmes",
 "k": "enigme",
@@ -280,16 +260,6 @@ export const FACTS: Fact[] = [
 "x": "Le professeur : « Quelqu'un peut-il donner un exemple ? » L'étudiant : « Oui, monsieur. » Le professeur : « Lequel ? » L'étudiant : « C'est justement ce que j'attendais de vous pour confirmer. »",
 "q": "À qui cette carte te fait-elle penser ?",
 "n": "Participer, c'est bien. Savoir de quoi on parle, c'est encore mieux."
-},
-{
-"i": "hum_004",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "Le budget du mois",
-"s": "La vie estudiantine",
-"x": "Le premier jour du mois : « Cette fois, je vais gérer mon argent intelligemment. » Le troisième jour : « Quelqu'un peut me prêter juste le transport ? »",
-"q": "À qui cette carte te fait-elle penser ?",
-"n": "Le budget étudiant mérite parfois un cours entier de mathématiques appliquées."
 },
 {
 "i": "hum_005",
@@ -380,16 +350,6 @@ export const FACTS: Fact[] = [
 "x": "Dans Le Banquet de Platon, Aristophane raconte un mythe selon lequel les humains auraient été autrefois des êtres doubles, séparés ensuite par les dieux. Depuis, chacun chercherait sa moitié. C'est un récit mythique prononcé par un personnage du dialogue, pas une théorie scientifique de l'amour.",
 "q": "Que retiens-tu de cette histoire ?",
 "n": "L'amour peut enrichir ta vie sans devenir la condition de ta valeur."
-},
-{
-"i": "love_002",
-"c": "Amour et relations",
-"k": "savoir",
-"t": "Orphée et Eurydice : faire confiance",
-"s": "Une histoire de la mythologie",
-"x": "Orphée obtient la possibilité de ramener Eurydice des Enfers, à condition de ne pas se retourner avant d'avoir atteint la sortie. Il doute, regarde derrière lui et la perd. Le récit a traversé les siècles comme une histoire d'amour, de confiance et d'impatience.",
-"q": "Que retiens-tu de cette histoire ?",
-"n": "La confiance n'est pas l'absence de questions : c'est la possibilité de les poser sans se détruire."
 },
 {
 "i": "love_003",
@@ -530,26 +490,6 @@ export const FACTS: Fact[] = [
 "x": "Hatshepsout régna comme pharaon au XVe siècle avant notre ère. Elle développa des projets monumentaux et organisa des expéditions commerciales, notamment vers le pays de Pount, dont la localisation exacte reste discutée.",
 "q": "Quel obstacle une femme dirigeante pouvait-elle rencontrer dans ce contexte ?",
 "n": "Le leadership se construit parfois dans des institutions qui n'ont pas été pensées pour vous."
-},
-{
-"i": "M3-011",
-"c": "Histoire",
-"k": "savoir",
-"t": "La pierre de Rosette, une clé linguistique",
-"s": "Égypte et époque ptolémaïque",
-"x": "La pierre de Rosette porte un même décret en hiéroglyphes, en démotique et en grec ancien. La comparaison des textes a joué un rôle essentiel dans le déchiffrement des hiéroglyphes au XIXe siècle.",
-"q": "Pourquoi les langues parallèles ont-elles aidé les chercheurs ?",
-"n": "Comprendre une langue peut ouvrir l'accès à toute une civilisation."
-},
-{
-"i": "M3-012",
-"c": "Histoire",
-"k": "savoir",
-"t": "Alexandrie, ville de savoir",
-"s": "Égypte hellénistique",
-"x": "La ville d'Alexandrie abrita une institution savante célèbre, le Mouseion, associée à une grande bibliothèque. Elle attira des savants et participa à la circulation des textes et des connaissances dans le monde méditerranéen.",
-"q": "Une bibliothèque suffit-elle à faire une ville intellectuelle ?",
-"n": "Le savoir grandit quand les idées peuvent circuler et être discutées."
 },
 {
 "i": "M3-013",
@@ -852,46 +792,6 @@ export const FACTS: Fact[] = [
 "n": "Le commerce ancien dépendait autant de la nature que des marchands."
 },
 {
-"i": "M3-043",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Socrate et l'art de questionner",
-"s": "La méthode socratique",
-"x": "Socrate est associé à une manière de dialoguer qui consiste à poser des questions, examiner les définitions et révéler les contradictions. Il ne s'agit pas de gagner un débat, mais de mieux comprendre ce que l'on croit savoir.",
-"q": "Quelle croyance pourrais-tu examiner au lieu de l'accepter automatiquement ?",
-"n": "Une bonne question peut être plus utile qu'une réponse rapide."
-},
-{
-"i": "M3-044",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Platon et la caverne",
-"s": "Allégorie",
-"x": "Dans l'allégorie de la caverne, des prisonniers prennent des ombres pour la réalité. Le récit invite à réfléchir à l'éducation, à l'illusion et à la difficulté de changer de perspective.",
-"q": "Quelle « ombre » moderne peut-on parfois confondre avec la réalité ?",
-"n": "Apprendre, c'est parfois accepter que notre première vision était incomplète."
-},
-{
-"i": "M3-045",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Aristote et l'habitude",
-"s": "Éthique",
-"x": "Pour Aristote, le caractère se forme en partie par des habitudes répétées. On devient juste en pratiquant des actes justes, courageux en accomplissant des actes courageux.",
-"q": "Quelle petite habitude pourrait améliorer ton quotidien d'étudiant ?",
-"n": "La personne que tu deviens se construit aussi dans les gestes ordinaires."
-},
-{
-"i": "M3-046",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Épictète : distinguer ce qui dépend de nous",
-"s": "Stoïcisme",
-"x": "Épictète enseigne à distinguer nos jugements et nos choix des événements que nous ne contrôlons pas. Cette distinction ne supprime pas les difficultés, mais aide à concentrer l'effort sur notre marge d'action.",
-"q": "Quelle situation te prend de l'énergie alors qu'elle échappe à ton contrôle ?",
-"n": "Reprends ton pouvoir là où il existe : dans tes décisions et tes actes."
-},
-{
 "i": "M3-047",
 "c": "Philosophie",
 "k": "savoir",
@@ -1132,16 +1032,6 @@ export const FACTS: Fact[] = [
 "n": "La curiosité ouvre des portes ; la sagesse aide à choisir lesquelles franchir."
 },
 {
-"i": "M3-071",
-"c": "Mythologie",
-"k": "savoir",
-"t": "Le Minotaure et le labyrinthe",
-"s": "Mythologie grecque",
-"x": "Le Minotaure, créature mi-homme mi-taureau, est enfermé dans le labyrinthe construit par Dédale. Thésée parvient à en sortir grâce au fil donné par Ariane, selon le récit mythologique.",
-"q": "Quel est ton « fil d'Ariane » quand tu te sens perdu dans un problème ?",
-"n": "Un bon repère peut transformer un labyrinthe en chemin."
-},
-{
 "i": "M3-072",
 "c": "Mythologie",
 "k": "savoir",
@@ -1150,26 +1040,6 @@ export const FACTS: Fact[] = [
 "x": "Athéna est associée à la sagesse, aux arts et à la stratégie militaire. Dans les récits, elle représente souvent l'intelligence pratique plutôt que la force brute.",
 "q": "Dans quelle situation la stratégie vaut-elle mieux que la force ?",
 "n": "La meilleure victoire est parfois celle qui évite le combat inutile."
-},
-{
-"i": "M3-073",
-"c": "Mythologie",
-"k": "savoir",
-"t": "Icare et les limites",
-"s": "Mythologie grecque",
-"x": "Icare s'échappe avec son père Dédale grâce à des ailes faites de plumes et de cire. Il vole trop près du soleil, la cire fond et il tombe. Le récit est souvent interprété comme une mise en garde contre l'excès et l'oubli des limites.",
-"q": "Comment distinguer ambition et imprudence ?",
-"n": "L'ambition a besoin de lucidité pour ne pas se brûler."
-},
-{
-"i": "M3-074",
-"c": "Mythologie",
-"k": "savoir",
-"t": "Orphée et Eurydice",
-"s": "Mythologie grecque",
-"x": "Orphée descend aux Enfers pour ramener Eurydice. Il reçoit la permission de la conduire vers le monde des vivants à condition de ne pas se retourner avant la sortie ; il le fait pourtant, et la perd.",
-"q": "Pourquoi est-il parfois si difficile de faire confiance jusqu'au bout ?",
-"n": "L'impatience peut détruire ce que la patience était en train de sauver."
 },
 {
 "i": "M3-075",
@@ -1282,16 +1152,6 @@ export const FACTS: Fact[] = [
 "n": "Être malin ne dispense pas d'être sage."
 },
 {
-"i": "M3-086",
-"c": "Mythologie",
-"k": "savoir",
-"t": "Sundiata, héros de l'épopée mandingue",
-"s": "Tradition orale",
-"x": "L'épopée de Sundiata raconte l'histoire d'un enfant destiné à devenir un grand souverain du Mali. Les conteurs transmettent différentes versions, où se mêlent mémoire, symboles et merveilleux.",
-"q": "Pourquoi les héros des récits doivent-ils souvent surmonter une épreuve ?",
-"n": "L'épreuve donne au personnage l'occasion de révéler sa force intérieure."
-},
-{
 "i": "M3-087",
 "c": "Mythologie",
 "k": "savoir",
@@ -1343,28 +1203,6 @@ export const FACTS: Fact[] = [
 "n": "La solution utilise deux indices : la lumière et la chaleur."
 },
 {
-"i": "M3-092",
-"c": "Énigmes",
-"k": "enigme",
-"t": "Les deux pères et les deux fils",
-"s": "Déduction",
-"x": "Deux pères et deux fils vont au marché. Chacun achète un fruit, mais ils ne repartent qu'avec trois fruits au total. Comment est-ce possible ?",
-"q": "Combien de personnes sont réellement présentes ?",
-"a": "Ils sont trois : un grand-père, son fils et son petit-fils.",
-"n": "Les relations familiales peuvent se chevaucher : une personne est à la fois fils et père."
-},
-{
-"i": "M3-093",
-"c": "Énigmes",
-"k": "enigme",
-"t": "Le mois aux 28 jours",
-"s": "Attention",
-"x": "Combien de mois dans l'année comptent au moins 28 jours ?",
-"q": "Lis bien la formulation.",
-"a": "Les douze mois : chacun compte au moins 28 jours.",
-"n": "Une énigme teste parfois moins le calcul que la précision de lecture."
-},
-{
 "i": "M3-094",
 "c": "Énigmes",
 "k": "enigme",
@@ -1407,17 +1245,6 @@ export const FACTS: Fact[] = [
 "q": "Combien d'issues équiprobables existe-t-il ?",
 "a": "1 chance sur 4 : les issues sont face-face, face-pile, pile-face et pile-pile.",
 "n": "Lister les possibilités évite de répondre au hasard."
-},
-{
-"i": "M3-098",
-"c": "Énigmes",
-"k": "enigme",
-"t": "Le nombre inversé",
-"s": "Calcul",
-"x": "Je suis un nombre à deux chiffres. La somme de mes chiffres vaut 9. Si on inverse mes chiffres, le nouveau nombre est inférieur de 27 à moi. Qui suis-je ?",
-"q": "Pose le nombre sous la forme 10a+b.",
-"a": "63. La somme vaut 9 et 63 - 36 = 27.",
-"n": "Transformer une phrase en équation rend le problème plus clair."
 },
 {
 "i": "M3-099",
@@ -1475,17 +1302,6 @@ export const FACTS: Fact[] = [
 "n": "La pensée latérale explore des scénarios inattendus."
 },
 {
-"i": "M3-104",
-"c": "Énigmes",
-"k": "enigme",
-"t": "Les trois boîtes",
-"s": "Logique",
-"x": "Trois boîtes portent les étiquettes « Pommes », « Oranges » et « Mélange ». Toutes les étiquettes sont fausses. Tu peux tirer un seul fruit d'une seule boîte. Comment corriger toutes les étiquettes ?",
-"q": "De quelle boîte faut-il tirer le fruit ?",
-"a": "Tire dans la boîte étiquetée « Mélange ». Comme l'étiquette est fausse, elle contient un seul type de fruit. Le fruit tiré révèle lequel ; les deux autres étiquettes se déduisent ensuite.",
-"n": "Commence par l'information qui réduit le plus les possibilités."
-},
-{
 "i": "M3-105",
 "c": "Énigmes",
 "k": "enigme",
@@ -1524,9 +1340,9 @@ export const FACTS: Fact[] = [
 "k": "enigme",
 "t": "Le père et le fils",
 "s": "Suite de chiffres",
-"x": "Un père et son fils ont ensemble 66 ans. L'âge du père est l'inverse des chiffres de l'âge du fils. Quelles sont leurs possibilités si le père est plus âgé ?",
+"x": "Un père et son fils ont ensemble 66 ans. L'âge du père s'écrit avec les chiffres de l'âge du fils, mais à l'envers. Les deux âges ont deux chiffres et le père est plus âgé. Quelles sont les possibilités ?",
 "q": "Cherche les paires de nombres à deux chiffres inversés qui font 66.",
-"a": "51 et 15, ou 42 et 24, ou 60 et 06 si l'on accepte un âge à un chiffre pour le fils. Le problème a donc plusieurs solutions sans contrainte supplémentaire.",
+"a": "51 et 15, ou 42 et 24. Si le fils a pour chiffres a et b, la somme des deux âges vaut 11 × (a + b) ; comme elle vaut 66, a + b = 6. Avec un père plus âgé et deux chiffres chacun, il reste ces deux solutions.",
 "n": "Un problème peut être sous-déterminé : il faut parfois demander une précision."
 },
 {
@@ -1560,16 +1376,6 @@ export const FACTS: Fact[] = [
 "x": "Le professeur dit : « Ce document est juste un petit support pour compléter le cours. » Tu l'ouvres : 87 pages, 14 chapitres, 6 annexes et une bibliographie qui a sa propre bibliographie.",
 "q": "Combien de pages fait le « petit support » de ton dernier cours ?",
 "n": "À l'université, le mot « petit » est parfois une unité de mesure émotionnelle."
-},
-{
-"i": "M3-112",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "Le groupe de travail",
-"s": "Travail en équipe",
-"x": "Dans le groupe WhatsApp : une personne propose le sujet, une autre envoie un emoji, deux personnes écrivent « on avance », et une seule ouvre réellement le document. Le travail d'équipe a commencé… théoriquement.",
-"q": "Quel rôle joues-tu souvent dans un travail de groupe ?",
-"n": "La collaboration commence quand quelqu'un ouvre le fichier."
 },
 {
 "i": "M3-113",
@@ -1652,16 +1458,6 @@ export const FACTS: Fact[] = [
 "n": "Le prêt est un acte de confiance ; le retour est une preuve de caractère."
 },
 {
-"i": "M3-121",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "Le cours enregistré",
-"s": "Technologie",
-"x": "Tu enregistres tout le cours pour le réécouter. Deux semaines plus tard, tu retrouves un fichier de 1 h 52 intitulé « audio nouveau 7 ». Tu ne sais plus si c'est le cours ou un documentaire sur le ventilateur.",
-"q": "Comment nommes-tu tes fichiers importants ?",
-"n": "Un bon système de classement fait gagner plus de temps qu'une mémoire parfaite."
-},
-{
 "i": "M3-122",
 "c": "Humour étudiant",
 "k": "humour",
@@ -1700,46 +1496,6 @@ export const FACTS: Fact[] = [
 "x": "Tu as un stylo que tu utilises à chaque examen. Tu sais qu'il n'a aucun pouvoir magique, mais tu refuses de prendre le risque de tester cette théorie le jour de l'épreuve.",
 "q": "As-tu un objet porte-bonheur pendant les examens ?",
 "n": "Les rituels rassurent ; la préparation, elle, fait le travail."
-},
-{
-"i": "M3-126",
-"c": "Motivation",
-"k": "savoir",
-"t": "La règle des dix minutes",
-"s": "Démarrage",
-"x": "Quand une tâche te paraît énorme, engage-toi à y consacrer seulement dix minutes. Le but n'est pas de finir immédiatement, mais de franchir la résistance du démarrage.",
-"q": "Quelle tâche peux-tu commencer pendant dix minutes aujourd'hui ?",
-"n": "Le premier pas réduit souvent la peur du travail."
-},
-{
-"i": "M3-127",
-"c": "Motivation",
-"k": "savoir",
-"t": "Réviser en plusieurs fois",
-"s": "Mémoire",
-"x": "Répartir les révisions sur plusieurs jours aide généralement davantage la mémoire à long terme qu'une seule longue séance juste avant l'examen. Revoir une notion après un délai oblige le cerveau à la récupérer.",
-"q": "Quel cours peux-tu revoir brièvement aujourd'hui ?",
-"n": "La régularité transforme l'effort en progrès durable."
-},
-{
-"i": "M3-128",
-"c": "Motivation",
-"k": "savoir",
-"t": "Le sommeil fait partie des études",
-"s": "Santé et apprentissage",
-"x": "Le sommeil participe à la consolidation de la mémoire et au fonctionnement de l'attention. Sacrifier systématiquement ses nuits pour étudier peut donc nuire à l'apprentissage que l'on cherche à améliorer.",
-"q": "À quelle heure pourrais-tu arrêter les révisions pour dormir suffisamment ?",
-"n": "Se reposer n'est pas abandonner le travail : c'est soutenir son cerveau."
-},
-{
-"i": "M3-129",
-"c": "Motivation",
-"k": "savoir",
-"t": "Comparer ses progrès, pas sa vie",
-"s": "Confiance",
-"x": "Tu vois parfois les résultats des autres sans voir leurs difficultés, leurs ressources ou leurs heures de travail. Comparer uniquement les résultats peut donner une image faussée de ton propre parcours.",
-"q": "Quel progrès personnel peux-tu reconnaître cette semaine ?",
-"n": "Ton rythme peut être différent sans être dépourvu de valeur."
 },
 {
 "i": "M3-130",
@@ -1840,16 +1596,6 @@ export const FACTS: Fact[] = [
 "x": "Une excuse utile reconnaît le tort, évite de rejeter la faute et précise ce qui changera. Dire « désolé si tu l'as mal pris » ne reconnaît pas vraiment l'acte qui a blessé.",
 "q": "Quelle différence fais-tu entre regretter et réparer ?",
 "n": "Les excuses prennent leur valeur dans le changement qui suit."
-},
-{
-"i": "M3-140",
-"c": "Amour et relations",
-"k": "savoir",
-"t": "L'amour n'est pas un examen",
-"s": "Relation",
-"x": "Tu n'as pas à réussir une série d'épreuves pour mériter l'affection : répondre immédiatement, abandonner tes amis ou prouver sans cesse ta loyauté. Une relation ne devrait pas devenir un contrôle permanent.",
-"q": "Quel comportement transforme une relation en compétition ?",
-"n": "L'amour n'est pas une note à obtenir ; c'est un lien à construire."
 },
 {
 "i": "M3-141",
@@ -1955,7 +1701,7 @@ export const FACTS: Fact[] = [
 "i": "M4-001",
 "c": "Histoire",
 "k": "savoir",
-"t": "Le royaume qui contrôlait les routes du cuivre",
+"t": "Le cuivre, métal de prestige et d'échange",
 "s": "Katanga et réseaux commerciaux",
 "x": "Bien avant les frontières actuelles, les régions du sud-est de l'Afrique centrale participaient à des réseaux d'échanges où le cuivre avait une grande valeur. Les objets en cuivre circulaient comme biens de prestige, matière première et parfois moyen d'échange. Les savoir-faire métallurgiques reliaient communautés, marchés et pouvoirs politiques.",
 "q": "Pourquoi un métal comme le cuivre pouvait-il renforcer le pouvoir d'un royaume ?",
@@ -2072,16 +1818,6 @@ export const FACTS: Fact[] = [
 "n": "L'indépendance politique prend aussi forme quand les pays construisent leurs propres espaces de dialogue."
 },
 {
-"i": "M4-013",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Épicure : le plaisir n'est pas l'excès",
-"s": "Bonheur et mesure",
-"x": "Pour Épicure, une vie heureuse ne consiste pas à satisfaire tous ses désirs. Il distingue les désirs naturels et nécessaires, les désirs naturels mais non nécessaires, et les désirs vains. La tranquillité de l'esprit et l'absence de souffrance inutile comptent davantage que l'accumulation.",
-"q": "Pourquoi Épicure ne recommande-t-il pas de poursuivre tous les plaisirs ?",
-"n": "Le plaisir durable demande parfois de savoir dire non à une envie immédiate."
-},
-{
 "i": "M4-014",
 "c": "Philosophie",
 "k": "savoir",
@@ -2130,16 +1866,6 @@ export const FACTS: Fact[] = [
 "x": "David Hume remarque que nous attendons souvent qu'un événement se reproduise parce que nous l'avons vu plusieurs fois. Pourtant, observer le soleil se lever chaque matin ne constitue pas une démonstration logique absolue qu'il se lèvera demain. Nos raisonnements quotidiens reposent en partie sur l'habitude et l'induction.",
 "q": "Pourquoi cette idée est-elle importante pour la science ?",
 "n": "Être rationnel, ce n'est pas être certain de tout : c'est savoir sur quoi repose sa certitude."
-},
-{
-"i": "M4-019",
-"c": "Philosophie",
-"k": "savoir",
-"t": "Hannah Arendt : penser pour ne pas agir mécaniquement",
-"s": "Responsabilité",
-"x": "Hannah Arendt s'est intéressée à la manière dont des individus peuvent participer à des systèmes injustes en cessant d'examiner leurs actes. Sa réflexion sur le jugement et la responsabilité invite à ne pas confondre obéissance, routine et absence de responsabilité personnelle.",
-"q": "Quelle question faut-il se poser avant de suivre un ordre ?",
-"n": "La pensée critique commence aussi quand on refuse de laisser l'habitude décider à notre place."
 },
 {
 "i": "M4-020",
@@ -2418,7 +2144,7 @@ export const FACTS: Fact[] = [
 "s": "Mesure",
 "x": "Tu disposes d'un sablier de 7 minutes et d'un autre de 11 minutes. Comment mesurer exactement 15 minutes à partir du moment où tu les retournes ensemble ?",
 "q": "Décris une méthode possible.",
-"a": "À 7 minutes, retourne le sablier de 7 minutes. À 11 minutes, le sablier de 11 minutes se vide ; le sablier de 7 minutes a alors 3 minutes écoulées depuis son retournement et il lui reste 4 minutes. Retourne-le à 11 minutes : il se videra 4 minutes plus tard, à 15 minutes.",
+"a": "À 7 minutes, retourne le sablier de 7 minutes. À 11 minutes, le sablier de 11 minutes est vide : dans le petit, 4 minutes de sable sont déjà tombées (il en reste 3 en haut). Retourne-le alors : les 4 minutes écoulées repartent dans l'autre sens, il se videra donc 4 minutes plus tard, à 15 minutes.",
 "n": "Suivre les écarts entre deux horloges imparfaites peut créer une mesure exacte."
 },
 {
@@ -2442,16 +2168,6 @@ export const FACTS: Fact[] = [
 "q": "Quelle astuce permet de résoudre le problème ?",
 "a": "En ajoutant temporairement une 18e pomme, on obtient 9, 6 et 2 pommes, soit 17 au total. La pomme ajoutée est ensuite retirée. Cette astuce fonctionne parce que 9 + 6 + 2 = 17.",
 "n": "Une aide temporaire peut débloquer un partage, mais il faut vérifier que les conditions mathématiques sont réellement respectées."
-},
-{
-"i": "M4-049",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "Le fichier « version finale »",
-"s": "La vie étudiante, sans filtre",
-"x": "Tu envoies ton travail nommé « Mémoire_final.docx ». Le professeur demande une correction. Tu crées « Mémoire_final2.docx », puis « final_vraiment_final.docx ». À la quatrième version, même ton ordinateur te demande si tu es sûr de ton choix.",
-"q": "Ça t'est déjà arrivé ?",
-"n": "Le vrai sujet de recherche : retrouver la bonne version."
 },
 {
 "i": "M4-050",
@@ -2494,16 +2210,6 @@ export const FACTS: Fact[] = [
 "n": "Le mode concentration doit parfois être installé dans la tête."
 },
 {
-"i": "M4-054",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "La question à la fin",
-"s": "La vie étudiante, sans filtre",
-"x": "Le professeur demande : « Une dernière question ? » Toute la classe garde le silence. Dans le couloir, tout le monde découvre soudain qu'il avait exactement la même question.",
-"q": "Ça t'est déjà arrivé ?",
-"n": "Le courage académique arrive souvent après le cours."
-},
-{
 "i": "M4-055",
 "c": "Humour étudiant",
 "k": "humour",
@@ -2512,16 +2218,6 @@ export const FACTS: Fact[] = [
 "x": "Tu écris sur une feuille : « Réviser chapitre 1 ». Tu passes 25 minutes à choisir la couleur du titre, 15 minutes à ranger les stylos et 5 minutes à lire le chapitre.",
 "q": "Ça t'est déjà arrivé ?",
 "n": "La préparation est importante. Mais elle ne remplace pas le travail."
-},
-{
-"i": "M4-056",
-"c": "Humour étudiant",
-"k": "humour",
-"t": "Le réveil négociateur",
-"s": "La vie étudiante, sans filtre",
-"x": "Le réveil sonne à 5 h 30. Tu lui demandes cinq minutes. Il accepte. Vous signez un accord qui sera renégocié six fois.",
-"q": "Ça t'est déjà arrivé ?",
-"n": "La diplomatie matinale a ses limites."
 },
 {
 "i": "M4-057",
@@ -2584,16 +2280,6 @@ export const FACTS: Fact[] = [
 "n": "Un bon plan n'est pas celui qui impressionne : c'est celui que tu peux réellement suivre."
 },
 {
-"i": "M4-063",
-"c": "Motivation",
-"k": "savoir",
-"t": "Demander de l'aide est une compétence",
-"s": "Une idée à garder pour tes études",
-"x": "Un étudiant peut perdre plusieurs jours sur une difficulté qu'un camarade, un enseignant ou un manuel pourrait éclaircir en quelques minutes. Savoir formuler précisément sa question fait partie de l'apprentissage.",
-"q": "Quelle question pourrais-tu poser au lieu de rester bloqué ?",
-"n": "L'autonomie ne signifie pas tout faire seul."
-},
-{
 "i": "M4-064",
 "c": "Motivation",
 "k": "savoir",
@@ -2624,16 +2310,6 @@ export const FACTS: Fact[] = [
 "n": "L'attention se protège mieux avec un environnement qu'avec la seule volonté."
 },
 {
-"i": "M4-067",
-"c": "Motivation",
-"k": "savoir",
-"t": "Le repos fait partie de la méthode",
-"s": "Une idée à garder pour tes études",
-"x": "Le cerveau a besoin de sommeil et de pauses pour consolider les apprentissages. Réviser épuisé pendant des heures n'est pas automatiquement plus efficace que travailler avec un rythme équilibré.",
-"q": "As-tu prévu une vraie pause dans ta prochaine séance ?",
-"n": "Se reposer n'est pas abandonner son objectif."
-},
-{
 "i": "M4-068",
 "c": "Motivation",
 "k": "savoir",
@@ -2662,16 +2338,6 @@ export const FACTS: Fact[] = [
 "x": "Quand tout semble urgent, commence par identifier la tâche qui aura le plus d'effet sur ton prochain cours ou examen. Une priorité claire réduit la dispersion.",
 "q": "Quelle tâche mérite vraiment la première place aujourd'hui ?",
 "n": "Faire moins de choses, mais les faire avec intention, peut être une stratégie."
-},
-{
-"i": "M4-071",
-"c": "Motivation",
-"k": "savoir",
-"t": "La comparaison cache les parcours",
-"s": "Une idée à garder pour tes études",
-"x": "Tu vois parfois le résultat d'un autre étudiant sans connaître ses ressources, ses difficultés ni le temps qu'il a investi. Utilise les réussites des autres comme sources d'idées, pas comme mesure de ta valeur.",
-"q": "Quelle méthode utile peux-tu apprendre d'une personne sans te dévaloriser ?",
-"n": "L'inspiration élève ; la comparaison permanente épuise."
 },
 {
 "i": "M4-072",
@@ -2744,26 +2410,6 @@ export const FACTS: Fact[] = [
 "n": "Aimer quelqu'un ne devrait pas rétrécir toute ta vie autour d'une seule personne."
 },
 {
-"i": "M4-079",
-"c": "Amour et relations",
-"k": "savoir",
-"t": "Le consentement se vérifie, il ne se devine pas",
-"s": "Une relation saine se construit à deux",
-"x": "Le silence, l'hésitation ou l'absence de résistance ne signifient pas automatiquement un accord. Le consentement doit être libre, éclairé, spécifique et peut être retiré à tout moment.",
-"q": "Pourquoi est-il important de demander plutôt que supposer ?",
-"n": "Le respect commence quand on laisse à l'autre la liberté réelle de choisir."
-},
-{
-"i": "M4-080",
-"c": "Amour et relations",
-"k": "savoir",
-"t": "Les excuses ont besoin d'un changement",
-"s": "Une relation saine se construit à deux",
-"x": "Dire « pardon » peut ouvrir une réparation, mais si le même comportement se répète sans effort, les mots perdent leur sens. Une excuse sincère reconnaît le tort et s'accompagne d'une action concrète.",
-"q": "Quel changement montrerait que les excuses sont sincères ?",
-"n": "La réparation se voit dans la suite, pas seulement dans la phrase."
-},
-{
 "i": "M4-081",
 "c": "Amour et relations",
 "k": "savoir",
@@ -2802,5 +2448,495 @@ export const FACTS: Fact[] = [
 "x": "Quand deux personnes vivent loin l'une de l'autre, elles peuvent avoir des attentes différentes sur les appels, les visites et la disponibilité. Parler de ces attentes évite de transformer chaque silence en accusation.",
 "q": "Quel accord simple rendrait la communication plus sereine ?",
 "n": "La distance se gère mieux avec des attentes discutées qu'avec des suppositions."
+},
+{
+"i": "M5-003",
+"c": "Histoire",
+"k": "savoir",
+"t": "Koush et Méroé, une puissance du Nil",
+"x": "Le royaume de Koush, dans l'actuel Soudan, a connu plusieurs périodes de puissance. À Méroé, on retrouve des traces d'artisanat, de métallurgie du fer, d'écriture méroïtique et de pouvoir royal.",
+"q": "Où se situait le royaume de Koush ?",
+"a": "Dans la vallée du Nil, principalement dans l’actuel Soudan, au sud de l’Égypte.",
+"n": "L’histoire africaine ne se limite pas aux frontières actuelles."
+},
+{
+"i": "M5-005",
+"c": "Histoire",
+"k": "savoir",
+"t": "Le traité qui a redessiné l’Europe",
+"x": "Le traité de Westphalie, signé en 1648, met fin à plusieurs conflits européens, dont la guerre de Trente Ans dans le Saint-Empire. Il est souvent associé à l’évolution de la diplomatie entre États, même si l’idée moderne de souveraineté s’est construite progressivement.",
+"q": "En quelle année les traités de Westphalie ont-ils été signés ?",
+"a": "En 1648.",
+"n": "Les grands changements politiques sont rarement l’œuvre d’un seul document."
+},
+{
+"i": "M5-006",
+"c": "Histoire",
+"k": "savoir",
+"t": "La première femme à recevoir un Nobel",
+"x": "Marie Curie a reçu le prix Nobel de physique en 1903 avec Pierre Curie et Henri Becquerel, puis le Nobel de chimie en 1911. Elle est la première femme récompensée par un Nobel et la première personne à en recevoir dans deux disciplines scientifiques différentes.",
+"q": "Dans quelles disciplines Marie Curie a-t-elle reçu ses deux prix ?",
+"a": "En physique en 1903 et en chimie en 1911.",
+"n": "La persévérance scientifique peut ouvrir des chemins que personne n’avait encore empruntés."
+},
+{
+"i": "M5-007",
+"c": "Histoire",
+"k": "savoir",
+"t": "Les Douze Tables : des lois enfin visibles",
+"x": "Le droit romain s’est développé pendant des siècles. La Loi des Douze Tables, traditionnellement datée du milieu du Ve siècle avant notre ère, a rendu publiques certaines règles juridiques de la jeune République romaine.",
+"q": "Pourquoi la publication des règles était-elle importante ?",
+"a": "Elle limitait le monopole des connaissances juridiques détenues par les élites et rendait les règles plus accessibles aux citoyens.",
+"n": "Rendre les règles visibles est une étape importante vers une justice plus prévisible."
+},
+{
+"i": "M5-010",
+"c": "Histoire",
+"k": "savoir",
+"t": "Le premier tour du monde n’a pas été achevé par Magellan",
+"x": "L’expédition partie en 1519 sous le commandement de Fernand de Magellan a réalisé la première circumnavigation connue. Magellan est mort aux Philippines en 1521 ; Juan Sebastián Elcano a ensuite conduit le navire Victoria jusqu’en Espagne en 1522.",
+"q": "Qui a ramené le Victoria en Espagne ?",
+"a": "Juan Sebastián Elcano, après la mort de Magellan.",
+"n": "Une grande aventure collective ne se résume pas toujours au nom de son premier chef."
+},
+{
+"i": "M5-013",
+"c": "Philosophie",
+"k": "savoir",
+"t": "La justice doit-elle traiter tout le monde pareil ?",
+"x": "Aristote distingue différentes formes de justice. La justice distributive consiste notamment à répartir certains biens ou avantages selon un critère pertinent, et pas nécessairement en donnant exactement la même chose à chacun.",
+"q": "L’égalité signifie-t-elle toujours donner la même chose à tous ?",
+"a": "Non. Selon le contexte, une répartition juste peut tenir compte de différences pertinentes entre les situations.",
+"n": "L’équité demande parfois de regarder les situations, pas seulement les quantités."
+},
+{
+"i": "M5-016",
+"c": "Philosophie",
+"k": "savoir",
+"t": "L’expérience avant les idées",
+"x": "John Locke défend l’idée que les connaissances humaines proviennent de l’expérience, par la sensation et la réflexion. Il critique l’idée que l’esprit possède dès la naissance un ensemble d’idées innées toutes faites.",
+"q": "D’où viennent les idées selon Locke ?",
+"a": "De l’expérience, notamment des sensations et de la réflexion sur ce que nous vivons.",
+"n": "Apprendre, c’est aussi observer, expérimenter et réfléchir à ce que l’on observe."
+},
+{
+"i": "M5-017",
+"c": "Philosophie",
+"k": "savoir",
+"t": "Le principe de non-violence",
+"x": "Mahatma Gandhi a fait de la résistance non violente un principe majeur de son action politique. La satyagraha désigne une forme de lutte fondée sur la force de la vérité et le refus de la violence.",
+"q": "La non-violence signifie-t-elle rester passif ?",
+"a": "Non. Elle peut prendre la forme d’une action collective, d’une désobéissance civile et d’une résistance organisée.",
+"n": "Refuser la violence n’oblige pas à accepter l’injustice."
+},
+{
+"i": "M5-018",
+"c": "Philosophie",
+"k": "savoir",
+"t": "Penser avec les autres",
+"x": "Hannah Arendt analyse la vie politique comme un espace où les êtres humains agissent et parlent ensemble. La pluralité — le fait que nous soyons différents — est une condition importante de la vie publique.",
+"q": "Pourquoi la pluralité compte-t-elle en politique ?",
+"a": "Parce que le monde commun existe entre des personnes différentes qui peuvent parler et agir ensemble.",
+"n": "Le débat n’est pas un obstacle à la vie commune : il en est une condition."
+},
+{
+"i": "M5-020",
+"c": "Mythologie",
+"k": "savoir",
+"t": "Oshun et la puissance de l’eau douce",
+"x": "Dans les traditions yoruba, Ọ̀ṣun est une divinité associée notamment aux rivières, à la fertilité, à la beauté et à la diplomatie. Les récits et pratiques qui lui sont liés diffèrent selon les lieux et les communautés.",
+"q": "À quel élément naturel Ọ̀ṣun est-elle particulièrement associée ?",
+"a": "À l’eau douce et aux rivières.",
+"n": "Les mythes relient souvent les forces de la nature aux valeurs d’une communauté."
+},
+{
+"i": "M5-021",
+"c": "Mythologie",
+"k": "savoir",
+"t": "Le corbeau qui apporte la lumière",
+"x": "Dans plusieurs récits des peuples autochtones de la côte nord-ouest du Pacifique, le Corbeau est un personnage transformateur associé à l’obtention ou à la mise en circulation de la lumière. Les versions varient selon les nations et les conteurs.",
+"q": "Pourquoi faut-il préciser la communauté lorsqu’on raconte ce mythe ?",
+"a": "Parce qu’il existe plusieurs versions et traditions distinctes ; les regrouper sous une seule histoire efface leurs différences.",
+"n": "Raconter un mythe, c’est aussi respecter la communauté qui le transmet."
+},
+{
+"i": "M5-024",
+"c": "Mythologie",
+"k": "savoir",
+"t": "Le serpent arc-en-ciel",
+"x": "Le Serpent arc-en-ciel apparaît dans plusieurs traditions aborigènes d’Australie, avec des récits différents selon les peuples. Il peut être lié à l’eau, aux paysages, à la création et aux règles qui organisent la vie.",
+"q": "Peut-on parler d’une version unique du Serpent arc-en-ciel ?",
+"a": "Non. Les récits varient selon les peuples aborigènes et doivent être contextualisés.",
+"n": "La diversité des traditions mérite autant d’attention que leur beauté."
+},
+{
+"i": "M5-027",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Ton cerveau complète parfois ce qu’il ne voit pas",
+"x": "La perception n’est pas une simple photographie du monde. Le cerveau combine les informations sensorielles avec le contexte et les attentes pour interpréter ce qui se passe.",
+"q": "Pourquoi deux personnes peuvent-elles interpréter différemment la même scène ?",
+"a": "Parce que leur attention, leurs attentes, leurs expériences et le contexte influencent leur perception.",
+"n": "Voir n’est pas toujours comprendre : vérifie avant de conclure."
+},
+{
+"i": "M5-028",
+"c": "Psychologie",
+"k": "savoir",
+"t": "L’effet de récence",
+"x": "Dans une liste d’informations, les derniers éléments peuvent être mieux rappelés à court terme que ceux du milieu. Ce phénomène est appelé effet de récence et fait partie des effets de position sérielle.",
+"q": "Quel élément d’une liste l’effet de récence favorise-t-il ?",
+"a": "Les éléments présentés vers la fin de la liste, notamment dans le rappel immédiat.",
+"n": "Pour réviser, mélange les ordres et teste-toi au lieu de toujours relire la même liste."
+},
+{
+"i": "M5-029",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Le biais de confirmation",
+"x": "Le biais de confirmation désigne la tendance à rechercher, interpréter ou retenir plus facilement les informations qui soutiennent nos croyances déjà présentes.",
+"q": "Comment limiter ce biais ?",
+"a": "Chercher volontairement des éléments qui pourraient contredire notre idée et examiner la qualité des preuves.",
+"n": "Une bonne réflexion cherche aussi ce qui pourrait lui donner tort."
+},
+{
+"i": "M5-030",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Pourquoi une pause peut aider à apprendre",
+"x": "L’attention soutenue peut diminuer avec le temps. Des pauses courtes et planifiées peuvent aider à récupérer et à reprendre une tâche avec plus de disponibilité mentale, même si leur durée idéale dépend de la personne et de l’activité.",
+"q": "Une pause signifie-t-elle perdre du temps ?",
+"a": "Pas nécessairement : elle peut aider à maintenir l’attention et à éviter une fatigue excessive.",
+"n": "Étudier efficacement, c’est aussi savoir récupérer."
+},
+{
+"i": "M5-031",
+"c": "Psychologie",
+"k": "savoir",
+"t": "L’effet de halo",
+"x": "L’effet de halo survient lorsqu’une impression positive ou négative sur une caractéristique influence notre jugement sur d’autres caractéristiques sans preuve suffisante.",
+"q": "Donne un exemple d’effet de halo.",
+"a": "Penser qu’une personne bien habillée est forcément compétente, alors que l’apparence ne prouve pas sa compétence.",
+"n": "Ne confonds pas une bonne première impression avec une preuve."
+},
+{
+"i": "M5-032",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Le pouvoir de l’espacement",
+"x": "Répartir les séances de révision dans le temps améliore généralement la mémorisation à long terme par rapport à une seule séance intensive de même durée totale.",
+"q": "Comment appliquer l’effet d’espacement ?",
+"a": "Revoir une notion plusieurs fois à des intervalles croissants, plutôt que tout apprendre la veille.",
+"n": "Un peu aujourd’hui, un peu demain : la mémoire aime les rendez-vous."
+},
+{
+"i": "M5-034",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Le sommeil consolide les souvenirs",
+"x": "Le sommeil participe à la consolidation de certains souvenirs. Apprendre puis dormir peut aider le cerveau à stabiliser des informations, même si le sommeil ne remplace pas l’étude.",
+"q": "Pourquoi sacrifier systématiquement son sommeil avant un examen est-il risqué ?",
+"a": "Parce que le manque de sommeil peut nuire à l’attention, à la mémoire et aux performances cognitives.",
+"n": "Une nuit de repos fait partie de la préparation, pas de la paresse."
+},
+{
+"i": "M5-035",
+"c": "Psychologie",
+"k": "savoir",
+"t": "L’effet spectateur",
+"x": "Dans certaines situations d’urgence, la présence de plusieurs témoins peut réduire la probabilité qu’une personne donnée intervienne rapidement. La responsabilité peut sembler partagée entre tous.",
+"q": "Comment augmenter les chances qu’une aide arrive ?",
+"a": "Désigner clairement une personne : « Vous, appelez les secours » plutôt que demander vaguement de l’aide à la foule.",
+"n": "Une consigne précise transforme les témoins en acteurs."
+},
+{
+"i": "M5-036",
+"c": "Psychologie",
+"k": "savoir",
+"t": "Les émotions influencent les décisions",
+"x": "Les émotions participent à la prise de décision : elles aident à évaluer ce qui compte, ce qui menace ou ce qui attire. Décider rationnellement ne signifie donc pas supprimer toute émotion.",
+"q": "Faut-il éliminer les émotions pour bien décider ?",
+"a": "Non. Il faut les reconnaître et les mettre en perspective avec les faits et les objectifs.",
+"n": "Écoute tes émotions, mais ne leur donne pas seules le dernier mot."
+},
+{
+"i": "M5-037",
+"c": "Sciences",
+"k": "savoir",
+"t": "Le métal qui fond dans la main",
+"x": "Le gallium est un métal dont le point de fusion est d’environ 29,8 °C. Il peut donc fondre près de la température du corps humain, contrairement à la plupart des métaux courants.",
+"q": "Pourquoi le gallium peut-il fondre dans une main chaude ?",
+"a": "Parce que sa température de fusion est proche de 30 °C.",
+"n": "La matière réserve des propriétés étonnantes, mais les expériences doivent respecter les consignes de sécurité."
+},
+{
+"i": "M5-038",
+"c": "Sciences",
+"k": "savoir",
+"t": "Les poulpes ont trois cœurs",
+"x": "Le poulpe possède trois cœurs : deux pompent le sang vers les branchies et un autre l’envoie vers le reste du corps. Son sang contient de l’hémocyanine, une molécule à base de cuivre qui contribue à sa couleur bleutée.",
+"q": "Combien de cœurs possède un poulpe ?",
+"a": "Trois.",
+"n": "La diversité du vivant dépasse souvent nos intuitions humaines."
+},
+{
+"i": "M5-039",
+"c": "Sciences",
+"k": "savoir",
+"t": "Sur Vénus, tourner sur soi dure plus longtemps qu'une année",
+"x": "Vénus met environ 243 jours terrestres à tourner sur elle-même, mais environ 225 jours terrestres à faire le tour du Soleil. Sa rotation est très lente et rétrograde.",
+"q": "Qu’est-ce qui est plus long sur Vénus : la rotation ou l’année orbitale ?",
+"a": "La rotation sidérale, qui dure environ 243 jours terrestres.",
+"n": "Même les repères les plus familiers, comme le jour et l’année, peuvent changer d’une planète à l’autre."
+},
+{
+"i": "M5-040",
+"c": "Sciences",
+"k": "savoir",
+"t": "Les arbres communiquent-ils ?",
+"x": "Les arbres et les plantes échangent des signaux chimiques et peuvent interagir avec des organismes du sol, notamment des champignons mycorhiziens. Certaines affirmations populaires sur une communication intentionnelle entre arbres sont toutefois exagérées.",
+"q": "Que faut-il retenir avec prudence ?",
+"a": "Il existe des interactions biologiques souterraines, mais il ne faut pas les présenter comme une conversation humaine entre arbres.",
+"n": "La science est fascinante sans avoir besoin d’être exagérée."
+},
+{
+"i": "M5-041",
+"c": "Sciences",
+"k": "savoir",
+"t": "Le son ne voyage pas dans le vide",
+"x": "Le son est une onde mécanique : il a besoin d’un milieu matériel, comme l’air, l’eau ou un solide, pour se propager. Dans le vide spatial, il ne peut pas se transmettre comme dans l’air.",
+"q": "Pourquoi une explosion dans l’espace ne s’entendrait-elle pas directement ?",
+"a": "Parce que le vide ne fournit pas de milieu matériel pour transporter les vibrations sonores.",
+"n": "Les films peuvent être spectaculaires ; la physique, elle, garde ses règles."
+},
+{
+"i": "M5-042",
+"c": "Sciences",
+"k": "savoir",
+"t": "Le miel peut se conserver très longtemps",
+"x": "Le miel possède une faible teneur en eau et une forte concentration en sucres, ce qui limite le développement de nombreux micro-organismes. Sa conservation dépend toutefois de l’humidité, de la contamination et du stockage.",
+"q": "Quelles propriétés contribuent à la conservation du miel ?",
+"a": "Sa faible activité de l’eau, son acidité et sa forte concentration en sucres.",
+"n": "Un aliment durable n’est pas pour autant à l’abri de toute altération."
+},
+{
+"i": "M5-043",
+"c": "Sciences",
+"k": "savoir",
+"t": "Les continents bougent encore",
+"x": "Les plaques tectoniques se déplacent de quelques millimètres à plusieurs centimètres par an. Leur mouvement explique notamment la formation de montagnes, les séismes et une grande partie du volcanisme.",
+"q": "Les continents sont-ils immobiles ?",
+"a": "Non. Ils se déplacent avec les plaques lithosphériques auxquelles ils appartiennent.",
+"n": "La Terre change même lorsque nous ne pouvons pas le percevoir à l’échelle d’une vie."
+},
+{
+"i": "M5-044",
+"c": "Sciences",
+"k": "savoir",
+"t": "Pourquoi le ciel paraît bleu",
+"x": "Les molécules de l’atmosphère diffusent davantage les courtes longueurs d’onde de la lumière solaire, notamment le bleu, que les grandes longueurs d’onde. Ce phénomène est appelé diffusion de Rayleigh.",
+"q": "Quel phénomène explique principalement la couleur bleue du ciel ?",
+"a": "La diffusion de Rayleigh de la lumière dans l’atmosphère.",
+"n": "Une couleur familière peut révéler une loi physique profonde."
+},
+{
+"i": "M5-045",
+"c": "Sciences",
+"k": "savoir",
+"t": "L’eau peut bouillir à température ambiante",
+"x": "L’eau bout lorsque sa pression de vapeur atteint la pression exercée autour d’elle. En diminuant suffisamment la pression, par exemple dans une enceinte adaptée, on peut faire bouillir l’eau à une température inférieure à 100 °C.",
+"q": "Pourquoi l’eau bout-elle à une température plus basse en altitude ?",
+"a": "Parce que la pression atmosphérique y est plus faible.",
+"n": "Un phénomène dépend parfois autant de son environnement que de la substance elle-même."
+},
+{
+"i": "M5-046",
+"c": "Sciences",
+"k": "savoir",
+"t": "Les tardigrades résistent à des conditions extrêmes",
+"x": "Les tardigrades sont de minuscules animaux capables d’entrer dans un état de dormance appelé cryptobiose. Dans cet état, certaines espèces tolèrent des conditions extrêmes, mais elles ne sont pas invincibles.",
+"q": "Comment certains tardigrades survivent-ils à la déshydratation ?",
+"a": "En entrant dans un état de cryptobiose qui réduit fortement leur activité métabolique.",
+"n": "La résistance exceptionnelle ne signifie pas une invulnérabilité absolue."
+},
+{
+"i": "M5-047",
+"c": "Afrique",
+"k": "savoir",
+"t": "Le royaume du Kongo avait une diplomatie internationale",
+"x": "À partir de la fin du XVe siècle, le royaume du Kongo entretient des relations diplomatiques avec le Portugal. Des lettres royales, des échanges religieux et des relations commerciales témoignent de contacts politiques complexes, marqués aussi par des tensions.",
+"q": "Le royaume du Kongo était-il isolé du monde extérieur ?",
+"a": "Non. Il entretenait notamment des relations diplomatiques avec le Portugal et d’autres réseaux régionaux.",
+"n": "L’histoire du Kongo est aussi une histoire de diplomatie et de choix politiques."
+},
+{
+"i": "M5-050",
+"c": "Afrique",
+"k": "savoir",
+"t": "L’écriture ge’ez est toujours étudiée",
+"x": "Le ge’ez est une ancienne langue sémitique d’Éthiopie, qui n’est plus une langue parlée courante mais reste utilisée dans la liturgie de l’Église orthodoxe éthiopienne et dans des traditions écrites.",
+"q": "Le ge’ez est-il une langue sans usage aujourd’hui ?",
+"a": "Non. Il conserve un usage liturgique et une importance historique et littéraire.",
+"n": "Une langue peut continuer à vivre dans les textes, les rites et la mémoire collective."
+},
+{
+"i": "M5-051",
+"c": "Afrique",
+"k": "savoir",
+"t": "Les murailles de Benin City",
+"x": "Les terrassements et remparts historiques associés à Benin City témoignent d’un vaste aménagement urbain du royaume du Bénin. Leur construction et leur fonction sont étudiées à partir de sources historiques et archéologiques.",
+"q": "Que révèlent ces ouvrages ?",
+"a": "L’organisation urbaine, le pouvoir politique et les capacités de construction du royaume du Bénin.",
+"n": "Les villes africaines anciennes possédaient des infrastructures complexes."
+},
+{
+"i": "M5-052",
+"c": "Afrique",
+"k": "savoir",
+"t": "Le swahili est une langue de rencontres",
+"x": "Le kiswahili s’est développé sur la côte est-africaine dans un environnement d’échanges entre communautés bantoues et réseaux commerciaux de l’océan Indien. Il a intégré des emprunts à plusieurs langues, notamment l’arabe.",
+"q": "Pourquoi le kiswahili contient-il des mots d’origines diverses ?",
+"a": "Parce qu’il s’est développé dans des régions de contacts commerciaux, culturels et linguistiques.",
+"n": "Les langues portent la trace des rencontres entre les peuples."
+},
+{
+"i": "M5-053",
+"c": "Afrique",
+"k": "savoir",
+"t": "L’université d’al-Qarawiyyin",
+"x": "La mosquée et l’institution d’al-Qarawiyyin à Fès, fondées au IXe siècle selon la tradition historique, sont devenues un important centre d’enseignement. Les définitions modernes d’université ne correspondent toutefois pas toujours aux institutions médiévales.",
+"q": "Pourquoi faut-il nuancer l’expression « plus vieille université » ?",
+"a": "Parce que les institutions médiévales n’avaient pas toutes la même organisation que les universités modernes.",
+"n": "L’histoire gagne en force lorsqu’on distingue les mots d’hier et les catégories d’aujourd’hui."
+},
+{
+"i": "M5-054",
+"c": "Afrique",
+"k": "savoir",
+"t": "Le lac Tchad a beaucoup changé",
+"x": "Le lac Tchad a connu de fortes variations de superficie au fil des décennies, sous l’effet combiné des précipitations, des apports des fleuves, de la demande en eau et des conditions climatiques.",
+"q": "Pourquoi la superficie du lac Tchad varie-t-elle ?",
+"a": "Elle dépend notamment des pluies, des apports hydrologiques, de l’évaporation et des usages humains de l’eau.",
+"n": "Comprendre l’environnement demande de regarder plusieurs causes à la fois."
+},
+{
+"i": "M5-055",
+"c": "Mystères",
+"k": "savoir",
+"t": "Le mécanisme d’Anticythère",
+"x": "Découvert dans une épave antique près de l’île grecque d’Anticythère, ce mécanisme à engrenages servait à modéliser des cycles astronomiques. Il est souvent présenté comme un calculateur analogique antique.",
+"q": "À quoi servait le mécanisme d’Anticythère ?",
+"a": "À calculer ou représenter des cycles astronomiques et calendaires.",
+"n": "Les technologies anciennes peuvent être beaucoup plus sophistiquées qu’on ne l’imagine."
+},
+{
+"i": "M5-056",
+"c": "Mystères",
+"k": "savoir",
+"t": "Les lignes de Nazca vues du ciel",
+"x": "Dans le désert péruvien, les lignes de Nazca forment de grandes figures géométriques et animales réalisées en retirant la couche superficielle sombre du sol. Leur fonction exacte fait encore l’objet de recherches.",
+"q": "Comment les figures de Nazca ont-elles été réalisées ?",
+"a": "En dégageant la surface sombre du désert pour faire apparaître le sol plus clair en dessous.",
+"n": "Une énigme archéologique mérite des hypothèses testées, pas des certitudes inventées."
+},
+{
+"i": "M5-057",
+"c": "Mystères",
+"k": "savoir",
+"t": "Le manuscrit de Voynich reste indéchiffré",
+"x": "Le manuscrit de Voynich est un codex illustré écrit dans une écriture inconnue. Son origine et son contenu exact restent débattus ; aucune interprétation largement acceptée n’a permis de le lire de manière convaincante.",
+"q": "Le manuscrit de Voynich a-t-il été déchiffré de façon certaine ?",
+"a": "Non. Aucune lecture n’est actuellement reconnue comme une solution définitive par les spécialistes.",
+"n": "Ne pas connaître la réponse est parfois le point de départ d’une vraie enquête."
+},
+{
+"i": "M5-058",
+"c": "Mystères",
+"k": "savoir",
+"t": "Les statues de l’île de Pâques",
+"x": "Les moaï de Rapa Nui sont des statues monumentales sculptées par les habitants de l’île. Les recherches montrent qu’elles s’inscrivent dans une société organisée ; les explications simplistes sur une civilisation disparue sont à éviter.",
+"q": "Qui a sculpté les moaï ?",
+"a": "Les ancêtres des habitants polynésiens de Rapa Nui.",
+"n": "Un mystère apparent peut disparaître quand on écoute les descendants et les données archéologiques."
+},
+{
+"i": "M5-059",
+"c": "Mystères",
+"k": "savoir",
+"t": "Le signal Wow!",
+"x": "En 1977, un radiotélescope de l’Ohio a détecté un signal radio étroit et puissant qui a attiré l’attention des chercheurs. Il n’a pas été détecté à nouveau de manière concluante, et son origine reste inconnue.",
+"q": "Le signal Wow! prouve-t-il l’existence d’extraterrestres ?",
+"a": "Non. Il reste une détection intrigante, mais aucune preuve d’une origine extraterrestre n’a été établie.",
+"n": "Une observation étonnante n’est pas encore une explication."
+},
+{
+"i": "M5-060",
+"c": "Mystères",
+"k": "savoir",
+"t": "Pourquoi le triangle des Bermudes n’est pas une preuve paranormale",
+"x": "La zone appelée triangle des Bermudes est associée à des récits de disparitions de navires et d’avions. Les analyses ne montrent pas qu’elle serait plus dangereuse que d’autres zones maritimes très fréquentées, et plusieurs récits ont été exagérés.",
+"q": "Le triangle des Bermudes est-il reconnu comme une zone surnaturelle ?",
+"a": "Non. Les explications relèvent notamment de la météo, de la navigation, des erreurs humaines et de récits médiatiques amplifiés.",
+"n": "Une histoire répétée n’est pas automatiquement un fait vérifié."
+},
+{
+"i": "M5-061",
+"c": "Mystères",
+"k": "savoir",
+"t": "Les sphères de pierre du Costa Rica",
+"x": "Des sphères de pierre précolombiennes, parfois très régulières, ont été sculptées dans le sud du Costa Rica. Elles sont associées aux sociétés précolombiennes de la région et leur fonction exacte n’est pas toujours connue.",
+"q": "Qui a réalisé les sphères de pierre du Costa Rica ?",
+"a": "Des communautés précolombiennes de la région du Diquís.",
+"n": "L’archéologie peut identifier les artisans et le contexte sans toujours connaître chaque usage."
+},
+{
+"i": "M5-062",
+"c": "Mystères",
+"k": "savoir",
+"t": "La cité souterraine de Derinkuyu",
+"x": "En Cappadoce, en Turquie, Derinkuyu est une vaste ville souterraine comprenant des espaces de stockage, des passages et des lieux de vie. Elle a pu servir de refuge à différentes périodes.",
+"q": "Pourquoi construire des espaces souterrains à Derinkuyu ?",
+"a": "Ils pouvaient offrir protection et abri, notamment pendant des périodes d’insécurité.",
+"n": "L’ingéniosité humaine sait aussi construire sous la surface."
+},
+{
+"i": "M5-064",
+"c": "Motivation",
+"k": "savoir",
+"t": "Le groupe de travail où un seul travaille",
+"x": "Dans un travail collectif, répartir les responsabilités sans préciser les livrables peut conduire à ce que quelques personnes fassent presque tout. Une tâche claire, un responsable et une échéance réduisent cette ambiguïté.",
+"q": "Que faut-il définir pour chaque tâche de groupe ?",
+"a": "Un responsable, un résultat attendu et une échéance.",
+"n": "Un bon groupe ne partage pas seulement un document : il partage les responsabilités."
+},
+{
+"i": "M5-065",
+"c": "Motivation",
+"k": "savoir",
+"t": "La fiche de révision qui devient un roman",
+"x": "Une fiche de révision trop longue peut reproduire le cours au lieu d’en extraire les notions essentielles. Une bonne fiche privilégie les idées structurantes, les définitions et les questions de rappel.",
+"q": "Quel est le but d’une fiche de révision ?",
+"a": "Aider à retrouver et à expliquer rapidement les notions essentielles, pas recopier tout le cours.",
+"n": "Si ta fiche est aussi longue que le cours, elle n’a peut-être pas encore fait son travail."
+},
+{
+"i": "M5-067",
+"c": "Motivation",
+"k": "savoir",
+"t": "Le téléphone et les cinq minutes qui disparaissent",
+"x": "Les notifications et les changements fréquents de tâche peuvent interrompre le travail et imposer un coût de reprise de l’attention. Couper les alertes pendant une courte période peut faciliter la concentration.",
+"q": "Quel geste simple peut protéger une séance de travail ?",
+"a": "Mettre le téléphone en mode silencieux ou éloigné pendant une période définie.",
+"n": "Tu n’as pas besoin de combattre toutes les distractions à la fois : commence par la plus proche."
+},
+{
+"i": "M5-069",
+"c": "Motivation",
+"k": "savoir",
+"t": "Réviser à deux sans se distraire",
+"x": "La révision à deux fonctionne mieux lorsque chacun doit expliquer une notion, répondre à des questions ou corriger une réponse. Sans objectif précis, la séance peut facilement devenir une conversation sans apprentissage.",
+"q": "Comment rendre une séance de révision à deux efficace ?",
+"a": "Alterner les rôles : un étudiant explique, l’autre questionne, puis on inverse.",
+"n": "Un camarade peut devenir ton meilleur outil de révision si vous avez une méthode."
 }
 ]
