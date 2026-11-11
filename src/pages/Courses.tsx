@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
-import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -13,15 +13,6 @@ import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
-
-// On ne montre que les sources qui marchent ; audio, vidéo et photo viendront quand elles seront prêtes.
-const SOURCES = [
-  { id: 'texte', label: 'Texte', icon: 'text' },
-  { id: 'voix', label: 'Dictée', icon: 'mic' },
-  { id: 'pdf', label: 'PDF', icon: 'pdf' },
-  { id: 'photo', label: 'Photo', icon: 'photo' },
-  { id: 'audio', label: 'Audio', icon: 'audio' }
-]
 
 // « Ajouter une note » propose toutes les méthodes : on y ajoute l'enregistrement direct et la vidéo (réduite à sa voix par la transcription).
 const NOTE_SOURCES = [
@@ -35,7 +26,7 @@ const NOTE_SOURCES = [
 ]
 const MAX_MEDIA_MB = 20
 
-/* Onglet « Cours » : sert uniquement à créer un cours. Une fois créé, il est rangé dans le sac à dos. */
+/* Onglet « Cours » : sert uniquement à créer un cours. Même écran d'écriture que « Ajouter une note ». Une fois créé, le cours est rangé dans le sac à dos. */
 export function NewCourse() {
   const nav = useNavigate()
   const { user } = useAuth()
@@ -46,12 +37,19 @@ export function NewCourse() {
   const [step, setStep] = useState('')
   const [source, setSource] = useState('texte')
   const [listening, setListening] = useState(false)
+  const [docSheet, setDocSheet] = useState(false)
+  const [recOpen, setRecOpen] = useState(false)
   const dict = useRef<Dictation | null>(null)
   const pdfInput = useRef<HTMLInputElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const audioInput = useRef<HTMLInputElement>(null)
+  const videoInput = useRef<HTMLInputElement>(null)
+  const rec = useRecorder({ maxBytes: MAX_MEDIA_MB * 1024 * 1024, onFile: (f) => void transcribeFile(f, 'audio'), onError: (m) => setError(m) })
+  const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
   useEffect(() => () => { dict.current?.stop() }, [])
+
+  function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
 
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
@@ -66,6 +64,7 @@ export function NewCourse() {
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
     dict.current = d
     setListening(true)
+    setSource('voix')
   }
 
   async function pickPdf(f: File | undefined) {
@@ -76,8 +75,9 @@ export function NewCourse() {
     setStep('')
     if (text === undefined) return
     if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
-    setContent(text.slice(0, 60000))
-    if (!title.trim()) setTitle(f.name.replace(/\.pdf$/i, '').slice(0, 80))
+    appendText(text)
+    setSource('pdf')
+    setTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
   async function pickPhoto(f: File | undefined) {
@@ -86,23 +86,30 @@ export function NewCourse() {
     setStep('')
     if (text === undefined) return
     if (text.length < 15) return setError("Je n'arrive pas à lire de texte sur cette photo. Prends-la bien droite, avec de la lumière, ou choisis un texte imprimé.")
-    setContent((c) => (c ? c + '\n\n' : '') + text.slice(0, 60000))
+    appendText(text)
+    setSource('photo')
   }
 
-  async function pickAudio(f: File | undefined) {
-    if (!f) return
-    if (f.size > 20 * 1024 * 1024) return setError('Cet audio est trop lourd (20 Mo maximum). Coupe-le en plusieurs parties.')
+  async function transcribeFile(f: File, kind: 'audio' | 'video') {
+    if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
     setStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
     setStep('')
     if (text === undefined) return
-    setContent((c) => (c ? c + '\n\n' : '') + text.slice(0, 60000))
-    if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '').slice(0, 80))
+    appendText(text)
+    setSource('audio')
+    setTitle((t) => t.trim() ? t : f.name.replace(/\.[^.]+$/, '').slice(0, 80))
   }
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  function leave() {
+    if ((title.trim() || content.trim() || consignes.trim()) && !window.confirm('Fermer sans créer ? Ce que tu as écrit sera perdu.')) return
+    dict.current?.stop()
+    nav('/')
+  }
+
+  async function submit() {
     if (!user) return
+    dict.current?.stop()
     if (!title.trim()) return setError('Donne un nom à ton cours.')
     const id = await run(async () => {
       // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
@@ -133,63 +140,40 @@ export function NewCourse() {
 
   return (
     <main className="page">
-      <div className="topbar" style={{ justifyContent: 'space-between', gap: 8 }}>
-        <h1 className="h1" style={{ whiteSpace: 'nowrap' }}>Nouveau cours</h1>
-        <Link to="/sac" className="btn ghost small" style={{ whiteSpace: 'nowrap', flex: 'none' }}>Sac à dos</Link>
-      </div>
-      <p className="lead">Crée ton cours : il sera rangé dans ton sac à dos, où tu pourras l'enrichir et faire tes TP.</p>
+      {/* Sélecteurs de fichiers : toujours présents, ouverts par les boutons de la barre du bas. */}
+      <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
+      <input ref={videoInput} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
 
-      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
-        <div className="field">
-          <label htmlFor="titre">Nom du cours</label>
-          <input id="titre" className="input" placeholder="Ex. Histoire de la langue française" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
-        </div>
+      <EditorScreen
+        backLabel="Nouveau cours"
+        onBack={leave}
+        doneLabel={busy ? 'Un instant…' : 'Créer'}
+        onDone={() => void submit()}
+        doneDisabled={busy || rec.state !== 'idle'}
+        title={title}
+        onTitle={setTitle}
+        titlePlaceholder="Titre du cours"
+        dateText={today}
+        body={content}
+        onBody={setContent}
+        bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
+        banner={<>{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        guide={consignes}
+        onGuide={setConsignes}
+        guideHelp="Ex. le prof veut des définitions courtes et des exemples. Memo en tient compte pour mettre tes notes en forme. Elles restent aussi dans le cours."
+        guideExtra={<DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />}
+        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
+      />
 
-        <span className="label-mono">Source</span>
-        <div className="grid3">
-          {SOURCES.map((s) => (
-            <button key={s.id} type="button" className="tile" aria-pressed={source === s.id} style={{ minHeight: 92, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: source === s.id ? 'var(--btn)' : undefined }} onClick={() => { setSource(s.id); if (s.id === 'pdf') pdfInput.current?.click(); if (s.id === 'photo') photoInput.current?.click(); if (s.id === 'audio') audioInput.current?.click() }}>
-              <Icon name={s.icon} size={26} color="var(--book)" />
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{s.label}</span>
-            </button>
-          ))}
-        </div>
-        <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
-
-        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
-        <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => { void pickAudio(e.target.files?.[0]); e.target.value = '' }} />
-        {source === 'audio' && <div className="notice">Choisis l'enregistrement de ton cours (MP3, M4A, WAV… 20 Mo maximum). Je le transforme en texte, puis tu peux le relire avant de créer le cours. <button type="button" className="link" onClick={() => audioInput.current?.click()}>Choisir un audio</button></div>}
-        {source === 'photo' && <div className="notice">Je lis le texte imprimé ou bien écrit. L'écriture à la main est lue moins bien : relis et corrige avant de créer le cours. <button type="button" className="link" onClick={() => photoInput.current?.click()}>Ajouter une photo</button></div>}
-
-        {source === 'voix' && canDictate() && (
-          <button type="button" className={'btn ' + (listening ? 'amber' : 'ghost')} onClick={toggleDictation}>
-            <Icon name="mic" size={20} /> {listening ? 'J’écoute… touche pour arrêter' : 'Commencer la dictée'}
-          </button>
-        )}
-        {source === 'voix' && !canDictate() && <div className="notice">La dictée n'est pas disponible sur ce navigateur. Ouvre Memoa avec Chrome.</div>}
-
-        <div className="field">
-          <label htmlFor="contenu">{source === 'pdf' ? 'Texte lu dans ton PDF (tu peux le corriger)' : source === 'photo' ? 'Texte lu sur ta photo (tu peux le corriger)' : source === 'audio' ? 'Texte de ton audio (tu peux le corriger)' : source === 'voix' ? 'Ce que tu as dicté (tu peux le corriger)' : 'Colle ou écris tes notes (facultatif)'}</label>
-          <textarea id="contenu" className="textarea" rows={7} placeholder="Tu peux aussi créer le cours vide et ajouter des notes plus tard." value={content} onChange={(e) => setContent(e.target.value)} />
-        </div>
-
-        <div className="field">
-          <label htmlFor="consignes">Consignes (facultatif)</label>
-          <textarea id="consignes" className="textarea" rows={3} maxLength={2000} placeholder="Ex. Le prof veut des définitions courtes et des exemples. Examen : questions de cours." value={consignes} onChange={(e) => setConsignes(e.target.value)} />
-          <span className="muted">Memo en tient compte pour mettre tes notes en forme. Elles restent aussi dans le cours.</span>
-        </div>
-
-        <ErrorBox message={error} />
-        <div className="sticky-action">
-          <button className="btn" type="submit" disabled={busy}>{busy ? step || 'Un instant…' : 'Créer mon cours'}</button>
-          <span className="muted" style={{ textAlign: 'center' }}>Il sera rangé dans ton sac à dos.</span>
-        </div>
-      </form>
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
+      <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )
 }
 
-/* Sac à dos : l'étagère de tous les cours, chacun nommé. Corbeille de 30 jours pour les cours supprimés. */
+/* Sac à dos : liste de lignes, un bouton « Nouveau cours », corbeille repliable de 30 jours. */
 export function Backpack() {
   const { user } = useAuth()
   const { data, loading, error, reload } = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
@@ -208,60 +192,44 @@ export function Backpack() {
   const [qc, setQc] = useState('')
   const shown = all.filter((c) => c.title.toLowerCase().includes(qc.trim().toLowerCase()))
   const totalNotes = all.reduce((n, c) => n + c.notes_count, 0)
-  const colors = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
   return (
     <main className="page" style={{ gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
-          <span className="muted">{all.length} cours · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
-        </div>
-        <Link to="/cours" className="hm-play" aria-label="Nouveau cours"><Icon name="plus" size={22} /></Link>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
+        <span className="muted">{all.length} {all.length > 1 ? 'cours' : 'cours'} · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
       </div>
+      <PillButton size="lg" to="/cours"><Icon name="plus" size={22} stroke={2.4} />Nouveau cours</PillButton>
       <ErrorBox message={error || actionError} />
       {loading ? <Spinner /> : !all.length ? (
-        <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici.">
-          <Link to="/cours" className="btn small">Créer un cours</Link>
-        </Empty>
+        <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici." />
       ) : (
         <>
-          <div className="hm-search" role="search">
-            <span className="ico" style={{ top: 13 }}><Icon name="search" size={20} /></span>
-            <input type="search" value={qc} onChange={(e) => setQc(e.target.value)} placeholder="Chercher un cours" aria-label="Chercher un cours" style={{ height: 48 }} />
-          </div>
-          <div className="grid2">
-            {shown.map((c, i) => (
-              <Link key={c.id} to={`/sac/${c.id}`} className="shelf-card" style={{ background: colors[i % colors.length] }}>
-                <div className="bars" aria-hidden="true"><i /><i /><i /></div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <strong>{c.title}</strong>
-                  <span>{c.notes_count} {c.notes_count > 1 ? 'notes' : 'note'}</span>
-                </div>
-              </Link>
-            ))}
-            <Link to="/cours" className="shelf-new">
-              <span className="hm-play" style={{ background: 'var(--surface-2)', color: 'var(--link)' }}><Icon name="plus" size={22} /></span>
-              <span>Nouveau cours</span>
-            </Link>
-          </div>
+          <PillInput type="search" value={qc} onChange={(e) => setQc(e.target.value)} placeholder="Chercher un cours" aria-label="Chercher un cours" />
+          <RowGroup>
+            {shown.length ? shown.map((c) => (
+              <Row key={c.id} icon="book" title={c.title} sub={`${c.notes_count} ${c.notes_count > 1 ? 'notes' : 'note'}`} to={`/sac/${c.id}`} />
+            )) : <div className="rg-empty">Aucun cours ne correspond.</div>}
+          </RowGroup>
         </>
       )}
       {trashed.length > 0 && (
         <>
-          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setShowTrash((v) => !v)} aria-expanded={showTrash}>
-            Corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
-          </button>
+          <PillButton variant="outline" onClick={() => setShowTrash((v) => !v)}>
+            <Icon name="trash" size={20} />Corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
+          </PillButton>
           {showTrash && (
-            <section className="card" aria-label="Cours supprimés">
-              <span className="muted">Un cours supprimé reste ici {TRASH_DAYS} jours, puis il est effacé pour de bon.</span>
+            <RowGroup label={`Supprimés · ${TRASH_DAYS} jours`}>
               {trashed.map((c) => (
-                <div key={c.id} className="list-row" style={{ justifyContent: 'space-between', gap: 10 }}>
-                  <span style={{ minWidth: 0 }}><b>{c.title}</b><br /><span className="muted">{daysLeft(c.deleted_at)} j restants</span></span>
-                  <button type="button" className="btn ghost small" disabled={busy} onClick={() => void restore(c.id)}>Restaurer</button>
+                <div key={c.id} className="rg-row" style={{ cursor: 'default' }}>
+                  <span className="rg-body">
+                    <span className="rg-title">{c.title}</span>
+                    <span className="rg-sub">{daysLeft(c.deleted_at)} j restants</span>
+                  </span>
+                  <PillButton variant="outline" size="sm" disabled={busy} onClick={() => void restore(c.id)}>Restaurer</PillButton>
                 </div>
               ))}
-            </section>
+            </RowGroup>
           )}
         </>
       )}
@@ -282,6 +250,129 @@ function saveBlob(name: string, blob: Blob) {
 }
 
 /* Un cours du sac à dos : un grand bouton « Ajouter une note », la liste des outils, puis les notes. */
+/* ------------------------------ Quiz ------------------------------ */
+interface QuizQ { q: string; opts: string[]; ans: number; why: string }
+
+const QUIZ_PROMPT = `Fais-moi un quiz de 5 questions à choix multiples (4 choix chacune) sur ce cours. Réponds UNIQUEMENT dans ce format exact, sans introduction, sans conclusion, sans astérisques, avec une ligne vide entre les questions :
+QUESTION: la question
+A) premier choix
+B) deuxième choix
+C) troisième choix
+D) quatrième choix
+REPONSE: la lettre de la bonne réponse
+EXPLICATION: une phrase courte tirée de mes notes`
+
+/** Découpe la réponse de l'IA en questions. Si le format n'est pas respecté, la liste est vide et on affiche le texte tel quel. */
+function parseQuiz(text: string): QuizQ[] {
+  const clean = text.replace(/\*\*/g, '').replace(/\r/g, '')
+  const blocks = clean.split(/(?:^|\n)\s*(?:QUESTION|Question)\s*\d*\s*[:.)-]/).slice(1)
+  const out: QuizQ[] = []
+  for (const b of blocks) {
+    const first = b.search(/^\s*A\s*[).:-]/m)
+    if (first < 0) continue
+    const q = b.slice(0, first).trim()
+    const head = b.slice(first).split(/R[ÉE]PONSE/i)[0]
+    const opts: string[] = []
+    const re = /^\s*([A-D])\s*[).:-]\s*(.+)$/gm
+    let m: RegExpExecArray | null
+    while ((m = re.exec(head)) !== null) opts[m[1].charCodeAt(0) - 65] = m[2].trim()
+    const dense = opts.filter(Boolean)
+    if (!q || dense.length < 2 || dense.length !== opts.length) continue
+    const am = /R[ÉE]PONSE\s*:?\s*\(?([A-D])/i.exec(b)
+    if (!am) continue
+    const ans = am[1].toUpperCase().charCodeAt(0) - 65
+    if (ans >= dense.length) continue
+    const why = (/EXPLICATION\s*:?\s*([\s\S]*)$/i.exec(b)?.[1] ?? '').trim()
+    out.push({ q, opts: dense, ans, why })
+  }
+  return out
+}
+
+function QuizScreen({ qs, raw, onClose }: { qs: QuizQ[]; raw: string; onClose: () => void }) {
+  const [i, setI] = useState(0)
+  const [picked, setPicked] = useState<number | null>(null)
+  const [score, setScore] = useState(0)
+  const [done, setDone] = useState(false)
+
+  if (!qs.length) {
+    return (
+      <div className="screen-full" role="dialog" aria-modal="true" aria-label="Révision">
+        <div className="sf-top">
+          <button type="button" className="icon-btn round" onClick={onClose} aria-label="Fermer"><Icon name="close" /></button>
+          <h1 className="h1" style={{ margin: 0, fontSize: 22 }}>Révision</h1>
+        </div>
+        <div className="sf-main"><div className="sum-text" style={{ whiteSpace: 'normal' }}><RichText text={raw} /></div></div>
+        <div className="sf-foot"><PillButton onClick={onClose}>Fermer</PillButton></div>
+      </div>
+    )
+  }
+
+  const q = qs[i]
+  function choose(k: number) {
+    if (picked !== null) return
+    setPicked(k)
+    if (k === q.ans) setScore((x) => x + 1)
+  }
+  function next() {
+    if (i + 1 >= qs.length) setDone(true)
+    else { setI(i + 1); setPicked(null) }
+  }
+  function again() { setI(0); setPicked(null); setScore(0); setDone(false) }
+
+  if (done) {
+    return (
+      <div className="screen-full" role="dialog" aria-modal="true" aria-label="Score">
+        <div className="sf-top">
+          <button type="button" className="icon-btn round" onClick={onClose} aria-label="Fermer"><Icon name="close" /></button>
+        </div>
+        <div className="sf-main" style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+          <span className="doc-label">Ton score</span>
+          <div className="qz-score">{score} / {qs.length}</div>
+          <p className="doc-intro">{score === qs.length ? 'Parfait, tu maîtrises ce cours.' : score >= qs.length / 2 ? 'Bien joué. Relis les notes sur les questions ratées.' : 'Pas encore. Relis tes notes et réessaie.'}</p>
+        </div>
+        <div className="sf-foot">
+          <PillButton variant="outline" onClick={again}>Recommencer</PillButton>
+          <PillButton onClick={onClose}>Fermer</PillButton>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="screen-full" role="dialog" aria-modal="true" aria-label="Révision">
+      <div className="sf-top">
+        <button type="button" className="icon-btn round" onClick={onClose} aria-label="Fermer"><Icon name="close" /></button>
+        <div className="qz-bar" role="progressbar" aria-valuemin={0} aria-valuemax={qs.length} aria-valuenow={i + 1}><span className="qz-fill" style={{ width: `${((i + (picked !== null ? 1 : 0)) / qs.length) * 100}%` }} /></div>
+        <span className="qz-count">{i + 1} / {qs.length}</span>
+      </div>
+      <div className="sf-main">
+        <h2 className="qz-q">{q.q}</h2>
+        {q.opts.map((o, k) => {
+          const cls = picked === null ? '' : k === q.ans ? ' right' : k === picked ? ' wrong' : ''
+          return (
+            <button key={k} type="button" className={'qz-opt' + cls} onClick={() => choose(k)} disabled={picked !== null}>
+              <span className="l">{String.fromCharCode(65 + k)}</span>
+              <span className="t">{o}</span>
+              {picked !== null && k === q.ans && <Icon name="check" size={20} stroke={2.6} />}
+              {picked !== null && k === picked && k !== q.ans && <Icon name="close" size={20} stroke={2.6} />}
+            </button>
+          )
+        })}
+        {picked !== null && (
+          <div className={'qz-fb ' + (picked === q.ans ? 'ok' : 'ko')} role="status">
+            <b>{picked === q.ans ? 'Bonne réponse' : 'Pas tout à fait'}</b>
+            {picked !== q.ans && <span>La bonne réponse : {String.fromCharCode(65 + q.ans)}) {q.opts[q.ans]}</span>}
+            {q.why && <span>{q.why}</span>}
+          </div>
+        )}
+      </div>
+      <div className="sf-foot">
+        <PillButton size="lg" onClick={next} disabled={picked === null}>{i + 1 >= qs.length ? 'Terminer' : 'Question suivante'}</PillButton>
+      </div>
+    </div>
+  )
+}
+
 export function CourseDetail() {
   const { id = '' } = useParams()
   const { user, profile } = useAuth()
@@ -298,7 +389,7 @@ export function CourseDetail() {
   const [noteGuide, setNoteGuide] = useState('')
   const [noteWeb, setNoteWeb] = useState(true)
   const [open, setOpen] = useState<string | null>(null)
-  const [quiz, setQuiz] = useState<string | null>(null)
+  const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string } | null>(null)
   const reading = useVoice() !== null
   const [listenOpen, setListenOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
@@ -475,8 +566,8 @@ export function CourseDetail() {
 
   async function revise() {
     if (!notes.data?.length) return setError("Ajoute d'abord une note pour pouvoir réviser.")
-    const r = await run(() => askAI({ task: 'quiz', courseId: id, prompt: 'Fais-moi un quiz de 5 questions sur ce cours, avec les réponses à la fin.' }))
-    if (r) setQuiz(r.reply)
+    const r = await run(() => askAI({ task: 'quiz', courseId: id, prompt: QUIZ_PROMPT }))
+    if (r) setQuiz({ qs: parseQuiz(r.reply), raw: r.reply })
   }
 
   if (course.loading) return <main className="page"><Spinner /></main>
@@ -498,47 +589,13 @@ export function CourseDetail() {
         <Row icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
       </RowGroup>
 
-      <ErrorBox message={editing ? null : error} />
+      <ErrorBox message={editing || listenOpen ? null : error} />
 
-      {listenOpen && !reading && (
-        <section className="card">
-          <span className="label-mono">Que veux-tu écouter ?</span>
-          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {all.map((n) => (
-              <label key={n.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <input type="checkbox" checked={picked.includes(n.id)} onChange={() => togglePick(n.id)} />
-                <span>{n.title}</span>
-              </label>
-            ))}
-          </div>
-          {all.length > 3 && (
-            <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setPicked(picked.length === all.length ? [] : all.map((n) => n.id))}>
-              {picked.length === all.length ? 'Tout décocher' : 'Tout cocher'}
-            </button>
-          )}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button type="button" className="btn ghost small" onClick={() => void listenChosen(false)} disabled={busy}>Lire tel quel</button>
-            <button type="button" className="btn small" onClick={() => void listenChosen(true)} disabled={busy}>{busy ? 'Un instant…' : 'Résumé puis lecture'}</button>
-          </div>
-        </section>
+      {summary && !summaryOpen && (
+        <RowGroup label="Résumé">
+          <Row icon="text" title="Voir le résumé" sub={summaryScope || 'Notes choisies'} onClick={() => setSummaryOpen(true)} />
+        </RowGroup>
       )}
-      {summary && (
-        <section className="card" aria-label="Résumé">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <span className="label-mono">Résumé{summaryScope ? ' · ' + (summaryScope.length > 40 ? summaryScope.slice(0, 40) + '…' : summaryScope) : ''}</span>
-            <button type="button" className="link" onClick={() => setSummaryOpen((v) => !v)} aria-expanded={summaryOpen}>{summaryOpen ? 'Masquer' : 'Afficher'}</button>
-          </div>
-          {summaryOpen && (
-            <>
-              <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{summary}</div>
-              <button type="button" className="btn small" onClick={() => void downloadSummary()} disabled={busy}>
-                <Icon name="download" size={18} /> Télécharger le résumé (PDF)
-              </button>
-            </>
-          )}
-        </section>
-      )}
-      {quiz && <section className="card"><span className="label-mono">Révision</span><div style={{ lineHeight: 1.5 }}><RichText text={quiz} /></div></section>}
 
       <RowGroup label="Notes">
         {notes.loading ? <div className="rg-empty">Chargement…</div> : !all.length ? (
@@ -551,7 +608,7 @@ export function CourseDetail() {
         ))}
       </RowGroup>
 
-      <button type="button" className="link" style={{ alignSelf: 'center', marginTop: 16, color: 'var(--danger, #c0392b)' }} onClick={() => void trashCourse()} disabled={busy}>Supprimer ce cours</button>
+      <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
 
       {/* Sélecteurs de fichiers : toujours présents, ouverts par « Continuer » ou par les boutons de l'éditeur. */}
       <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
@@ -600,13 +657,67 @@ export function CourseDetail() {
         />
       )}
 
+      <BottomSheet open={listenOpen && !reading} onClose={() => setListenOpen(false)} title="Que veux-tu écouter ?">
+        {all.length > 3 && (
+          <button type="button" className="link" style={{ alignSelf: 'flex-end', textDecoration: 'none', minHeight: 36 }} onClick={() => setPicked(picked.length === all.length ? [] : all.map((n) => n.id))}>
+            {picked.length === all.length ? 'Tout décocher' : 'Tout cocher'}
+          </button>
+        )}
+        <div className="chk-list">
+          {all.map((n) => {
+            const on = picked.includes(n.id)
+            return (
+              <button key={n.id} type="button" className="chk-row" onClick={() => togglePick(n.id)} aria-pressed={on}>
+                <span className={'chk' + (on ? ' on' : '')}>{on && <Icon name="check" size={16} stroke={3} />}</span>
+                <span className="grow">{n.title}</span>
+              </button>
+            )
+          })}
+        </div>
+        <ErrorBox message={error} />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <PillButton variant="outline" onClick={() => void listenChosen(false)} disabled={busy}>Lire tel quel</PillButton>
+          <PillButton onClick={() => void listenChosen(true)} disabled={busy}>{busy ? 'Un instant…' : 'Résumé puis lecture'}</PillButton>
+        </div>
+      </BottomSheet>
+
+      {quiz && <QuizScreen qs={quiz.qs} raw={quiz.raw} onClose={() => setQuiz(null)} />}
+
+      {summary && summaryOpen && (
+        <div className="screen-full" role="dialog" aria-modal="true" aria-label="Résumé">
+          <div className="sf-top">
+            <button type="button" className="icon-btn round" onClick={() => setSummaryOpen(false)} aria-label="Fermer le résumé"><Icon name="close" /></button>
+            <h1 className="h1" style={{ margin: 0, fontSize: 22 }}>Résumé</h1>
+          </div>
+          <div className="sf-main">
+            <div>
+              <div className="rg-label">Notes choisies</div>
+              <span className="muted">{summaryScope}</span>
+            </div>
+            <div className="sum-text">{summary}</div>
+            <ErrorBox message={error} />
+          </div>
+          <div className="sf-foot">
+            {canSpeak() && (
+              <PillButton onClick={() => { if (!speak(summary, undefined, { label: 'Lecture en cours', sub: 'Résumé · ' + (course.data?.title ?? '') })) setError("La lecture à voix haute n'est pas disponible sur ce navigateur.") }}>
+                <Icon name="headphones" size={20} />Écouter le résumé
+              </PillButton>
+            )}
+            <PillButton variant="outline" onClick={() => void downloadSummary()} disabled={busy}><Icon name="download" size={20} />Télécharger le résumé (PDF)</PillButton>
+          </div>
+        </div>
+      )}
+
       <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} onVideo={() => videoRef.current?.click()} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )
 }
 
-/* Assistant TP : sujet → plan validé → document complet avec page de garde. */
+/* Assistant TP : énoncé → plan validé → document complet avec page de garde. */
+interface Attach { id: string; name: string; text: string }
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
 export function TpAssistant() {
   const { id = '' } = useParams()
   const { profile } = useAuth()
@@ -614,60 +725,165 @@ export function TpAssistant() {
   const { busy, error, setError, run } = useAction()
   const [title, setTitle] = useState('')
   const [brief, setBrief] = useState('')
+  const [atts, setAtts] = useState<Attach[]>([])
   const [plan, setPlan] = useState<string | null>(null)
   const [remarks, setRemarks] = useState('')
+  const [remAtts, setRemAtts] = useState<Attach[]>([])
   const [doc, setDoc] = useState<string | null>(null)
+  const [sheetFor, setSheetFor] = useState<'brief' | 'remarks' | null>(null)
+  const [target, setTarget] = useState<'brief' | 'remarks'>('brief')
+  const [step, setStep] = useState('')
+  // Logo envoyé par l'étudiant : valable pour CE travail seulement, gardé sur le téléphone (rien n'est envoyé au serveur).
+  const [myLogo, setMyLogo] = useState<string | null>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
+  const logoRef = useRef<HTMLInputElement>(null)
   const year = (() => { const y = new Date().getFullYear(), m = new Date().getMonth(); return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}` })()
+  const defaultLogo = logoUrlFor(profile?.university)
+  const logoUrl = myLogo ?? defaultLogo
+
+  // L'énoncé complet = texte écrit + texte lu dans les pièces jointes (limité pour rester sous la limite du serveur).
+  const fullBrief = [brief.trim(), ...atts.map((a) => `[${a.name}]\n${a.text}`)].filter(Boolean).join('\n\n').slice(0, 4000)
+
+  async function attach(f: File | undefined, where: 'brief' | 'remarks') {
+    if (!f) return
+    setError(null)
+    const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+    let text: string | undefined
+    if (isPdf) {
+      if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
+      setStep('Lecture du PDF…')
+      text = await run(() => extractPdfText(f))
+    } else {
+      setStep('Lecture de la photo…')
+      text = await run(() => readPhotoText(f, setStep))
+    }
+    setStep('')
+    if (text === undefined) return
+    if (text.length < 10) return setError("Je n'ai pas pu lire de texte dans ce fichier. Essaie une photo plus nette ou un PDF non scanné.")
+    const item: Attach = { id: String(Date.now()) + Math.random().toString(36).slice(2, 6), name: f.name || 'photo', text: text.slice(0, 3500) }
+    if (where === 'brief') setAtts((x) => [...x, item]); else setRemAtts((x) => [...x, item])
+  }
+
+  function pickLogo(f: File | undefined) {
+    if (!f) return
+    if (!LOGO_TYPES.includes(f.type)) return setError('Le logo doit être une image PNG, JPG ou WEBP.')
+    if (f.size > 2 * 1024 * 1024) return setError('Ce logo est trop lourd (2 Mo maximum).')
+    const r = new FileReader()
+    r.onload = () => setMyLogo(String(r.result))
+    r.onerror = () => setError('Je ne peux pas lire ce logo. Essaie une autre image.')
+    r.readAsDataURL(f)
+  }
 
   async function makePlan() {
-    if (!title.trim() || !brief.trim()) return setError("Écris le titre et l'énoncé du TP.")
-    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}` }))
+    if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
+    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
     if (r) { setPlan(r.reply); setDoc(null) }
   }
   async function adjustPlan() {
     if (!plan) return
-    if (!remarks.trim()) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
-    const r = await run(() => askAI({ task: 'tp_revise', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${remarks}` }))
-    if (r) { setPlan(stripAiNoise(r.reply)); setRemarks('') }
+    const extra = remAtts.map((a) => `[${a.name}]\n${a.text}`).join('\n\n')
+    if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
+    const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
+    const r = await run(() => askAI({ task: 'tp_revise', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
+    if (r) { setPlan(stripAiNoise(r.reply)); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
     const blob = await run(() => buildTpPdf({
       university: profile.university, faculty: profile.faculty, department: profile.department,
-      promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl: logoUrlFor(profile.university),
+      promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl,
       title, course: course.data?.title ?? '', student: profile.full_name, year
     }, doc))
     if (blob) saveBlob(title || 'TP', blob)
   }
   async function write() {
-    const r = await run(() => askAI({ task: 'tp_write', courseId: id, prompt: `Titre : ${title}\nConsignes : ${brief}\nPlan validé :\n${plan}` }))
+    const r = await run(() => askAI({ task: 'tp_write', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\nPlan validé :\n${plan}` }))
     if (r) setDoc(stripAiNoise(r.reply))
   }
 
+  const LogoCheck = () => (
+    logoUrl ? (
+      <div className="logo-row">
+        <span className="th"><img src={logoUrl} alt="" /></span>
+        <span className="tx">
+          <b>{myLogo ? 'Ton logo' : 'Logo de la page de garde'}</b>
+          <span>{myLogo ? 'Utilisé pour ce travail' : `${profile?.university ? universityLabel(profile.university) : ''} · Ce n’est pas le bon ?`}</span>
+        </span>
+        {myLogo
+          ? <PillButton variant="outline" size="sm" onClick={() => setMyLogo(null)}>Retirer</PillButton>
+          : <PillButton variant="outline" size="sm" onClick={() => logoRef.current?.click()}>Ajouter le mien</PillButton>}
+      </div>
+    ) : (
+      <div className="logo-row none">
+        <span className="tx">
+          <b>Aucun logo trouvé</b>
+          <span>Ajoute celui de ton université pour une page de garde complète.</span>
+        </span>
+        <PillButton size="sm" onClick={() => logoRef.current?.click()}>Ajouter</PillButton>
+      </div>
+    )
+  )
+
+  const chips = (list: Attach[], remove: (aid: string) => void) => list.length > 0 && (
+    <div className="tp-att">
+      {list.map((a) => (
+        <span key={a.id} className="attach-chip"><Icon name={/\.pdf$/i.test(a.name) ? 'pdf' : 'photo'} size={16} /><span>{a.name}</span>
+          <button type="button" className="link" style={{ textDecoration: 'none' }} onClick={() => remove(a.id)} aria-label={`Retirer ${a.name}`}><Icon name="close" size={16} /></button>
+        </span>
+      ))}
+    </div>
+  )
+
   return (
     <main className="page">
-      <div className="no-print"><BackLink to={`/sac/${id}`} title="Assistant TP" /></div>
-      <p className="lead no-print">Cours : <strong>{course.data?.title ?? '…'}</strong></p>
+      <div className="no-print"><PageHead to={`/sac/${id}`} title="Assistant TP" /></div>
+      <p className="lead no-print" style={{ margin: 0 }}>Cours : <strong>{course.data?.title ?? '…'}</strong></p>
+
+      {/* Sélecteurs de fichiers : toujours présents, ouverts directement par un appui. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void attach(e.target.files?.[0], target); e.target.value = '' }} />
+      <input ref={galleryRef} type="file" accept="image/*" hidden onChange={(e) => { void attach(e.target.files?.[0], target); e.target.value = '' }} />
+      <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void attach(e.target.files?.[0], target); e.target.value = '' }} />
+      <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { pickLogo(e.target.files?.[0]); e.target.value = '' }} />
 
       <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div className="field"><label htmlFor="tpt">Titre du travail</label><input id="tpt" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. TP 1 · Le substrat gaulois" /></div>
-        <div className="field"><label htmlFor="tpc">Énoncé et consignes</label><textarea id="tpc" className="textarea" rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} /><DictateButton onText={(t) => setBrief((b) => (b ? b + ' ' : '') + t)} label="Dicter l’énoncé" /></div>
+        <PillInput id="tpt" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titre du travail" aria-label="Titre du travail" maxLength={120} />
+        <div className="tp-box">
+          <textarea value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="Énoncé et consignes" aria-label="Énoncé et consignes" />
+          {chips(atts, (aid) => setAtts((x) => x.filter((a) => a.id !== aid)))}
+          <div className="tp-tools">
+            <button type="button" className="round-plus" onClick={() => { setTarget('brief'); setSheetFor('brief') }} aria-label="Ajouter à tes consignes"><Icon name="plus" size={24} stroke={2.4} /></button>
+            <DictateButton onText={(t) => setBrief((b) => (b ? b + ' ' : '') + t)} label="Dicter" />
+          </div>
+        </div>
+        {step && <span className="muted" role="status">{step}</span>}
         <ErrorBox message={error} />
-        <button className="btn" type="button" onClick={makePlan} disabled={busy}>{busy && !plan ? 'Un instant…' : 'Proposer un plan'}</button>
+        {!plan && <LogoCheck />}
+        {!plan && <PillButton size="lg" onClick={makePlan} disabled={busy}>{busy ? 'Un instant…' : 'Proposer un plan'}</PillButton>}
       </div>
 
       {plan && (
-        <section className="card no-print">
-          <span className="label-mono">Plan proposé</span>
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{plan}</div>
-          <div className="field">
-            <label htmlFor="tpr">Un changement à demander ?</label>
-            <textarea id="tpr" className="textarea" rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Ex. Ajoute une partie sur les exemples, enlève la 3e partie…" />
-            <DictateButton onText={(t) => setRemarks((b) => (b ? b + ' ' : '') + t)} label="Dicter le changement" />
-            <button className="btn ghost" type="button" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</button>
+        <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div className="rg-label">Plan proposé</div>
+            <div className="plan-box">{plan}</div>
           </div>
-          <button className="btn amber" type="button" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : 'Valider et rédiger le TP'}</button>
-        </section>
+          <div>
+            <div className="rg-label">Un changement à demander ?</div>
+            <div className="tp-box">
+              <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Ex. Ajoute une partie sur les exemples, enlève la 3e partie…" aria-label="Changement à demander" style={{ minHeight: 70 }} />
+              {chips(remAtts, (aid) => setRemAtts((x) => x.filter((a) => a.id !== aid)))}
+              <div className="tp-tools">
+                <button type="button" className="round-plus" onClick={() => { setTarget('remarks'); setSheetFor('remarks') }} aria-label="Ajouter une pièce jointe"><Icon name="plus" size={24} stroke={2.4} /></button>
+                <DictateButton onText={(t) => setRemarks((b) => (b ? b + ' ' : '') + t)} label="Dicter" />
+              </div>
+            </div>
+          </div>
+          <LogoCheck />
+          <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
+          <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : 'Valider et rédiger le TP'}</PillButton>
+        </div>
       )}
 
       {doc && (
@@ -675,7 +891,7 @@ export function TpAssistant() {
           <div className="cover">
             <small>République démocratique du Congo</small>
             <span className="t" style={{ fontSize: 16 }}>{profile?.university ? universityLabel(profile.university) : ''}</span>
-            {logoUrlFor(profile?.university) && <img src={logoUrlFor(profile?.university)!} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
+            {logoUrl && <img src={logoUrl} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
             <span className="s">{profile?.faculty}</span>
             <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
             <hr />
@@ -684,11 +900,20 @@ export function TpAssistant() {
             <span className="s">Présenté par : {profile?.full_name}</span>
             <span className="s">Année académique {year}</span>
           </div>
-          <div className="doc-out">{doc}</div>
-          <div className="notice no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
-          <button className="btn no-print" type="button" disabled={busy} onClick={downloadTp}>{busy ? 'Un instant…' : 'Télécharger le PDF du TP'}</button>
+          <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
+          <div className="warn-braise no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
+          <PillButton size="lg" disabled={busy} onClick={downloadTp}>{busy ? 'Un instant…' : 'Télécharger le PDF du TP'}</PillButton>
         </>
       )}
+
+      <BottomSheet open={sheetFor !== null} onClose={() => setSheetFor(null)} title="Ajouter à tes consignes">
+        <RowGroup>
+          <Row icon="photo" title="Prendre une photo" sub="L’énoncé écrit au tableau ou sur papier" onClick={() => { setSheetFor(null); cameraRef.current?.click() }} />
+          <Row icon="photo" title="Choisir une image" sub="Depuis ta galerie" onClick={() => { setSheetFor(null); galleryRef.current?.click() }} />
+          <Row icon="pdf" title="Document PDF" sub="L’énoncé ou des consignes du professeur" onClick={() => { setSheetFor(null); pdfRef.current?.click() }} />
+          <Row icon="book" title="Logo de mon université" sub="S’il est faux ou manquant sur la page de garde" onClick={() => { setSheetFor(null); logoRef.current?.click() }} />
+        </RowGroup>
+      </BottomSheet>
     </main>
   )
 }
