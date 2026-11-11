@@ -28,18 +28,22 @@ export function EditorScreen(p: {
 }) {
   const [guideOpen, setGuideOpen] = useState(false)
   // Quand le clavier s'ouvre, l'écran se réduit à la zone visible : la barre d'outils reste au-dessus du clavier.
-  const [h, setH] = useState<number | null>(null)
+  const [box, setBox] = useState<{ h: number; top: number } | null>(null)
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    const on = () => setH(vv.height)
+    const on = () => setBox({ h: Math.round(vv.height), top: Math.round(vv.offsetTop) })
     on()
     vv.addEventListener('resize', on)
-    return () => vv.removeEventListener('resize', on)
+    vv.addEventListener('scroll', on)
+    return () => {
+      vv.removeEventListener('resize', on)
+      vv.removeEventListener('scroll', on)
+    }
   }, [])
 
   return (
-    <div className="editor" style={h ? { height: h } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
+    <div className="editor" style={box ? { height: box.h, top: box.top } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
       <div className="ed-top">
         <button type="button" className="ed-back" onClick={p.onBack} aria-label="Retour">
           <Icon name="back" size={22} stroke={2.2} />
