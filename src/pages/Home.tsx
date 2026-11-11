@@ -54,7 +54,9 @@ export default function Home() {
         <span className="hm-brand">memoa</span>
         <div className="hm-right">
           <span className="hm-streak" aria-label={`${streak} jours de suite`}><Icon name="flame" size={18} />{streak}</span>
-          <Link to="/moi" className="hm-avatar" aria-label="Mon profil">{first.slice(0, 1).toUpperCase()}</Link>
+          <Link to="/moi" className="hm-avatar" aria-label="Mon profil">
+            {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : first.slice(0, 1).toUpperCase()}
+          </Link>
         </div>
       </div>
 

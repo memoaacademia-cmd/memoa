@@ -41,6 +41,7 @@ export function NewCourse() {
   const { busy, error, setError, run } = useAction()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [consignes, setConsignes] = useState('')
   const [step, setStep] = useState('')
   const [source, setSource] = useState('texte')
   const [listening, setListening] = useState(false)
@@ -109,7 +110,8 @@ export function NewCourse() {
         setStep('Mise en forme de tes notes…')
         try {
           if (structured.length > 7500) throw new Error('trop long pour la mise en forme IA')
-          const r = await askAI({ task: 'structure_notes', prompt: structured })
+          const instr = consignes.trim()
+          const r = await askAI({ task: 'structure_notes', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${structured}` : structured })
           if (r.reply.trim()) structured = r.reply.trim()
         } catch (e) {
           if (e instanceof LimitError) throw e
@@ -118,6 +120,7 @@ export function NewCourse() {
       }
       setStep('Création du cours…')
       const course = await createCourse(user.id, title)
+      if (consignes.trim()) await addNote(user.id, course.id, 'Consignes', consignes.trim().slice(0, 2000), 'texte')
       if (content.trim()) {
         await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte')
       }
@@ -167,6 +170,12 @@ export function NewCourse() {
         <div className="field">
           <label htmlFor="contenu">{source === 'pdf' ? 'Texte lu dans ton PDF (tu peux le corriger)' : source === 'photo' ? 'Texte lu sur ta photo (tu peux le corriger)' : source === 'audio' ? 'Texte de ton audio (tu peux le corriger)' : source === 'voix' ? 'Ce que tu as dicté (tu peux le corriger)' : 'Colle ou écris tes notes (facultatif)'}</label>
           <textarea id="contenu" className="textarea" rows={7} placeholder="Tu peux aussi créer le cours vide et ajouter des notes plus tard." value={content} onChange={(e) => setContent(e.target.value)} />
+        </div>
+
+        <div className="field">
+          <label htmlFor="consignes">Consignes (facultatif)</label>
+          <textarea id="consignes" className="textarea" rows={3} maxLength={2000} placeholder="Ex. Le prof veut des définitions courtes et des exemples. Examen : questions de cours." value={consignes} onChange={(e) => setConsignes(e.target.value)} />
+          <span className="muted">Memo en tient compte pour mettre tes notes en forme. Elles restent aussi dans le cours.</span>
         </div>
 
         <ErrorBox message={error} />

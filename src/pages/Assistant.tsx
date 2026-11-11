@@ -137,7 +137,7 @@ export default function Assistant() {
               {m.role !== 'user' && <span className="hm-memo-av ai-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={20} /></span>}
               {m.role === 'user' ? m.content : <div style={{ minWidth: 0 }}><RichText text={m.content} /></div>}
               {m.role !== 'user' && canSpeak() && (
-                <div><button type="button" className="link" style={{ fontSize: 14, marginTop: 8 }} onClick={() => readAloud(m)}>{speakingId === m.id ? 'Arrêter la lecture' : 'Écouter'}</button></div>
+                <div><button type="button" className={'speak-btn' + (speakingId === m.id ? ' on' : '')} onClick={() => readAloud(m)} aria-label={speakingId === m.id ? 'Arrêter la lecture' : 'Écouter la réponse'} aria-pressed={speakingId === m.id}><Icon name={speakingId === m.id ? 'stop' : 'speaker'} size={18} /></button></div>
               )}
             </div>
           ))}
