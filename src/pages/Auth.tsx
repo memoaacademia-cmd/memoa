@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, MemoHero, PillButton, PillInput, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
@@ -6,6 +6,29 @@ import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const cleanPhone = (v: string) => v.replace(/[^0-9]/g, '').replace(/^243/, '').replace(/^0/, '')
+
+/* Champ mot de passe avec bouton œil : un appui montre le mot de passe, un autre appui le recache. */
+function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input {...props} className={className} type={shown ? 'text' : 'password'} style={{ ...props.style, paddingRight: 56 }} />
+      <button
+        type="button"
+        onClick={() => setShown((v) => !v)}
+        aria-label={shown ? 'Cacher le mot de passe' : 'Afficher le mot de passe'}
+        aria-pressed={shown}
+        style={{ position: 'absolute', top: '50%', right: 6, transform: 'translateY(-50%)', width: 44, height: 44, border: 0, background: 'transparent', color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="3" />
+          {shown && <path d="M4 4 L20 20" />}
+        </svg>
+      </button>
+    </div>
+  )
+}
 
 function GoogleG() {
   return (
@@ -69,7 +92,7 @@ export function Login() {
       <h1 className="h1 big" style={{ textAlign: 'center', margin: '0 0 8px' }}>Content de te revoir</h1>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <PillInput id="email" type="email" autoComplete="email" placeholder="Adresse e-mail" aria-label="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <PillInput id="mdp" type="password" autoComplete="current-password" placeholder="Mot de passe" aria-label="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordField id="mdp" className="pill-input" autoComplete="current-password" placeholder="Mot de passe" aria-label="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
         <ErrorBox message={error} />
         <PillButton type="submit" size="lg" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</PillButton>
         <div style={{ textAlign: 'center' }}>
@@ -138,7 +161,7 @@ export function Signup() {
         </div>
         <div className="field">
           <label htmlFor="mdp">Mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="muted">8 caractères minimum.</span>
         </div>
         <ErrorBox message={error} />
