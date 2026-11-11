@@ -46,6 +46,8 @@ self.addEventListener('push', (e) => {
       icon: './icon-192.png',
       badge: './icon-192.png',
       tag: 'memoa-savais-tu',
+      vibrate: [200, 100, 200],
+      renotify: true,
       data: { url: data.url || './' }
     })
   )
