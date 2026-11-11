@@ -105,7 +105,7 @@ function Switch({ label, on, set }: { label: string; on: boolean; set: (v: boole
 export function Settings() {
   const nav = useNavigate()
   const { user, profile } = useAuth()
-  const [theme, setTheme] = usePref('theme', 'dark')
+  const [theme, setTheme] = usePref('theme', 'light')
   const [storedLang, setLang] = usePref('lang', 'fr')
   const lang = LANGUAGES.some(([c]) => c === storedLang) ? storedLang : 'fr'
   const [pushOn, setPushOn] = useState(false)
