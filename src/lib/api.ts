@@ -337,6 +337,38 @@ export async function listNotes(courseId: string): Promise<Note[]> {
   return data as Note[]
 }
 
+export interface NoteHit { id: string; course_id: string; title: string; snippet: string }
+
+function snippetOf(content: string, q: string): string {
+  const flat = content.replace(/\s+/g, ' ').trim()
+  const i = flat.toLowerCase().indexOf(q.toLowerCase())
+  if (i < 0) return flat.slice(0, 90)
+  const start = Math.max(0, i - 30)
+  return (start > 0 ? '…' : '') + flat.slice(start, start + 100)
+}
+
+/** Recherche dans les notes de l'étudiant (titre et texte). Sert uniquement à l'Accueil. */
+export async function searchNotes(userId: string, query: string): Promise<NoteHit[]> {
+  const q = query.replace(/[%,()_*\\]/g, ' ').trim()
+  if (q.length < 2) return []
+  if (!isConfigured) {
+    const needle = q.toLowerCase()
+    return loadDemo().notes
+      .filter((n) => n.title.toLowerCase().includes(needle) || n.content.toLowerCase().includes(needle))
+      .slice(0, 8)
+      .map((n) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(n.content, q) }))
+  }
+  void userId
+  const { data, error } = await sb()
+    .from('notes')
+    .select('id,course_id,title,content')
+    .or(`title.ilike.%${q}%,content.ilike.%${q}%`)
+    .order('created_at', { ascending: false })
+    .limit(8)
+  if (error) throw error
+  return (data ?? []).map((n: any) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(n.content ?? '', q) }))
+}
+
 export async function addNote(userId: string, courseId: string, title: string, content: string, source = 'texte'): Promise<Note> {
   if (!content.trim()) fail('Ta note est vide.')
   if (content.length > 60000) fail('Cette note est trop longue. Découpe-la en plusieurs notes.')
