@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ErrorBox, Icon, Spinner, useAction, useLoad, Empty } from '../components/ui'
+import { ErrorBox, Icon, PillButton, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
 import { askAI, deleteDocForever, docDownloadUrl, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
 import { extractPdfText } from '../lib/pdfimport'
@@ -98,7 +98,7 @@ export default function Library() {
           <h1 className="h1 big" style={{ margin: 0 }}>Librairie</h1>
           <span className="muted">{shown.length} {shown.length > 1 ? 'documents partagés' : 'document partagé'} par des étudiants</span>
         </div>
-        <button type="button" className="btn small" style={{ borderRadius: 22, flex: 'none' }} onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</button>
+        <PillButton size="sm" onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</PillButton>
       </div>
 
       <div className="hm-search" role="search">
@@ -175,7 +175,7 @@ export default function Library() {
             Ma corbeille ({trashed.length}) · {showTrash ? 'Masquer' : 'Voir'}
           </button>
           {showTrash && (
-            <section className="card" aria-label="Documents supprimés">
+            <section className="rg" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }} aria-label="Documents supprimés">
               <span className="muted">Un document supprimé reste ici {TRASH_DAYS} jours, invisible des autres étudiants, puis il est effacé pour de bon.</span>
               {trashed.map((d) => (
                 <div key={d.id} className="list-row" style={{ alignItems: 'flex-start', gap: 10 }}>
@@ -233,7 +233,7 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
   }
 
   return (
-    <form onSubmit={submit} className="card" noValidate>
+    <form onSubmit={submit} className="rg" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
       <span className="label-mono">Publier un document</span>
       <div className="field"><label htmlFor="pt">Titre</label><input id="pt" className="input" maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       <div className="row">
@@ -263,7 +263,7 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
       <div className="field"><label htmlFor="pfile">Fichier PDF (20 Mo max)</label><input id="pfile" type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></div>
       <div className="notice">Ton document est publié tout de suite. Ne partage que ce que tu as le droit de partager : un document clairement hors sujet ou signalé par plusieurs étudiants est retiré.</div>
       <ErrorBox message={error} />
-      <button className="btn" type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Publier'}</button>
+      <PillButton type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Publier'}</PillButton>
     </form>
   )
 }

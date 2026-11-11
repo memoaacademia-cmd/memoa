@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BackLink, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
+import { BottomSheet, ErrorBox, Icon, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf } from '../lib/names'
@@ -34,10 +34,6 @@ export function Me() {
   const nNotes = (courses.data ?? []).reduce((n, c) => n + c.notes_count, 0)
   const uni = profile?.university?.match(/\(([^)]+)\)/)?.[1] ?? profile?.university
   const where = [uni, profile?.faculty, profile?.promotion].filter(Boolean).join(' · ')
-  const Row = ({ to, icon, label, value }: { to: string; icon: string; label: string; value?: string }) => (
-    <Link to={to} className="me-row"><Icon name={icon} size={20} /><span>{label}</span>{value && <span className="v">{value}</span>}<Icon name="chevright" size={18} /></Link>
-  )
-
   return (
     <main className="page" style={{ gap: 18 }}>
       <section style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -67,36 +63,33 @@ export function Me() {
         <span className="sub">Notes IA, TP, audio et résumés avec une utilisation généreuse. Paiement par Orange Money, Airtel Money ou M-Pesa.</span>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
           <div><span className="price">{PRICE_LABEL.USD}</span> <span className="sub">/ 30 jours</span><br /><span className="sub">ou {PRICE_LABEL.CDF}</span></div>
-          <Link to="/premium" className="btn amber small" style={{ borderRadius: 22 }}>{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
+          <Link to="/premium" className="pill-btn sm" style={{ background: '#f2a33a', color: '#0e1a2b' }}>{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
         </div>
       </section>
 
-      <div className="me-sec">COMPTE</div>
-      <div className="me-grp">
-        <Row to="/inscription?edit=1" icon="user" label="Mon profil" value="Modifier" />
-        <Row to="/adoption?change=1" icon="star" label="Mon Memo" value="Changer" />
-        <Row to="/parametres" icon="gear" label="Notifications, apparence et langue" />
-      </div>
-      <div className="me-sec">AIDE</div>
-      <div className="me-grp">
-        <Row to="/aide" icon="chat" label="Centre d’aide" />
-        <Row to="/signaler" icon="text" label="Signaler un problème" />
-        <Row to="/avis" icon="star" label="Donner mon avis" />
-      </div>
-      <div className="me-sec">À PROPOS</div>
-      <div className="me-grp">
-        <Row to="/confidentialite" icon="pdf" label="Confidentialité" />
-        <Row to="/conditions" icon="pdf" label="Conditions d’utilisation" />
-        <Row to="/a-propos" icon="home" label="À propos de Memoa" />
-      </div>
+      <RowGroup label="Compte">
+        <Row icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
+        <Row icon="star" title="Mon Memo" right="Changer" to="/adoption?change=1" />
+        <Row icon="gear" title="Réglages" sub="Notifications, apparence et langue" to="/parametres" />
+      </RowGroup>
+      <RowGroup label="Aide">
+        <Row icon="chat" title="Centre d’aide" to="/aide" />
+        <Row icon="text" title="Signaler un problème" to="/signaler" />
+        <Row icon="star" title="Donner mon avis" to="/avis" />
+      </RowGroup>
+      <RowGroup label="À propos">
+        <Row icon="pdf" title="Confidentialité" to="/confidentialite" />
+        <Row icon="pdf" title="Conditions d’utilisation" to="/conditions" />
+        <Row icon="home" title="À propos de Memoa" to="/a-propos" />
+      </RowGroup>
     </main>
   )
 }
 
-function Switch({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
+function SwitchRow({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
   return (
-    <div className="list-row">
-      <span id={'sw-' + label}>{label}</span>
+    <div className="rg-row" style={{ cursor: 'default' }}>
+      <span className="rg-body"><span className="rg-title" id={'sw-' + label}>{label}</span></span>
       <button type="button" role="switch" aria-checked={on} aria-labelledby={'sw-' + label} className="switch" onClick={() => set(!on)} />
     </div>
   )
@@ -140,49 +133,71 @@ export function Settings() {
 
   async function logout() { await signOut(); nav('/connexion', { replace: true }) }
 
+  const [pick, setPick] = useState<null | 'lang' | 'theme'>(null)
+  const langName = LANGUAGES.find(([c]) => c === lang)?.[1] ?? 'Français'
+
   return (
-    <main className="page">
-      <BackLink to="/moi" title="Paramètres" />
-      <section className="card"><span className="label-mono">Langue</span>
-        <div className="field">
-          <label htmlFor="lang" className="muted">Langue de l'application</label>
-          <select id="lang" className="select" value={lang} onChange={(e) => setLang(e.target.value)}>
-            {LANGUAGES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-          </select>
+    <main className="page" style={{ gap: 18 }}>
+      <PageHead to="/moi" title="Réglages" />
+
+      <RowGroup label="Apparence et langue">
+        <Row icon="gear" title="Langue" right={langName} onClick={() => setPick('lang')} />
+        <Row icon="star" title="Thème" right={theme === 'dark' ? 'Sombre' : 'Clair'} onClick={() => setPick('theme')} />
+      </RowGroup>
+      {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
+
+      <RowGroup label="Notifications et données">
+        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications « Le savais-tu ? »" on={pushOn} set={(v) => void togglePush(v)} />}
+        <SwitchRow label="Économie de données" on={saver === '1'} set={(v) => setSaver(v ? '1' : '0')} />
+      </RowGroup>
+      {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
+
+      <RowGroup label="Aide et informations">
+        <Row icon="chat" title="Centre d'aide" to="/aide" />
+        <Row icon="text" title="Signaler un problème" to="/signaler" />
+        <Row icon="star" title="Noter l'application" to="/avis" />
+        <Row icon="upload" title="Partager Memoa" onClick={() => void share()} chevron={false} />
+        <Row icon="pdf" title="Politique de confidentialité" to="/confidentialite" />
+        <Row icon="pdf" title="Conditions d'utilisation" to="/conditions" />
+        <Row icon="home" title="À propos de Memoa" to="/a-propos" />
+      </RowGroup>
+      {shared && <div className="notice">Lien copié. Colle-le dans WhatsApp ou ailleurs.</div>}
+
+      <RowGroup label="Compte">
+        <Row title="E-mail" right={user?.email ?? '—'} chevron={false} />
+        <Row title="Téléphone" right={profile?.phone ?? user?.phone ?? '—'} chevron={false} />
+        <Row icon="crown" title="Abonnement et paiements" to="/premium" />
+      </RowGroup>
+
+      {!confirm ? (
+        <PillButton variant="outline" onClick={() => setConfirm(true)}>Se déconnecter</PillButton>
+      ) : (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <PillButton variant="outline" onClick={() => setConfirm(false)}>Annuler</PillButton>
+          <PillButton onClick={() => void logout()}>Confirmer</PillButton>
         </div>
-        {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
-      </section>
-      <section className="card"><span className="label-mono">Thème</span>
-        <div className="chips" role="radiogroup" aria-label="Thème">
-          {[['dark', 'Sombre'], ['light', 'Clair']].map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={theme === v} className={'pill' + (theme === v ? ' on' : '')} onClick={() => setTheme(v)}>{l}</button>)}
-        </div>
-      </section>
-      <section className="card"><span className="label-mono">Notifications et données</span>
-        {VAPID_PUBLIC_KEY && <Switch label="Notifications « Le savais-tu ? »" on={pushOn} set={(v) => void togglePush(v)} />}
-        {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
-        <Switch label="Économie de données" on={saver === '1'} set={(v) => setSaver(v ? '1' : '0')} />
-      </section>
-      <section className="card"><span className="label-mono">Aide et informations</span>
-        <Link to="/aide" className="list-row"><span>Centre d'aide</span><Icon name="back" size={18} /></Link>
-        <Link to="/signaler" className="list-row"><span>Signaler un problème</span><Icon name="back" size={18} /></Link>
-        <Link to="/avis" className="list-row"><span>Noter l'application</span><Icon name="back" size={18} /></Link>
-        <button type="button" className="list-row" style={{ background: 'none', border: 0, color: 'inherit', textAlign: 'left', width: '100%' }} onClick={share}><span>Partager Memoa</span><Icon name="upload" size={18} /></button>
-        {shared && <div className="notice">Lien copié. Colle-le dans WhatsApp ou ailleurs.</div>}
-        <Link to="/confidentialite" className="list-row"><span>Politique de confidentialité</span><Icon name="back" size={18} /></Link>
-        <Link to="/conditions" className="list-row"><span>Conditions d'utilisation</span><Icon name="back" size={18} /></Link>
-        <Link to="/a-propos" className="list-row"><span>À propos de Memoa</span><Icon name="back" size={18} /></Link>
-      </section>
-      <section className="card"><span className="label-mono">Compte</span>
-        <div className="list-row"><span className="muted">Email</span><span style={{ overflowWrap: 'anywhere', textAlign: 'right' }}>{user?.email}</span></div>
-        <div className="list-row"><span className="muted">Téléphone</span><span>{profile?.phone ?? user?.phone ?? '—'}</span></div>
-        <Link to="/premium" className="list-row"><span>Abonnement et paiements</span><Icon name="back" size={18} /></Link>
-        {!confirm ? <button type="button" className="btn ghost" onClick={() => setConfirm(true)}>Se déconnecter</button> : (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" className="btn ghost" onClick={() => setConfirm(false)}>Annuler</button>
-            <button type="button" className="btn amber" onClick={logout}>Confirmer</button>
-          </div>
-        )}
-      </section>
+      )}
+
+      <BottomSheet open={pick === 'lang'} onClose={() => setPick(null)} title="Langue de l'application">
+        <RowGroup>
+          {LANGUAGES.map(([code, name]) => (
+            <button key={code} type="button" className="rg-row" onClick={() => { setLang(code); setPick(null) }}>
+              <span className="rg-body"><span className="rg-title">{name}</span></span>
+              <span className={'radio' + (lang === code ? ' on' : '')} />
+            </button>
+          ))}
+        </RowGroup>
+      </BottomSheet>
+      <BottomSheet open={pick === 'theme'} onClose={() => setPick(null)} title="Thème">
+        <RowGroup>
+          {[['dark', 'Sombre'], ['light', 'Clair']].map(([v, l]) => (
+            <button key={v} type="button" className="rg-row" role="radio" aria-checked={theme === v} onClick={() => { setTheme(v); setPick(null) }}>
+              <span className="rg-body"><span className="rg-title">{l}</span></span>
+              <span className={'radio' + (theme === v ? ' on' : '')} />
+            </button>
+          ))}
+        </RowGroup>
+      </BottomSheet>
     </main>
   )
 }
@@ -219,52 +234,54 @@ export function Premium() {
   }
 
   return (
-    <main className="page">
-      <BackLink to="/moi" title="Memoa Premium" />
-      <section className="card hero">
-        <span className="label-mono" style={{ color: '#f2a33a' }}>Abonnement mensuel</span>
+    <main className="page" style={{ gap: 18 }}>
+      <PageHead to="/moi" title="Memoa Premium" />
+      <section className="prem-hero">
+        <span className="label-mono" style={{ color: '#f2a33a' }}>Abonnement mensuel · un seul plan</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 44, lineHeight: 1 }}>{PRICE_LABEL.USD}</span>
-          <span className="muted" style={{ color: '#b9c8c2', fontSize: 16 }}>ou {PRICE_LABEL.CDF}</span>
+          <span style={{ color: '#b9c8c2', fontSize: 16 }}>ou {PRICE_LABEL.CDF}</span>
         </div>
         {prem.data && <span className="badge">Abonnement actif</span>}
         {BENEFITS.map((b) => <div key={b} style={{ display: 'flex', gap: 10 }}><Icon name="check" size={20} color="#3ccfb4" stroke={2.4} /><span style={{ fontSize: 15, lineHeight: 1.4 }}>{b}</span></div>)}
       </section>
 
-      <span className="label-mono">Payer par Mobile Money</span>
-      <div className="grid3" role="radiogroup" aria-label="Opérateur">
+      <RowGroup label="Payer par Mobile Money">
         {OPERATORS.map((o) => (
-          <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className="tile" style={{ minHeight: 76, alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 600, borderWidth: 2, borderColor: op === o.id ? '#3ccfb4' : undefined, background: op === o.id ? 'var(--surface-2)' : undefined }} onClick={() => setOp(o.id)}>
-            <span style={{ width: 12, height: 12, borderRadius: '50%', background: o.dot }} />{o.name}
+          <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className="rg-row" onClick={() => setOp(o.id)}>
+            <span className="dot" style={{ background: o.dot }} />
+            <span className="rg-body"><span className="rg-title">{o.name}</span></span>
+            <span className={'radio' + (op === o.id ? ' on' : '')} />
           </button>
         ))}
-      </div>
+      </RowGroup>
       <div className="chips" role="radiogroup" aria-label="Devise">
         {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}>{PRICE_LABEL[c]}</button>)}
       </div>
-      <div className="field"><label htmlFor="mm">Numéro Mobile Money</label><div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="8X XXX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} /></div></div>
+      <div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="Numéro Mobile Money · 8X XXX XX XX" aria-label="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
       <ErrorBox message={error} />
       {info && <div className="notice">{info}</div>}
-      <button type="button" className="btn amber" onClick={go} disabled={busy}>{busy ? 'Un instant…' : `Payer maintenant · ${PRICE_LABEL[cur]}`}</button>
+      <PillButton size="lg" onClick={() => void go()} disabled={busy}>{busy ? 'Un instant…' : `Payer maintenant · ${PRICE_LABEL[cur]}`}</PillButton>
       <span className="muted" style={{ textAlign: 'center' }}>Tu valides le paiement sur ton téléphone. Aucune donnée bancaire n'est stockée dans l'app.</span>
 
-      <span className="label-mono">Historique des paiements</span>
-      {pay.loading ? <Spinner /> : !pay.data?.length ? <span className="muted">Aucun paiement pour l'instant.</span> : pay.data.map((p) => {
-        const [lab, cls] = STATUS[p.status] ?? ['—', 'badge']
-        return (
-          <div key={p.id} className="card" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <strong>{OPERATORS.find((o) => o.id === p.provider)?.name ?? p.provider}</strong>
-              <span className="muted" style={{ fontFamily: 'var(--font-mono)' }}>{p.provider_ref ?? '—'}</span>
-              <span className="muted">{new Date(p.created_at).toLocaleDateString('fr-FR')}</span>
+      <RowGroup label="Historique des paiements">
+        {pay.loading ? <div className="rg-empty">Chargement…</div> : !pay.data?.length ? <div className="rg-empty">Aucun paiement pour l'instant.</div> : pay.data.map((p) => {
+          const [lab, cls] = STATUS[p.status] ?? ['—', 'badge']
+          const amount = p.currency === 'USD' ? p.amount.toFixed(2).replace('.', ',') + ' USD' : p.amount.toLocaleString('fr-FR') + ' FC'
+          return (
+            <div key={p.id} className="rg-row" style={{ cursor: 'default' }}>
+              <span className="rg-body">
+                <span className="rg-title">{OPERATORS.find((o) => o.id === p.provider)?.name ?? p.provider}</span>
+                <span className="rg-sub">{new Date(p.created_at).toLocaleDateString('fr-FR')} · {p.provider_ref ?? '—'}</span>
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                <strong style={{ fontSize: 14 }}>{amount}</strong>
+                <span className={cls}>{lab}</span>
+              </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              <strong>{p.currency === 'USD' ? p.amount.toFixed(2).replace('.', ',') + ' USD' : p.amount.toLocaleString('fr-FR') + ' FC'}</strong>
-              <span className={cls}>{lab}</span>
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </RowGroup>
     </main>
   )
 }
