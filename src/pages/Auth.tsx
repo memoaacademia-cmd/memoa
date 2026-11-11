@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brand, ErrorBox, useAction } from '../components/ui'
+import { Brand, ErrorBox, MemoHero, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -98,7 +98,7 @@ export function Signup() {
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
     else {
       await refresh()
-      nav('/inscription', { replace: true })
+      nav('/bienvenue', { replace: true })
     }
   }
 
@@ -113,7 +113,9 @@ export function Signup() {
 
   return (
     <main className="page auth">
-      <Header title="Créer ton compte" text="Quelques secondes, puis on prépare ton espace d'étude." />
+      <MemoHero height={150} bubble="Salut ! Moi, c’est Memo. On crée ton compte ?" />
+      <h1 className="h1 big" style={{ margin: 0 }}>Crée ton compte</h1>
+      <p className="lead" style={{ margin: 0 }}>Ton numéro active ton essai gratuit de 5 jours. Un seul essai par numéro.</p>
       <button type="button" className="btn ghost" onClick={google} disabled={busy} style={{ background: '#fff', color: '#0e1a2b', borderColor: '#b7c4be' }}>
         <GoogleG /> Continuer avec Google
       </button>

@@ -93,19 +93,24 @@ export default function Library() {
 
   return (
     <main className="page">
-      <div className="topbar" style={{ justifyContent: 'space-between' }}>
-        <h1 className="h1">Librairie</h1>
-        <button type="button" className="btn small" onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} color="#0b1513" /> Publier</button>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <h1 className="h1 big" style={{ margin: 0 }}>Librairie</h1>
+          <span className="muted">{shown.length} {shown.length > 1 ? 'documents partagés' : 'document partagé'} par des étudiants</span>
+        </div>
+        <button type="button" className="btn small" style={{ borderRadius: 22, flex: 'none' }} onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</button>
       </div>
 
-      <input
-        className="input"
-        type="search"
-        aria-label="Rechercher dans la Librairie"
-        placeholder="Rechercher un titre, un cours, une faculté, un département…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
+      <div className="hm-search" role="search">
+        <span className="ico"><Icon name="search" size={20} /></span>
+        <input
+          type="search"
+          aria-label="Rechercher dans la Librairie"
+          placeholder="Chercher un document, un cours…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </div>
       <div className="row">
         <select className="select" aria-label="Faculté" value={fac} onChange={(e) => setFac(e.target.value)}>
           <option value="">Faculté : toutes</option>
@@ -131,28 +136,27 @@ export default function Library() {
           text={filtered ? 'Essaie un autre mot, ou touche « Tout afficher ».' : 'Sois le premier à partager un document avec les étudiants.'}
         />
       ) : (
-        <div className="grid2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {shown.map((d) => (
-            <article key={d.id} className="tile" style={{ gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span className="badge">{d.doc_type}</span>
-                  <span className="badge">{d.promotion}</span>
-                </span>
-                <button type="button" className="icon-btn" style={{ width: 36, height: 36, border: 0 }} aria-pressed={!!d.is_favorite} aria-label={d.is_favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} onClick={() => fav(d)}>
-                  <Icon name="star" size={20} color={d.is_favorite ? '#f2a33a' : '#9db0aa'} />
+            <article key={d.id} className="lib-card">
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <span className="lib-type" aria-hidden="true">{(d.doc_type || 'PDF').slice(0, 3).toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <strong style={{ fontSize: 15, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.title}</strong>
+                  <span className="muted" style={{ fontSize: 13 }}>{[d.faculty, d.promotion, d.department].filter(Boolean).join(' · ')}</span>
+                  {d.course_title && <span className="muted" style={{ fontSize: 12 }}>{d.course_title}</span>}
+                  {d.university && <span className="muted" style={{ fontSize: 12 }}>{universityLabel(d.university)}</span>}
+                  {d.status === 'rejected' && <span className="badge amber" style={{ alignSelf: 'flex-start' }}>Retiré après vérification</span>}
+                </div>
+                <button type="button" className="icon-btn" style={{ width: 40, height: 40, border: 0, flex: 'none' }} aria-pressed={!!d.is_favorite} aria-label={d.is_favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} onClick={() => fav(d)}>
+                  <Icon name="star" size={22} color={d.is_favorite ? '#f2a33a' : '#9db0aa'} />
                 </button>
               </div>
-              <strong className="h2">{d.title}</strong>
-              {d.course_title && <span className="muted">{d.course_title}</span>}
-              <span className="muted" style={{ fontSize: 13 }}>{d.faculty}{d.department ? ' · ' + d.department : ''}</span>
-              {d.university && <span className="muted" style={{ fontSize: 13 }}>{universityLabel(d.university)}</span>}
-              {d.status === 'rejected' && <span className="badge amber">Retiré après vérification</span>}
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-                {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'view')}>Voir</button>}
-                {d.file_path && <button type="button" className="link" onClick={() => void openDoc(d, 'download')}>Télécharger</button>}
-                {d.owner_id === user?.id && <button type="button" className="link" style={{ color: 'var(--danger, #c0392b)' }} disabled={act.busy} onClick={() => void remove(d)}>Supprimer</button>}
-                {d.owner_id !== user?.id && <button type="button" className="link" style={{ color: 'var(--text-3)' }} onClick={() => { setThanks(''); setReporting(reporting === d.id ? null : d.id) }}>Signaler</button>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {d.file_path && <button type="button" className="lib-act primary" onClick={() => void openDoc(d, 'view')}>Voir</button>}
+                {d.file_path && <button type="button" className="lib-act" onClick={() => void openDoc(d, 'download')}><Icon name="download" size={16} /> Télécharger</button>}
+                {d.owner_id === user?.id && <button type="button" className="lib-act danger" disabled={act.busy} onClick={() => void remove(d)}>Supprimer</button>}
+                {d.owner_id !== user?.id && <button type="button" className="lib-act" onClick={() => { setThanks(''); setReporting(reporting === d.id ? null : d.id) }}>Signaler</button>}
               </div>
               {reporting === d.id && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>

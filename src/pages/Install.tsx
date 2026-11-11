@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Brand } from '../components/ui'
+import { Icon, Logo } from '../components/ui'
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -118,9 +118,21 @@ export default function Install() {
 
   return (
     <main className="page">
-      <Brand size={48} center />
-      <h1 className="h1" style={{ textAlign: 'center' }}>Installe Memoa</h1>
-      <p className="lead" style={{ textAlign: 'center' }}>Garde Memoa sur ton écran d’accueil, comme une application. Étudiez plus intelligemment.</p>
+      <div className="memo-hero" style={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden="true">
+        <span className="blob b1" /><span className="blob b2" />
+        <span style={{ width: 110, height: 110, borderRadius: 28, background: '#0b5d54', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 22px rgba(14,26,43,.28)', position: 'relative' }} className="notif-mock-app"><Logo size={68} /></span>
+      </div>
+      <span className="badge" style={{ alignSelf: 'flex-start', letterSpacing: '.04em', padding: '6px 12px' }}>DÉTECTÉ : {isIos ? 'IPHONE · SAFARI' : isAndroid ? 'ANDROID · CHROME' : 'ORDINATEUR'}</span>
+      <h1 className="h1 big" style={{ margin: 0 }}>Installe Memoa</h1>
+      <p className="lead" style={{ margin: 0 }}>Elle s’ouvre comme une vraie application, même quand la connexion est lente.</p>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {([['Plein écran', 'home'], ['Plus rapide', 'star'], ['Notifications', 'chat']] as const).map(([t, ic]) => (
+          <div key={t} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
+            <span style={{ width: 44, height: 44, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--link)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={ic} size={22} /></span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>{t}</span>
+          </div>
+        ))}
+      </div>
       {standalone || done ? (
         <div className="notice" role="status">Memoa est déjà installée sur cet appareil. Cherche son icône sur ton écran d’accueil.</div>
       ) : (
@@ -130,7 +142,7 @@ export default function Install() {
             <span className="label-mono" style={{ letterSpacing: '0.14em' }}>INSTALLER</span>
             <span style={{ flex: 1, height: 2, borderRadius: 2, background: 'var(--line-strong)' }} />
           </div>
-          <button type="button" className="btn" style={{ minHeight: 60, fontSize: 19, fontWeight: 700, width: '100%' }} onClick={() => void installNow()}>
+          <button type="button" className="pill-btn" style={{ minHeight: 60 }} onClick={() => void installNow()}><Icon name="download" size={22} />
             Installer Memoa
           </button>
           <span className="muted" style={{ textAlign: 'center' }}>

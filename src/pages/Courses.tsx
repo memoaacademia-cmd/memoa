@@ -194,23 +194,48 @@ export function Backpack() {
   }
   const daysLeft = (d?: string | null) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(d ?? Date.now()).getTime()) / 86400000))
 
+  const all = data ?? []
+  const [qc, setQc] = useState('')
+  const shown = all.filter((c) => c.title.toLowerCase().includes(qc.trim().toLowerCase()))
+  const totalNotes = all.reduce((n, c) => n + c.notes_count, 0)
+  const colors = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
+
   return (
-    <main className="page">
-      <BackLink to="/cours" title="Mon sac à dos" />
+    <main className="page" style={{ gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
+          <span className="muted">{all.length} cours · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
+        </div>
+        <Link to="/cours" className="hm-play" aria-label="Nouveau cours"><Icon name="plus" size={22} /></Link>
+      </div>
       <ErrorBox message={error || actionError} />
-      {loading ? <Spinner /> : !data?.length ? (
+      {loading ? <Spinner /> : !all.length ? (
         <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici.">
           <Link to="/cours" className="btn small">Créer un cours</Link>
         </Empty>
       ) : (
-        <div className="shelf">
-          {data.map((c) => (
-            <Link key={c.id} to={`/sac/${c.id}`} className="book">
-              <b>{c.title}</b>
-              <span className="muted">{c.notes_count} {c.notes_count > 1 ? 'notes' : 'note'}</span>
+        <>
+          <div className="hm-search" role="search">
+            <span className="ico" style={{ top: 13 }}><Icon name="search" size={20} /></span>
+            <input type="search" value={qc} onChange={(e) => setQc(e.target.value)} placeholder="Chercher un cours" aria-label="Chercher un cours" style={{ height: 48 }} />
+          </div>
+          <div className="grid2">
+            {shown.map((c, i) => (
+              <Link key={c.id} to={`/sac/${c.id}`} className="shelf-card" style={{ background: colors[i % colors.length] }}>
+                <div className="bars" aria-hidden="true"><i /><i /><i /></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <strong>{c.title}</strong>
+                  <span>{c.notes_count} {c.notes_count > 1 ? 'notes' : 'note'}</span>
+                </div>
+              </Link>
+            ))}
+            <Link to="/cours" className="shelf-new">
+              <span className="hm-play" style={{ background: 'var(--surface-2)', color: 'var(--link)' }}><Icon name="plus" size={22} /></span>
+              <span>Nouveau cours</span>
             </Link>
-          ))}
-        </div>
+          </div>
+        </>
       )}
       {trashed.length > 0 && (
         <>

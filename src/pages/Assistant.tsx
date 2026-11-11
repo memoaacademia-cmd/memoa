@@ -97,13 +97,13 @@ export default function Assistant() {
   return (
     <main className="page" style={{ paddingBottom: 200 }}>
       <div className="topbar" style={{ justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <MemoAvatar animal={profile?.memo_animal ?? null} size={40} />
-          <div><div className="h1" style={{ fontSize: 20, lineHeight: '24px' }}>Assistant</div><span className="muted">avec {profile?.memo_name ?? 'Memo'}</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <span className="hm-memo-av" style={{ width: 44, height: 44 }}><MemoAvatar animal={profile?.memo_animal ?? null} size={30} /></span>
+          <div style={{ minWidth: 0 }}><div className="h1" style={{ fontSize: 17, lineHeight: '22px', fontWeight: 800 }}>{profile?.memo_name ?? 'Memo'}</div><span className="muted" style={{ fontSize: 12 }}>Assistant d’étude</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, flex: 'none' }}>
           <button type="button" className="icon-btn" onClick={() => setHistory((v) => !v)} aria-label="Historique des conversations"><Icon name="clock" size={20} /></button>
-          <button type="button" className="icon-btn" style={{ background: '#3ccfb4', border: 0 }} onClick={fresh} aria-label="Nouvelle conversation"><Icon name="plus" size={20} color="#0b1513" stroke={2.4} /></button>
+          <button type="button" className="icon-btn" style={{ background: 'var(--btn)', border: 0 }} onClick={fresh} aria-label="Nouvelle conversation"><Icon name="plus" size={20} color="var(--btn-text)" stroke={2.4} /></button>
         </div>
       </div>
 
@@ -134,7 +134,8 @@ export default function Assistant() {
           {!messages.length && !!courseId && <div className="chips" style={{ flexWrap: 'wrap' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => send(s)}>{s}</button>)}</div>}
           {messages.map((m) => (
             <div key={m.id} className={'bubble ' + (m.role === 'user' ? 'user' : 'ai')}>
-              {m.role === 'user' ? m.content : <RichText text={m.content} />}
+              {m.role !== 'user' && <span className="hm-memo-av ai-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={20} /></span>}
+              {m.role === 'user' ? m.content : <div style={{ minWidth: 0 }}><RichText text={m.content} /></div>}
               {m.role !== 'user' && canSpeak() && (
                 <div><button type="button" className="link" style={{ fontSize: 14, marginTop: 8 }} onClick={() => readAloud(m)}>{speakingId === m.id ? 'Arrêter la lecture' : 'Écouter'}</button></div>
               )}
@@ -166,7 +167,7 @@ export default function Assistant() {
         <label htmlFor="q" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ta question</label>
         <input id="q" className="input" style={{ borderRadius: 26, minWidth: 0, flex: '1 1 0' }} placeholder="Pose une question" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
         {canDictate() && <button type="button" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: listening ? 'var(--braise)' : undefined }} onClick={toggleMic} aria-label={listening ? 'Arrêter la dictée' : 'Dicter ma question'}><Icon name="mic" /></button>}
-        <button type="submit" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: '#3ccfb4', border: 0 }} aria-label="Envoyer" disabled={busy}><Icon name="send" color="#0b1513" stroke={2} /></button>
+        <button type="submit" className="icon-btn" style={{ width: 52, height: 52, borderRadius: '50%', flex: 'none', background: 'var(--btn)', border: 0 }} aria-label="Envoyer" disabled={busy}><Icon name="send" color="var(--btn-text)" stroke={2} /></button>
       </form>
     </main>
   )

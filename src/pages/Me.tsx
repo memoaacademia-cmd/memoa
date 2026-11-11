@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BackLink, ErrorBox, Icon, MemoAvatar, Spinner, useAction, useLoad } from '../components/ui'
-import { hasPremium, listActivity, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
+import { BackLink, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
+import { hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
 import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
-import { currentStreak, streakTitle } from '../lib/streak'
+import { currentStreak } from '../lib/streak'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
 
@@ -28,51 +28,67 @@ export function Me() {
     })
   }
 
-  const rows: [string, string | undefined][] = [
-    ['Université', profile?.university], ['Faculté', profile?.faculty], ['Département', profile?.department],
-    ['Promotion', profile?.promotion], ['Vacation', profile?.vacation || 'Non précisée']
-  ]
+  const courses = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
+  const prem = useLoad(() => hasPremium(user?.id ?? ''), [user?.id])
+  const nCourses = courses.data?.length ?? 0
+  const nNotes = (courses.data ?? []).reduce((n, c) => n + c.notes_count, 0)
+  const uni = profile?.university?.match(/\(([^)]+)\)/)?.[1] ?? profile?.university
+  const where = [uni, profile?.faculty, profile?.promotion].filter(Boolean).join(' · ')
+  const Row = ({ to, icon, label, value }: { to: string; icon: string; label: string; value?: string }) => (
+    <Link to={to} className="me-row"><Icon name={icon} size={20} /><span>{label}</span>{value && <span className="v">{value}</span>}<Icon name="chevright" size={18} /></Link>
+  )
 
   return (
-    <main className="page">
-      <h1 className="h1">Moi</h1>
-      <section className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <button type="button" className="icon-btn" style={{ width: 72, height: 72, borderRadius: '50%', overflow: 'hidden', padding: 0 }} onClick={() => file.current?.click()} aria-label="Changer ma photo (facultatif)">
+    <main className="page" style={{ gap: 18 }}>
+      <section style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <button type="button" className="hm-memo-av" style={{ width: 72, height: 72, padding: 0 }} onClick={() => file.current?.click()} aria-label="Changer ma photo (facultatif)">
           {profile?.avatar_url ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="h2">{initials}</span>}
         </button>
         <input ref={file} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <strong className="h2">{profile?.full_name}</strong>
-          <span className="muted" style={{ overflowWrap: 'anywhere' }}>{user?.email}</span>
-          <span className="muted">Photo facultative</span>
+          <h1 className="h1" style={{ margin: 0, fontSize: 24 }}>{profile?.first_name || profile?.full_name}</h1>
+          <span className="muted">{where}</span>
+          <span className="muted">Ton Memo : {profile?.memo_name ?? 'Memo'}</span>
         </div>
       </section>
       <ErrorBox message={error} />
 
-      <section className="card" aria-label="Mon parcours">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="label-mono">Mon parcours</span>
-          <Link to="/inscription?edit=1" className="link">Modifier</Link>
-        </div>
-        {rows.map(([k, v]) => <div key={k} className="list-row"><span className="muted">{k}</span><span style={{ textAlign: 'right', fontWeight: 500 }}>{v}</span></div>)}
+      <section className="me-stats" aria-label="Mes chiffres">
+        <div><b>{streak}</b><span>{streak > 1 ? 'jours de suite' : 'jour de suite'}</span></div>
+        <i aria-hidden="true" />
+        <div><b>{nCourses}</b><span>cours</span></div>
+        <i aria-hidden="true" />
+        <div><b>{nNotes}</b><span>{nNotes > 1 ? 'notes' : 'note'}</span></div>
       </section>
 
-      <div className="grid2">
-        <Link to="/premium" className="tile"><Icon name="crown" size={26} color="#f2a33a" /><span><span className="h2">Abonnement</span><br /><span style={{ color: '#3ccfb4', fontWeight: 600, fontSize: 14 }}>Passer à Premium</span></span></Link>
-        <Link to="/parametres" className="tile"><Icon name="gear" size={26} /><span><span className="h2">Paramètres</span><br /><span className="muted">Langue, thème, compte</span></span></Link>
-      </div>
-      <section className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }} aria-label="Mon Memo">
-        <MemoAvatar animal={profile?.memo_animal ?? null} size={56} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong><br />
-          <span className="muted">Ton Memo</span>
+      <section className="me-premium" aria-label="Premium">
+        <span className="me-premium-pill">PREMIUM</span>
+        <strong>Étudie sans te poser de limites</strong>
+        <span className="sub">Notes IA, TP, audio et résumés avec une utilisation généreuse. Paiement par Orange Money, Airtel Money ou M-Pesa.</span>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+          <div><span className="price">{PRICE_LABEL.USD}</span> <span className="sub">/ 30 jours</span><br /><span className="sub">ou {PRICE_LABEL.CDF}</span></div>
+          <Link to="/premium" className="btn amber small" style={{ borderRadius: 22 }}>{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
         </div>
-        <Link to="/adoption?change=1" className="link">Changer</Link>
       </section>
-      <section className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <MemoAvatar animal={profile?.memo_animal ?? null} size={56} />
-        <div><strong className="h2">Flammes</strong><br /><span className="muted">{streak} {streak > 1 ? 'jours' : 'jour'} de suite · {streakTitle(streak)}</span></div>
-      </section>
+
+      <div className="me-sec">COMPTE</div>
+      <div className="me-grp">
+        <Row to="/inscription?edit=1" icon="user" label="Mon profil" value="Modifier" />
+        <Row to="/adoption?change=1" icon="star" label="Mon Memo" value="Changer" />
+        <Row to="/parametres" icon="gear" label="Notifications, apparence et langue" />
+      </div>
+      <div className="me-sec">AIDE</div>
+      <div className="me-grp">
+        <Row to="/aide" icon="chat" label="Centre d’aide" />
+        <Row to="/signaler" icon="text" label="Signaler un problème" />
+        <Row to="/avis" icon="star" label="Donner mon avis" />
+      </div>
+      <div className="me-sec">À PROPOS</div>
+      <div className="me-grp">
+        <Row to="/confidentialite" icon="pdf" label="Confidentialité" />
+        <Row to="/conditions" icon="pdf" label="Conditions d’utilisation" />
+        <Row to="/a-propos" icon="home" label="À propos de Memoa" />
+      </div>
     </main>
   )
 }

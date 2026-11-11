@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
+import { Brand, ErrorBox, MemoAvatar, Steps, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
 import { saveProfile, uploadAvatar } from '../lib/api'
@@ -83,8 +83,9 @@ export default function Onboarding() {
   return (
     <main className="page auth">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+        {!editing && <Steps n={2} />}
         <Brand size={44} />
-        <span className="label-mono">{editing ? 'Mon parcours' : 'Étape 1 sur 3'}</span>
+        {editing && <span className="label-mono">Mon parcours</span>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <h1 className="h1 big">Où étudies-tu ?</h1>
@@ -248,7 +249,7 @@ export function PhotoStep() {
 
   return (
     <main className="page" style={{ paddingBottom: 28, alignItems: 'center', textAlign: 'center' }}>
-      <span className="label-mono">Étape 3 sur 3 · facultative</span>
+      <span className="label-mono">Facultatif</span>
       <h1 className="h1 big">Ajoute ta photo</h1>
       <p className="lead">Pour que Memoa soit à ton image. Tu peux aussi le faire plus tard, dans Moi.</p>
       <button type="button" className="icon-btn" style={{ width: 160, height: 160, borderRadius: '50%', overflow: 'hidden', padding: 0 }} onClick={() => file.current?.click()} disabled={busy} aria-label="Choisir une photo de profil">
@@ -259,13 +260,13 @@ export function PhotoStep() {
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {shown ? (
           <>
-            <button className="btn" type="button" onClick={() => nav('/', { replace: true })} disabled={busy}>Continuer</button>
+            <button className="btn" type="button" onClick={() => nav('/essai', { replace: true })} disabled={busy}>Continuer</button>
             <button className="link" type="button" onClick={() => file.current?.click()} disabled={busy}>Choisir une autre photo</button>
           </>
         ) : (
           <>
             <button className="btn" type="button" onClick={() => file.current?.click()} disabled={busy}>{busy ? 'Un instant…' : 'Choisir une photo'}</button>
-            <button className="link" type="button" onClick={() => nav('/', { replace: true })} disabled={busy}>Passer</button>
+            <button className="link" type="button" onClick={() => nav('/essai', { replace: true })} disabled={busy}>Passer</button>
           </>
         )}
       </div>

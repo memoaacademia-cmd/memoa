@@ -1,10 +1,22 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, MemoAvatar, useLoad } from '../components/ui'
 import FactCard from '../components/FactCard'
-import { listActivity, listCourses } from '../lib/api'
+import { listActivity, listCourses, searchNotes, type NoteHit } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
-import { currentStreak, lastWeek, memoMood, streakTitle } from '../lib/streak'
+import { currentStreak, lastWeek, memoMood } from '../lib/streak'
+
+const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
+
+function greeting(): string {
+  const h = new Date().getHours()
+  return h >= 18 || h < 5 ? 'Bonsoir' : 'Bonjour'
+}
+
+function Spine({ color }: { color: string }) {
+  return <div className="hm-spine" style={{ background: color }} aria-hidden="true"><i /><i /></div>
+}
 
 export default function Home() {
   const { user, profile } = useAuth()
@@ -15,51 +27,103 @@ export default function Home() {
   const streak = currentStreak(days)
   const mood = memoMood(days)
   const first = firstNameOf(profile) || 'toi'
-  const last = courses.data?.[0]
+  const list = courses.data ?? []
+  const last = list[0]
+  const memoName = profile?.memo_name ?? 'Memo'
+
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<NoteHit[] | null>(null)
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 2) { setHits(null); return }
+    let alive = true
+    const t = setTimeout(() => {
+      searchNotes(uid, term).then((r) => { if (alive) setHits(r) }).catch(() => { if (alive) setHits([]) })
+    }, 300)
+    return () => { alive = false; clearTimeout(t) }
+  }, [q, uid])
+
+  const uni = profile?.university?.match(/\(([^)]+)\)/)?.[1] ?? profile?.university
+  const eyebrow = [uni, profile?.faculty, profile?.promotion].filter(Boolean).join(' · ')
+  const week = lastWeek(days)
+  const courseTitle = (id: string) => list.find((c) => c.id === id)?.title ?? 'Cours'
 
   return (
-    <main className="page">
-      <div>
-        <span className="label-mono">{profile?.university?.match(/\(([^)]+)\)/)?.[1] ?? profile?.university} · {profile?.promotion}</span>
-        <h1 className="h1" style={{ marginTop: 4 }}>Bonjour {first}</h1>
+    <main className="page" style={{ gap: 18 }}>
+      <div className="hm-top">
+        <span className="hm-brand">memoa</span>
+        <div className="hm-right">
+          <span className="hm-streak" aria-label={`${streak} jours de suite`}><Icon name="flame" size={18} />{streak}</span>
+          <Link to="/moi" className="hm-avatar" aria-label="Mon profil">{first.slice(0, 1).toUpperCase()}</Link>
+        </div>
       </div>
 
-      <section className="card hero" aria-label="Ton Memo">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ opacity: mood.state === 'energique' ? 1 : mood.state === 'faible' ? 0.8 : 0.6 }}>
-            <MemoAvatar animal={profile?.memo_animal ?? null} size={84} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="h2">{profile?.memo_name ?? 'Memo'}</span>
-            <span className="muted" style={{ color: '#d6e2dd' }}>{mood.text}</span>
-            <span className="badge amber" style={{ alignSelf: 'flex-start' }}>
-              {streak} {streak > 1 ? 'jours' : 'jour'} · {streakTitle(streak)}
-            </span>
-          </div>
-        </div>
-        <div className="week" aria-label="Tes 7 derniers jours">
-          {lastWeek(days).map((d, i) => (
-            <div key={i} className={'day' + (d.on ? ' on' : '')}><i />{d.label}</div>
-          ))}
-        </div>
-      </section>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span className="hm-eyebrow">{eyebrow}</span>
+        <h1 className="h1 big" style={{ margin: 0 }}>{greeting()}, {first}</h1>
+      </div>
+
+      <div className="hm-search" role="search">
+        <span className="ico"><Icon name="search" size={20} /></span>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cherche dans tes notes" aria-label="Chercher dans tes notes" />
+      </div>
+      {hits && (hits.length
+        ? <div className="hm-hits">{hits.map((h) => (
+            <Link key={h.id} to={`/sac/${h.course_id}`} className="hm-hit"><b>{h.title}</b><span>{courseTitle(h.course_id)} · {h.snippet}</span></Link>
+          ))}</div>
+        : <div className="muted" role="status">Aucune note ne correspond.</div>)}
 
       {last && (
-        <Link to={`/sac/${last.id}`} className="card">
-          <span className="label-mono">Reprendre</span>
-          <strong className="h2">{last.title}</strong>
-          <span className="muted">{last.notes_count} {last.notes_count > 1 ? 'notes' : 'note'} dans ton sac à dos</span>
+        <Link to={`/sac/${last.id}`} className="hm-resume">
+          <Spine color={COURSE_COLORS[0]} />
+          <div className="hm-resume-body">
+            <small>REPRENDRE</small>
+            <strong>{last.title}</strong>
+            <span>{last.notes_count} {last.notes_count > 1 ? 'notes' : 'note'}</span>
+          </div>
+          <span className="hm-play" aria-hidden="true"><Icon name="play" size={20} /></span>
         </Link>
       )}
 
-      <div className="grid2">
-        <Link to="/cours" className="tile"><Icon name="plus" size={26} color="#3ccfb4" /><span className="h2">Nouveau cours</span></Link>
-        <Link to="/sac" className="tile"><Icon name="book" size={26} color="#3ccfb4" /><span className="h2">Mon sac à dos</span></Link>
-        <Link to="/librairie" className="tile"><Icon name="shelf" size={26} color="#3ccfb4" /><span className="h2">Librairie</span></Link>
-        <Link to="/assistant" className="tile"><Icon name="chat" size={26} color="#3ccfb4" /><span className="h2">Poser une question</span></Link>
-      </div>
+      {list.length > 0 && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="hm-sec-head"><h2>Tes cours</h2><Link to="/sac">Tout voir</Link></div>
+          <div className="hm-rail">
+            {list.map((c, i) => (
+              <Link key={c.id} to={`/sac/${c.id}`} className="hm-course" style={{ background: COURSE_COLORS[i % COURSE_COLORS.length] }}>
+                <div className="bars" aria-hidden="true"><i /><i /><i /></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <strong>{c.title}</strong>
+                  <span>{c.notes_count} {c.notes_count > 1 ? 'notes' : 'note'}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
-      <FactCard memoName={profile?.memo_name ?? 'Memo'} animal={profile?.memo_animal ?? null} />
+      <section className="hm-memo" aria-label="Ton Memo">
+        <div className="hm-memo-top">
+          <span className="hm-memo-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={42} /></span>
+          <div style={{ minWidth: 0 }}>
+            <strong>{streak > 0 ? `${streak} ${streak > 1 ? 'jours' : 'jour'} de suite` : 'Commence ta série'}</strong>
+            <span>{memoName} · {mood.text}</span>
+          </div>
+        </div>
+        <div className="hm-week" aria-label="Tes 7 derniers jours">
+          {week.map((d, i) => {
+            const today = i === week.length - 1 && !d.on
+            return (
+              <div key={i} className="hm-day">
+                <span className={'hm-dot' + (d.on ? ' done' : today ? ' today' : '')}>{d.on && <Icon name="check" size={16} stroke={2.4} />}</span>
+                {d.label}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <FactCard memoName={memoName} animal={profile?.memo_animal ?? null} />
     </main>
   )
 }
