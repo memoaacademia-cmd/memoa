@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
-import { BackLink, Empty, ErrorBox, Icon, Spinner, useAction, useLoad } from '../components/ui'
+import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { logoUrlFor, universityLabel } from '../data/academic'
@@ -280,7 +281,7 @@ function saveBlob(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
-/* Un cours du sac à dos : toutes les actions sont ici (notes, TP, révision, téléchargement). */
+/* Un cours du sac à dos : un grand bouton « Ajouter une note », la liste des outils, puis les notes. */
 export function CourseDetail() {
   const { id = '' } = useParams()
   const { user, profile } = useAuth()
@@ -288,7 +289,10 @@ export function CourseDetail() {
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
   const { busy, error, setError, run } = useAction()
-  const [adding, setAdding] = useState(false)
+  const [sheet, setSheet] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [docSheet, setDocSheet] = useState(false)
+  const [recOpen, setRecOpen] = useState(false)
   const [noteTitle, setNoteTitle] = useState('')
   const [noteText, setNoteText] = useState('')
   const [noteGuide, setNoteGuide] = useState('')
@@ -305,15 +309,14 @@ export function CourseDetail() {
   const [noteSource, setNoteSource] = useState('texte')
   const [noteStep, setNoteStep] = useState('')
   const [listening, setListening] = useState(false)
-  const [recording, setRecording] = useState(false)
   const dict = useRef<Dictation | null>(null)
-  const recorder = useRef<MediaRecorder | null>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
   const photoRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLInputElement>(null)
+  const rec = useRecorder({ maxBytes: MAX_MEDIA_MB * 1024 * 1024, onFile: (f) => void transcribeFile(f, 'audio'), onError: (m) => setError(m) })
 
-  useEffect(() => () => { dict.current?.stop(); recorder.current?.stream.getTracks().forEach((t) => t.stop()) }, [])
+  useEffect(() => () => { dict.current?.stop() }, [])
 
   function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
 
@@ -339,32 +342,7 @@ export function CourseDetail() {
     setNoteStep('')
     if (text === undefined) return
     appendText(text)
-    if (!noteTitle.trim()) setNoteTitle(f.name.replace(/\.[^.]+$/, '').slice(0, 80))
-  }
-
-  async function toggleRecording() {
-    if (recording) { recorder.current?.stop(); return }
-    setError(null)
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return setError("L'enregistrement n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const chunks: Blob[] = []
-      const rec = new MediaRecorder(stream)
-      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
-      rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        setRecording(false)
-        const type = rec.mimeType || 'audio/webm'
-        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'
-        const file = new File(chunks, `enregistrement.${ext}`, { type })
-        if (file.size) void transcribeFile(file, 'audio')
-      }
-      recorder.current = rec
-      rec.start()
-      setRecording(true)
-    } catch {
-      setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
-    }
+    setNoteTitle((t) => t.trim() ? t : f.name.replace(/\.[^.]+$/, '').slice(0, 80))
   }
 
   async function pickPdf(f: File | undefined) {
@@ -376,7 +354,7 @@ export function CourseDetail() {
     if (text === undefined) return
     if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
     appendText(text)
-    if (!noteTitle.trim()) setNoteTitle(f.name.replace(/\.pdf$/i, '').slice(0, 80))
+    setNoteTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
   async function pickPhoto(f: File | undefined) {
@@ -388,13 +366,31 @@ export function CourseDetail() {
     appendText(text)
   }
 
-  function chooseSource(id: string) {
-    setNoteSource(id)
+  /* Feuille « Comment veux-tu ajouter ta note ? » : on choisit, puis « Continuer » ouvre l'écran d'écriture. */
+  function openSheet() {
     setError(null)
-    if (id === 'pdf') pdfRef.current?.click()
-    if (id === 'photo') photoRef.current?.click()
-    if (id === 'audio') audioRef.current?.click()
-    if (id === 'video') videoRef.current?.click()
+    setListenOpen(false)
+    setSheet(true)
+  }
+  function continueFromSheet() {
+    setSheet(false)
+    setEditing(true)
+    setError(null)
+    if (noteSource === 'pdf') pdfRef.current?.click()
+    else if (noteSource === 'photo') photoRef.current?.click()
+    else if (noteSource === 'audio') audioRef.current?.click()
+    else if (noteSource === 'video') videoRef.current?.click()
+    else if (noteSource === 'voix') toggleDictation()
+    else if (noteSource === 'enreg') { setRecOpen(true); void rec.start() }
+  }
+  function resetNote() {
+    dict.current?.stop()
+    setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null)
+    setEditing(false)
+  }
+  function closeEditor() {
+    if ((noteText.trim() || noteGuide.trim() || noteTitle.trim()) && !window.confirm('Fermer sans enregistrer ? Ce que tu as écrit sera perdu.')) return
+    resetNote()
   }
 
   async function trashCourse() {
@@ -405,10 +401,10 @@ export function CourseDetail() {
 
   function togglePanel() {
     if (reading) { stopSpeaking(); return }
-    if (!listenOpen) { setPicked((notes.data ?? []).map((n) => n.id)); setAdding(false) }
+    if (!listenOpen) { setPicked((notes.data ?? []).map((n) => n.id)) }
     setListenOpen((v) => !v)
   }
-    function togglePick(nid: string) {
+  function togglePick(nid: string) {
     setPicked((p) => (p.includes(nid) ? p.filter((x) => x !== nid) : [...p, nid]))
   }
   async function listenChosen(summarize: boolean) {
@@ -430,8 +426,7 @@ export function CourseDetail() {
     setListenOpen(false)
   }
 
-  async function save(e: FormEvent) {
-    e.preventDefault()
+  async function save() {
     if (!user) return
     dict.current?.stop()
     const src = noteSource === 'enreg' ? 'audio' : noteSource === 'video' ? 'audio' : noteSource === 'voix' ? 'voix' : noteSource
@@ -451,7 +446,9 @@ export function CourseDetail() {
       return true
     })
     if (ok) {
-      setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setAdding(false); notes.reload(); course.reload()
+      resetNote()
+      notes.reload()
+      course.reload()
     }
   }
 
@@ -486,19 +483,22 @@ export function CourseDetail() {
   if (!course.data) return <main className="page"><BackLink to="/sac" title="Cours introuvable" /><Empty title="Ce cours n'existe pas" text="Il a peut-être été supprimé." /></main>
 
   const all = notes.data ?? []
+  const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
   return (
     <main className="page">
-      <BackLink to="/sac" title={course.data.title} />
-      <div className="grid2">
-        <button type="button" className="tile" onClick={() => { setAdding((v) => !v); setListenOpen(false) }}><Icon name="plus" size={26} color="#3ccfb4" /><span className="h2">Ajouter une note</span></button>
-        <Link to={`/tp/${id}`} className="tile"><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Assistant TP</span></Link>
-        <button type="button" className="tile" onClick={revise} disabled={busy}><Icon name="check" size={26} color="#3ccfb4" /><span className="h2">{busy ? 'Un instant…' : 'Réviser'}</span></button>
-        <button type="button" className="tile" onClick={() => void pdf('read')} disabled={!all.length || busy}><Icon name="pdf" size={26} color="#3ccfb4" /><span className="h2">Lire le PDF</span></button>
-        <button type="button" className="tile" onClick={() => void pdf('save')} disabled={!all.length || busy}><Icon name="download" size={26} color="#3ccfb4" /><span className="h2">Télécharger</span></button>
-        {canSpeak() && <button type="button" className="tile" onClick={togglePanel} disabled={!all.length}><Icon name="headphones" size={26} color="#3ccfb4" /><span className="h2">{reading ? 'Arrêter' : 'Écouter'}</span></button>}
-      </div>
+      <PageHead to="/sac" title={course.data.title} />
 
-      <ErrorBox message={error} />
+      <PillButton size="lg" onClick={openSheet}><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
+
+      <RowGroup label="Outils">
+        <Row icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub="Un quiz sur tes notes" onClick={() => void revise()} disabled={busy} />
+        {canSpeak() && <Row icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
+        <Row icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
+        <Row icon="download" title="Télécharger" sub="Enregistrer en PDF" onClick={() => void pdf('save')} disabled={!all.length || busy} />
+        <Row icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
+      </RowGroup>
+
+      <ErrorBox message={editing ? null : error} />
 
       {listenOpen && !reading && (
         <section className="card">
@@ -538,60 +538,70 @@ export function CourseDetail() {
           )}
         </section>
       )}
-      {adding && (
-        <form onSubmit={save} className="card" noValidate>
-          <span className="label-mono">Comment veux-tu ajouter ta note ?</span>
-          <div className="grid3">
-            {NOTE_SOURCES.map((o) => (
-              <button key={o.id} type="button" className="tile" aria-pressed={noteSource === o.id} style={{ minHeight: 84, alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: noteSource === o.id ? 'var(--btn)' : undefined }} onClick={() => chooseSource(o.id)}>
-                <Icon name={o.icon} size={24} color="var(--book)" />
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{o.label}</span>
-              </button>
-            ))}
-          </div>
-          <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
-          <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
-          <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
-          <input ref={videoRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
-
-          {noteSource === 'voix' && (canDictate()
-            ? <button type="button" className={'btn ' + (listening ? 'amber' : 'ghost')} onClick={toggleDictation}><Icon name="mic" size={20} /> {listening ? 'J’écoute… touche pour arrêter' : 'Commencer la dictée'}</button>
-            : <div className="notice">La dictée n'est pas disponible sur ce navigateur. Ouvre Memoa avec Chrome.</div>)}
-          {noteSource === 'enreg' && <button type="button" className={'btn ' + (recording ? 'amber' : 'ghost')} onClick={() => void toggleRecording()} disabled={!!noteStep}><Icon name="mic" size={20} /> {recording ? 'Enregistrement… touche pour arrêter' : 'Démarrer l’enregistrement'}</button>}
-          {noteSource === 'audio' && <div className="notice">Choisis un enregistrement (MP3, M4A, WAV… {MAX_MEDIA_MB} Mo maximum). <button type="button" className="link" onClick={() => audioRef.current?.click()}>Choisir un audio</button></div>}
-          {noteSource === 'video' && <div className="notice">Je garde uniquement la voix de la vidéo et je la transforme en texte ({MAX_MEDIA_MB} Mo maximum : préfère une vidéo courte). <button type="button" className="link" onClick={() => videoRef.current?.click()}>Choisir une vidéo</button></div>}
-          {noteSource === 'photo' && <div className="notice">Je lis le texte imprimé ou bien écrit. L'écriture à la main est lue moins bien : relis et corrige. <button type="button" className="link" onClick={() => photoRef.current?.click()}>Ajouter une photo</button></div>}
-          {noteStep && <span className="muted">{noteStep}</span>}
-
-          <div className="field"><label htmlFor="nt">Titre</label><input id="nt" className="input" maxLength={80} placeholder="Ex. Chapitre 2" value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} /></div>
-          <div className="field"><label htmlFor="nc">Ta note (tu peux la corriger)</label><textarea id="nc" className="textarea" rows={6} value={noteText} onChange={(e) => setNoteText(e.target.value)} /></div>
-          <div className="field">
-            <label htmlFor="ng">Consignes pour l’IA (facultatif)</label>
-            <textarea id="ng" className="textarea" rows={3} value={noteGuide} onChange={(e) => setNoteGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." />
-            <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
-            {WEB_SEARCH_ENABLED && <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={noteWeb} onChange={(e) => setNoteWeb(e.target.checked)} /> Chercher aussi sur le web</label>}
-            <span className="muted">Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points).</span>
-          </div>
-          <button className="btn" type="submit" disabled={busy || recording}>{busy ? 'Un instant…' : 'Enregistrer la note'}</button>
-        </form>
-      )}
-
       {quiz && <section className="card"><span className="label-mono">Révision</span><div style={{ lineHeight: 1.5 }}><RichText text={quiz} /></div></section>}
 
-      <span className="label-mono">Mes notes</span>
-      {notes.loading ? <Spinner /> : !all.length ? (
-        <Empty title="Aucune note pour l'instant" text="Ajoute une note pour commencer à enrichir ce cours." />
-      ) : all.map((n) => (
-        <article key={n.id} className="card">
-          <button type="button" className="link" style={{ textAlign: 'left', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setOpen(open === n.id ? null : n.id)} aria-expanded={open === n.id}>
-            <span className="h2">{n.title}</span><br />
-            <span className="muted">{new Date(n.created_at).toLocaleDateString('fr-FR')} · {open === n.id ? 'Masquer' : 'Lire'}</span>
-          </button>
-          {open === n.id && <div style={{ lineHeight: 1.5 }}><RichText text={n.content} /></div>}
-        </article>
-      ))}
+      <RowGroup label="Notes">
+        {notes.loading ? <div className="rg-empty">Chargement…</div> : !all.length ? (
+          <div className="rg-empty">Aucune note pour l’instant. Touche « Ajouter une note » pour commencer.</div>
+        ) : all.map((n) => (
+          <Fragment key={n.id}>
+            <Row title={n.title} right={new Date(n.created_at).toLocaleDateString('fr-FR')} chevron={false} onClick={() => setOpen(open === n.id ? null : n.id)} expanded={open === n.id} />
+            {open === n.id && <div className="rg-open"><RichText text={n.content} /></div>}
+          </Fragment>
+        ))}
+      </RowGroup>
 
       <button type="button" className="link" style={{ alignSelf: 'center', marginTop: 16, color: 'var(--danger, #c0392b)' }} onClick={() => void trashCourse()} disabled={busy}>Supprimer ce cours</button>
+
+      {/* Sélecteurs de fichiers : toujours présents, ouverts par « Continuer » ou par les boutons de l'éditeur. */}
+      <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
+      <input ref={videoRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
+
+      <BottomSheet open={sheet} onClose={() => setSheet(false)} title="Comment veux-tu ajouter ta note ?">
+        <div className="src-grid">
+          {NOTE_SOURCES.map((o) => (
+            <button key={o.id} type="button" className="src-tile" aria-pressed={noteSource === o.id} onClick={() => { setNoteSource(o.id); setError(null) }}>
+              <Icon name={o.icon} size={24} />
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <PillButton onClick={continueFromSheet}>Continuer</PillButton>
+      </BottomSheet>
+
+      {editing && (
+        <EditorScreen
+          backLabel={course.data.title}
+          onBack={closeEditor}
+          status="Brouillon"
+          doneLabel={busy ? 'Un instant…' : 'Terminé'}
+          onDone={() => void save()}
+          doneDisabled={busy || rec.state !== 'idle'}
+          title={noteTitle}
+          onTitle={setNoteTitle}
+          titlePlaceholder="Titre de la note"
+          dateText={today}
+          body={noteText}
+          onBody={setNoteText}
+          bodyPlaceholder="Écris ta note ici…"
+          banner={<>{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
+          guide={noteGuide}
+          onGuide={setNoteGuide}
+          guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points). Elle s’en sert quand tu touches « Terminé »."
+          guideExtra={
+            <>
+              <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
+              {WEB_SEARCH_ENABLED && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={noteWeb} onChange={(e) => setNoteWeb(e.target.checked)} /> Chercher aussi sur le web</label>}
+            </>
+          }
+          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
+        />
+      )}
+
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} onVideo={() => videoRef.current?.click()} />
+      <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )
 }

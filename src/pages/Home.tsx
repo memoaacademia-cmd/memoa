@@ -9,11 +9,6 @@ import { currentStreak, lastWeek, memoMood } from '../lib/streak'
 
 const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
-function greeting(): string {
-  const h = new Date().getHours()
-  return h >= 18 || h < 5 ? 'Bonsoir' : 'Bonjour'
-}
-
 function Spine({ color }: { color: string }) {
   return <div className="hm-spine" style={{ background: color }} aria-hidden="true"><i /><i /></div>
 }
@@ -62,7 +57,7 @@ export default function Home() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="hm-eyebrow">{eyebrow}</span>
-        <h1 className="h1 big" style={{ margin: 0 }}>{greeting()}, {first}</h1>
+        <h1 className="h1 big" style={{ margin: 0 }}>Salut, {first}</h1>
       </div>
 
       <div className="hm-search" role="search">

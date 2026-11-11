@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brand, ErrorBox, MemoHero, useAction } from '../components/ui'
+import { Brand, ErrorBox, Icon, Logo, MemoHero, PillButton, PillInput, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -53,26 +53,33 @@ export function Login() {
   }
 
   return (
-    <main className="page auth">
-      <Header title="Content de te revoir" text="Connecte-toi avec ton email et ton mot de passe." />
-      <form onSubmit={submit} className="card" style={{ border: 0, background: 'transparent', padding: 0, gap: 14 }} noValidate>
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="mdp">Mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="current-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <Link className="link" to="/mot-de-passe-oublie">Mot de passe oublié ?</Link>
-        </div>
+    <main className="page auth" style={{ gap: 16 }}>
+      <div>
+        <button type="button" className="icon-btn round" aria-label="Retour" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/creer-un-compte'))}>
+          <Icon name="back" stroke={2.2} />
+        </button>
+      </div>
+      {/* Choix de langue : décoratif pour l'instant (la traduction vient plus tard dans le plan). */}
+      <div style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: 'var(--text-2)' }}>
+        Français <Icon name="chevdown" size={16} />
+      </div>
+      <div style={{ alignSelf: 'center', width: 76, height: 76, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0 4px' }}>
+        <Logo size={44} />
+      </div>
+      <h1 className="h1 big" style={{ textAlign: 'center', margin: '0 0 8px' }}>Content de te revoir</h1>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+        <PillInput id="email" type="email" autoComplete="email" placeholder="Adresse e-mail" aria-label="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <PillInput id="mdp" type="password" autoComplete="current-password" placeholder="Mot de passe" aria-label="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
         <ErrorBox message={error} />
-        <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
+        <PillButton type="submit" size="lg" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</PillButton>
+        <div style={{ textAlign: 'center' }}>
+          <Link className="link" style={{ textDecoration: 'none', display: 'inline-block', padding: '10px 8px' }} to="/mot-de-passe-oublie">Mot de passe oublié ?</Link>
+        </div>
       </form>
-      <p className="muted" style={{ textAlign: 'center' }}>
-        Pas encore de compte ? <Link className="link" to="/creer-un-compte">Créer un compte</Link>
-      </p>
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 24 }}>
+        <PillButton variant="outline" size="lg" to="/creer-un-compte">Créer un compte</PillButton>
+        <span style={{ textAlign: 'center', fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 18, letterSpacing: '-0.03em', color: 'var(--text-3)' }}>memoa</span>
+      </div>
     </main>
   )
 }
