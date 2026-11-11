@@ -4,7 +4,7 @@ import type { Fact } from '../data/facts'
 import { useAuth } from '../lib/auth'
 import { dailyIndex, loadFacts, otherIndex } from '../lib/facts'
 import { canInvite, enablePush, noteInvited } from '../lib/push'
-import { MemoAvatar } from './ui'
+import { Icon, MemoAvatar } from './ui'
 
 const W = 1080
 const MIN_H = 1350
@@ -239,6 +239,7 @@ export default function FactCard({ memoName, animal }: { memoName: string; anima
   const [invite, setInvite] = useState<'none' | 'show' | 'done'>('none')
   const [inviteMsg, setInviteMsg] = useState<string | null>(null)
   const [engaged, setEngaged] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -256,6 +257,19 @@ export default function FactCard({ memoName, animal }: { memoName: string; anima
   const fact = facts ? facts[idx] : null
   if (!fact) {
     return <section className="card" aria-label="Le savais-tu ?" style={{ background: 'linear-gradient(135deg, #0B5D54, #3CCFB4)', color: '#fff', border: 'none' }}><span style={{ alignSelf: 'flex-start', background: '#F2A33A', color: '#0E1A2B', fontWeight: 800, fontSize: 13, padding: '6px 12px', borderRadius: 999 }}>LE SAVAIS-TU ?</span>{err ? <span role="alert">{err}</span> : <span>Memo prépare ta carte…</span>}</section>
+  }
+
+  if (!open) {
+    return (
+      <button type="button" aria-expanded="false" aria-label={`Le savais-tu ? ${fact.t}. Touche pour dérouler.`} onClick={() => setOpen(true)} className="fact-fold">
+        <span aria-hidden="true" className="fact-fold-bubble" />
+        <span className="fact-fold-body">
+          <span className="fact-fold-pill">LE SAVAIS-TU ?</span>
+          <strong className="fact-fold-title">{fact.t}</strong>
+        </span>
+        <span aria-hidden="true" className="fact-fold-chev"><Icon name="chevdown" size={22} /></span>
+      </button>
+    )
   }
 
   const answerShown = fact.k === 'enigme' ? revealed : true
@@ -296,7 +310,10 @@ export default function FactCard({ memoName, animal }: { memoName: string; anima
   const note = fact.n
   return (
     <section className="card" aria-label="Le savais-tu ?" style={{ background: 'linear-gradient(135deg, #0B5D54, #3CCFB4)', color: '#fff', border: 'none', overflow: 'hidden' }}>
-      <span style={{ alignSelf: 'flex-start', background: '#F2A33A', color: '#0E1A2B', fontWeight: 800, fontSize: 13, letterSpacing: 0.5, padding: '6px 12px', borderRadius: 999 }}>LE SAVAIS-TU ?</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ background: '#F2A33A', color: '#0E1A2B', fontWeight: 800, fontSize: 13, letterSpacing: 0.5, padding: '6px 12px', borderRadius: 999 }}>LE SAVAIS-TU ?</span>
+        <button type="button" aria-expanded="true" aria-label="Replier la carte" onClick={() => setOpen(false)} style={{ width: 44, height: 44, borderRadius: '50%', border: 0, background: 'rgba(255,255,255,.16)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="chevup" size={22} /></button>
+      </div>
 
       <div style={{ ...safe, background: '#fff', color: '#0E1A2B', borderRadius: 18, padding: '16px 16px 18px', lineHeight: 1.5, position: 'relative', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#0B5D54' }}>{fact.c}</span>

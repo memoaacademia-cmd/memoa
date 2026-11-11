@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { ANIMALS } from '../data/animals'
 
 /** Les trois livres. La couleur des deux livres droits suit le thème (Menthe en sombre, Kivu en clair). */
@@ -62,7 +62,13 @@ const ICONS: Record<string, string> = {
   pdf: 'M6 3 H14 L19 8 V21 H6 Z M14 3 V8 H19',
   photo: 'M3 7 H7 L9 4 H15 L17 7 H21 V19 H3 Z M12 16 A3.5 3.5 0 1 0 12 9 A3.5 3.5 0 0 0 12 16 Z',
   text: 'M5 5 H19 M5 10 H19 M5 15 H14 M5 20 H11',
-  headphones: 'M4 15 V12 A8 8 0 0 1 20 12 V15 M4 14 H7 V19 H4 Z M17 14 H20 V19 H17 Z'
+  headphones: 'M4 15 V12 A8 8 0 0 1 20 12 V15 M4 14 H7 V19 H4 Z M17 14 H20 V19 H17 Z',
+  search: 'M11 4 A7 7 0 1 0 11 18 A7 7 0 1 0 11 4 M16.5 16.5 L21 21',
+  flame: 'M12 3 C12 3 7 8 7 13 A5 5 0 0 0 17 13 C17 10.5 15.5 9 15 8 C14.5 10 13.5 10.5 12.5 10 C13 8 12 5 12 3 Z',
+  play: 'M8 5 L19 12 L8 19 Z',
+  chevdown: 'M6 9 L12 15 L18 9',
+  chevup: 'M6 15 L12 9 L18 15',
+  chevright: 'M9 5 L16 12 L9 19'
 }
 
 export function Icon({ name, size = 22, color = 'currentColor', stroke = 1.9 }: { name: string; size?: number; color?: string; stroke?: number }) {
@@ -85,9 +91,10 @@ export function BackLink({ to, title }: { to: string; title: string }) {
 }
 
 export function NavBar() {
+  const loc = useLocation()
   const items = [
     { to: '/', label: 'Accueil', icon: 'home', end: true },
-    { to: '/cours', label: 'Cours', icon: 'book' },
+    { to: '/sac', label: 'Cours', icon: 'book', also: '/cours' },
     { to: '/librairie', label: 'Librairie', icon: 'shelf' },
     { to: '/assistant', label: 'Assistant', icon: 'chat' },
     { to: '/moi', label: 'Moi', icon: 'user' }
@@ -95,8 +102,8 @@ export function NavBar() {
   return (
     <nav className="nav" aria-label="Navigation principale">
       {items.map((i) => (
-        <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          <Icon name={i.icon} size={24} />
+        <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => 'nav-item' + (isActive || (i.also && loc.pathname.startsWith(i.also)) ? ' active' : '')}>
+          <span className="nav-pill"><Icon name={i.icon} size={24} /></span>
           {i.label}
         </NavLink>
       ))}
@@ -185,4 +192,26 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
     return () => window.removeEventListener('online', on)
   }, [])
   return { data, error, loading, reload: () => setTick((t) => t + 1) }
+}
+
+/** Barre de progression du parcours d'inscription (4 étapes). */
+export function Steps({ n, total = 4 }: { n: number; total?: number }) {
+  return (
+    <div className="steps" role="img" aria-label={`Étape ${n} sur ${total}`}>
+      {Array.from({ length: total }, (_, i) => <i key={i} className={i < n ? 'on' : ''} />)}
+    </div>
+  )
+}
+
+/** Bandeau illustré : Memo qui parle (bulle), avec les trois livres. */
+export function MemoHero({ bubble, height = 150, tags }: { bubble?: string; height?: number; tags?: { text: string; style: CSSProperties }[] }) {
+  return (
+    <div className="memo-hero" style={{ height }} aria-hidden="true">
+      <span className="blob b1" /><span className="blob b2" /><span className="blob b3" />
+      {tags?.map((t) => <span key={t.text} className="tag" style={t.style}>{t.text}</span>)}
+      {bubble && <div className="bubble-w">{bubble}<i /></div>}
+      <span className="mh-av"><MemoAvatar animal={null} size={Math.round(height * 0.38)} /></span>
+      <span className="mh-books"><Logo size={Math.round(height * 0.5)} /></span>
+    </div>
+  )
 }
