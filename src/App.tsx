@@ -95,7 +95,7 @@ function ConfirmationRoute() {
 }
 
 function Theme() {
-  const [theme] = usePref('theme', 'dark')
+  const [theme] = usePref('theme', 'light')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
