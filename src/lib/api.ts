@@ -38,22 +38,62 @@ export function friendlyError(e: unknown): string {
 
 /* ------------------------------ AUTH ------------------------------ */
 
+// Dernier étudiant connu sur ce téléphone : sert UNIQUEMENT quand le réseau coupe, pour ouvrir l'appli sans connexion.
+const USER_CACHE = 'memoa-user-cache'
+const readUserCache = (): AuthUser | null => {
+  try {
+    const raw = localStorage.getItem(USER_CACHE)
+    return raw ? (JSON.parse(raw) as AuthUser) : null
+  } catch {
+    return null
+  }
+}
+const writeUserCache = (u: AuthUser | null) => {
+  try {
+    if (u) localStorage.setItem(USER_CACHE, JSON.stringify(u))
+    else localStorage.removeItem(USER_CACHE)
+  } catch {
+    /* navigation privée : on ignore */
+  }
+}
+const isNetworkFailure = (e: unknown) => {
+  const x = e as { name?: string; message?: string } | null
+  return (typeof navigator !== 'undefined' && !navigator.onLine) || x?.name === 'AuthRetryableFetchError' || /fetch|network|timeout/i.test(x?.message ?? '')
+}
+
 export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!isConfigured) {
     const db = loadDemo()
     const u = db.users.find((x) => x.id === db.session)
     return u ? { id: u.id, email: u.email, phone: u.phone, needsPassword: u.password === '' } : null
   }
-  const { data } = await sb().auth.getSession()
+  let res: Awaited<ReturnType<ReturnType<typeof sb>['auth']['getSession']>>
+  try {
+    // Sans réseau, le renouvellement de la session peut traîner : au bout de 8 s on reprend le dernier étudiant connu.
+    res = await Promise.race([
+      sb().auth.getSession(),
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 8000))
+    ])
+  } catch {
+    return readUserCache()
+  }
+  const { data, error } = res
   const u = data.session?.user
-  if (!u) return null
+  if (!u) {
+    // Session illisible à cause du réseau (et non déconnexion réelle) : l'étudiant reste connecté.
+    if (error && isNetworkFailure(error)) return readUserCache()
+    writeUserCache(null)
+    return null
+  }
   const viaGoogle = u.app_metadata?.provider === 'google'
-  return {
+  const user: AuthUser = {
     id: u.id,
     email: u.email ?? '',
     phone: (u.user_metadata?.phone as string) ?? null,
     needsPassword: viaGoogle && !u.user_metadata?.password_set
   }
+  writeUserCache(user)
+  return user
 }
 
 export function onAuthChange(cb: (event?: string) => void): () => void {
@@ -192,6 +232,7 @@ export async function signOut(): Promise<void> {
     pingDemoAuth()
     return
   }
+  writeUserCache(null)
   await sb().auth.signOut()
 }
 
