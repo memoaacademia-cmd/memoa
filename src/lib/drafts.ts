@@ -21,6 +21,8 @@ export interface Draft {
   body: string
   guide: string
   source: string
+  /** Enregistrement vocal fait sans réseau, à transcrire quand le réseau revient. */
+  audio: Blob | null
   createdAt: number
   updatedAt: number
   expiresAt: number
@@ -88,6 +90,7 @@ export async function saveDraft(input: {
   body: string
   guide?: string
   source?: string
+  audio?: Blob | null
 }): Promise<Draft> {
   const now = Date.now()
   const prev = input.id ? await run<Draft | undefined>('readonly', (s) => s.get(input.id as string)) : undefined
@@ -101,6 +104,7 @@ export async function saveDraft(input: {
     body: input.body.slice(0, 60000),
     guide: (input.guide ?? '').slice(0, 2000),
     source: input.source ?? 'texte',
+    audio: input.audio ?? null,
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
     // Enregistrer à nouveau ne prolonge PAS les 72 h : le compte à rebours part de la première sauvegarde.
