@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
@@ -7,6 +7,9 @@ import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, Pil
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { DraftsSection } from '../components/Drafts'
+import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
+import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
@@ -40,6 +43,9 @@ export function NewCourse() {
   const [listening, setListening] = useState(false)
   const [docSheet, setDocSheet] = useState(false)
   const [recOpen, setRecOpen] = useState(false)
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const online = useOnline()
+  const [params, setParams] = useSearchParams()
   const dict = useRef<Dictation | null>(null)
   const pdfInput = useRef<HTMLInputElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
@@ -50,7 +56,32 @@ export function NewCourse() {
 
   useEffect(() => () => { dict.current?.stop() }, [])
 
+  // Ouverture d'un brouillon (depuis « Brouillons en attente ») : on remet le titre, le texte et les consignes.
+  const bid = params.get('brouillon')
+  useEffect(() => {
+    if (!bid || !user) return
+    let alive = true
+    void getDraft(bid).then((d) => {
+      if (!alive) return
+      if (d && d.userId === user.id && d.kind === 'course') {
+        setTitle(d.title); setContent(d.body); setConsignes(d.guide); setSource(d.source || 'texte'); setDraftId(d.id)
+      } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
+      setParams({}, { replace: true })
+    }).catch(() => { if (alive) setParams({}, { replace: true }) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bid, user?.id])
+
   function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
+
+  /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (72 h), puis retourne à la liste. */
+  async function keepDraft() {
+    if (!user) return
+    if (!title.trim() && !content.trim() && !consignes.trim()) return setError('Écris quelque chose avant de le garder en brouillon.')
+    dict.current?.stop()
+    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: 'course', title, body: content, guide: consignes, source }))
+    if (d) nav('/sac')
+  }
 
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
@@ -60,6 +91,7 @@ export function NewCourse() {
       (err) => {
         setListening(false)
         if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
+        else if (err === 'network') setError('La dictée a besoin du réseau sur ce téléphone. Écris ta note à la main, ou réessaie quand le réseau revient.')
       }
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
@@ -83,6 +115,7 @@ export function NewCourse() {
 
   async function pickPhoto(f: File | undefined) {
     if (!f) return
+    if (!isOnline()) return setError('La lecture d’une photo a besoin du réseau. Réessaie quand il revient.')
     const text = await run(() => readPhotoText(f, setStep))
     setStep('')
     if (text === undefined) return
@@ -93,6 +126,7 @@ export function NewCourse() {
 
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
+    if (!isOnline()) return setError('La transcription a besoin du réseau. Réessaie quand il revient.')
     setStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
     setStep('')
@@ -103,7 +137,7 @@ export function NewCourse() {
   }
 
   function leave() {
-    if ((title.trim() || content.trim() || consignes.trim()) && !window.confirm('Fermer sans créer ? Ce que tu as écrit sera perdu.')) return
+    if ((title.trim() || content.trim() || consignes.trim()) && !window.confirm('Fermer sans créer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 72 h.)')) return
     dict.current?.stop()
     nav('/')
   }
@@ -112,6 +146,7 @@ export function NewCourse() {
     if (!user) return
     dict.current?.stop()
     if (!title.trim()) return setError('Donne un nom à ton cours.')
+    if (!isOnline()) return setError(OFFLINE_MSG)
     const id = await run(async () => {
       // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
       let structured = content.trim()
@@ -139,10 +174,11 @@ export function NewCourse() {
       if (structured) {
         await addNote(user.id, course.id, title.trim(), structured.slice(0, 60000), content.trim() ? (source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte') : 'texte')
       }
+      if (draftId) await deleteDraft(draftId).catch(() => {})
       return course.id
     })
     setStep('')
-    if (id) nav(`/sac/${id}`)
+    if (id) nav(`/sac/${id}${draftId ? '?pdf=1' : ''}`)
   }
 
   return (
@@ -156,9 +192,11 @@ export function NewCourse() {
       <EditorScreen
         backLabel="Nouveau cours"
         onBack={leave}
-        doneLabel={busy ? 'Un instant…' : 'Créer'}
+        doneLabel={busy ? 'Un instant…' : draftId && online ? 'Générer le PDF' : 'Créer'}
         onDone={() => void submit()}
         doneDisabled={busy || rec.state !== 'idle'}
+        onDraft={() => void keepDraft()}
+        draftDisabled={busy}
         title={title}
         onTitle={setTitle}
         titlePlaceholder="Titre du cours"
@@ -166,7 +204,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        banner={<>{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Brouillon » pour garder ta note 72 h, puis crée ton cours quand le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place (3 points). Il s’en sert quand tu touches « Créer »."
@@ -176,7 +214,7 @@ export function NewCourse() {
             {WEB_SEARCH_ENABLED && <WebToggle on={web} set={setWeb} />}
           </div>
         }
-        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
+        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step || !online} onPlus={() => setDocSheet(true)} />}
       />
 
       <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
@@ -191,6 +229,7 @@ export function Backpack() {
   const { data, loading, error, reload } = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
   const trash = useLoad(listTrashedCourses, [])
   const { busy, error: actionError, run } = useAction()
+  const { drafts, now, reload: reloadDrafts } = useDrafts(user?.id)
   const [showTrash, setShowTrash] = useState(false)
   const trashed = trash.data ?? []
 
@@ -213,7 +252,8 @@ export function Backpack() {
       </div>
       <PillButton size="lg" to="/cours"><Icon name="plus" size={22} stroke={2.4} />Nouveau cours</PillButton>
       <ErrorBox message={error || actionError} />
-      {loading ? <Spinner /> : !all.length ? (
+      <DraftsSection drafts={drafts} now={now} onDelete={(d) => void deleteDraft(d.id).then(reloadDrafts)} />
+      {loading ? <Spinner /> : error && !all.length ? null : !all.length ? (
         <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici." />
       ) : (
         <>
@@ -406,6 +446,11 @@ export function CourseDetail() {
   const [noteWeb, setNoteWeb] = useState(true)
   const [modify, setModify] = useState(false)
   const [mainId, setMainId] = useState<string | null>(null)
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const online = useOnline()
+  const [params, setParams] = useSearchParams()
+  const [pdfPrompt, setPdfPrompt] = useState(params.get('pdf') === '1')
+  const { drafts, now, reload: reloadDrafts } = useDrafts(user?.id)
   const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string; n: number; seen: string[] } | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
@@ -428,6 +473,25 @@ export function CourseDetail() {
 
   useEffect(() => () => { dict.current?.stop() }, [])
 
+  // Arrivée avec ?pdf=1 (après « Générer le PDF » depuis un brouillon) ou ?brouillon=… (réouverture d'un brouillon).
+  const bid = params.get('brouillon')
+  useEffect(() => {
+    if (params.get('pdf') === '1') setParams({}, { replace: true })
+    if (!bid || !user) return
+    let alive = true
+    void getDraft(bid).then((d) => {
+      if (!alive) return
+      if (d && d.userId === user.id && d.courseId === id && d.kind !== 'course') {
+        setNoteTitle(d.title); setNoteText(d.body); setNoteGuide(d.guide); setNoteSource(d.source || 'texte')
+        setModify(d.kind === 'edit'); setMainId(d.kind === 'edit' ? d.noteId : null); setDraftId(d.id)
+        setError(null); setEditing(true)
+      } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
+      setParams({}, { replace: true })
+    }).catch(() => { if (alive) setParams({}, { replace: true }) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bid, user?.id])
+
   function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
 
   function toggleDictation() {
@@ -438,6 +502,7 @@ export function CourseDetail() {
       (err) => {
         setListening(false)
         if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
+        else if (err === 'network') setError('La dictée a besoin du réseau sur ce téléphone. Écris ta note à la main, ou réessaie quand le réseau revient.')
       }
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
@@ -447,6 +512,7 @@ export function CourseDetail() {
 
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
+    if (!isOnline()) return setError('La transcription a besoin du réseau. Réessaie quand il revient.')
     setNoteStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
     setNoteStep('')
@@ -469,6 +535,7 @@ export function CourseDetail() {
 
   async function pickPhoto(f: File | undefined) {
     if (!f) return
+    if (!isOnline()) return setError('La lecture d’une photo a besoin du réseau. Réessaie quand il revient.')
     const text = await run(() => readPhotoText(f, setNoteStep))
     setNoteStep('')
     if (text === undefined) return
@@ -496,12 +563,21 @@ export function CourseDetail() {
   function resetNote() {
     dict.current?.stop()
     setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null)
-    setModify(false); setMainId(null)
+    setModify(false); setMainId(null); setDraftId(null)
     setEditing(false)
   }
   function closeEditor() {
-    if ((noteText.trim() || noteGuide.trim() || noteTitle.trim()) && !window.confirm('Fermer sans enregistrer ? Ce que tu as écrit sera perdu.')) return
+    if ((noteText.trim() || noteGuide.trim() || noteTitle.trim()) && !window.confirm('Fermer sans enregistrer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 72 h.)')) return
     resetNote()
+  }
+
+  /** « Brouillon » : garde la note (ou la modification du cours) sur le téléphone pendant 72 h. Le cours n'est pas touché. */
+  async function keepDraft() {
+    if (!user) return
+    if (!noteTitle.trim() && !noteText.trim() && !noteGuide.trim()) return setError('Écris quelque chose avant de le garder en brouillon.')
+    dict.current?.stop()
+    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: modify ? 'edit' : 'note', courseId: id, noteId: modify ? mainId : null, title: noteTitle, body: noteText, guide: noteGuide, source: noteSource }))
+    if (d) resetNote()
   }
 
   async function trashCourse() {
@@ -557,6 +633,7 @@ export function CourseDetail() {
     const base = noteText.trim()
     const guide = noteGuide.trim()
     if (!base && !guide) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
+    if (!isOnline()) return setError(OFFLINE_MSG)
     let content = base
     if (guide) {
       const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${base || '(aucun)'}` }))
@@ -577,6 +654,7 @@ export function CourseDetail() {
       return true
     })
     if (ok) {
+      if (draftId) { await deleteDraft(draftId).catch(() => {}); setPdfPrompt(true) }
       resetNote()
       notes.reload()
       course.reload()
@@ -636,6 +714,12 @@ export function CourseDetail() {
     <main className="page">
       <PageHead to="/sac" title={course.data.title} />
 
+      {pdfPrompt && (
+        <PillButton size="lg" onClick={() => { setPdfPrompt(false); void pdf('save') }} disabled={busy || !all.length}>
+          <Icon name="download" size={22} />Télécharger le PDF
+        </PillButton>
+      )}
+
       <PillButton size="lg" onClick={openSheet}><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
 
       <RowGroup label="Outils">
@@ -654,6 +738,8 @@ export function CourseDetail() {
           <Row icon="text" title="Voir le résumé" sub={summaryScope || 'Notes choisies'} onClick={() => setSummaryOpen(true)} />
         </RowGroup>
       )}
+
+      <DraftsSection label="Brouillons" drafts={drafts.filter((d) => d.courseId === id)} now={now} onDelete={(d) => void deleteDraft(d.id).then(reloadDrafts)} />
 
       <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
 
@@ -679,10 +765,12 @@ export function CourseDetail() {
         <EditorScreen
           backLabel={course.data.title}
           onBack={closeEditor}
-          status={modify ? 'Modification' : 'Brouillon'}
-          doneLabel={busy ? 'Un instant…' : 'Terminé'}
+          status={modify ? 'Modification' : 'Nouvelle note'}
+          doneLabel={busy ? 'Un instant…' : draftId && online ? 'Générer le PDF' : 'Terminé'}
           onDone={() => void save()}
           doneDisabled={busy || rec.state !== 'idle'}
+          onDraft={() => void keepDraft()}
+          draftDisabled={busy}
           title={noteTitle}
           onTitle={setNoteTitle}
           titlePlaceholder={modify ? 'Titre du cours' : 'Titre de la note'}
@@ -690,7 +778,7 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          banner={<>{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
+          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Brouillon » pour garder ta note 72 h.</span>}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
           guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points). Elle s’en sert quand tu touches « Terminé »."
@@ -700,7 +788,7 @@ export function CourseDetail() {
               {WEB_SEARCH_ENABLED && <WebToggle on={noteWeb} set={setNoteWeb} />}
             </div>
           }
-          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
+          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep || !online} onPlus={() => setDocSheet(true)} />}
         />
       )}
 
