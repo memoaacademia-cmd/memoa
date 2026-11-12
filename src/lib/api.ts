@@ -697,7 +697,10 @@ export async function askAI(args: {
     }
     return { reply: `[Démo — tâche « ${args.task} »]\n\n${args.prompt.slice(0, 400)}`, conversationId: null }
   }
-  return invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+  const res = await invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+  // Tout l'appli (Accueil, Assistant) affiche le nouveau solde tout de suite.
+  if (res.points !== undefined) window.dispatchEvent(new CustomEvent('memoa-points', { detail: res.points }))
+  return res
 }
 
 /** Envoie un fichier audio au serveur et reçoit le texte de ce qui y est dit. */
