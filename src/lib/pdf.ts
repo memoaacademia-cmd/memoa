@@ -34,6 +34,9 @@ export function stripAiNoise(text: string): string {
   return out.join('\n')
 }
 
+/** Taille de police par défaut du texte dans tous les PDF de l'application (en points). */
+export const BODY_PT = 13
+
 const W = 210
 const H = 297
 const M = 20
@@ -66,9 +69,9 @@ function writer(doc: Doc) {
   const marker = (m: string) => {
     ensure(6)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
+    doc.setFontSize(BODY_PT)
     doc.setTextColor(11)
-    doc.text(m, M + 1, y + 4)
+    doc.text(m, M + 1, y + 4.5)
   }
   /** Écrit un texte simple (titres #, listes - et 1.) comme l'IA les produit. */
   const body = (content: string) => {
@@ -76,12 +79,12 @@ function writer(doc: Doc) {
       const t = raw.trim()
       if (!t) { y += 2.5; continue }
       const h = /^(#{1,4})\s+(.*)$/.exec(t)
-      if (h) { y += 2; write(clean(h[2]), h[1].length <= 2 ? 14 : 12, 'bold', 0, 2, 20); continue }
+      if (h) { y += 2; write(clean(h[2]), h[1].length <= 2 ? BODY_PT + 4 : BODY_PT + 1.5, 'bold', 0, 2, 20); continue }
       const b = /^[-*•]\s+(.*)$/.exec(t)
-      if (b) { marker('-'); write(clean(b[1]), 11, 'normal', 7, 1.2, 30); continue }
+      if (b) { marker('-'); write(clean(b[1]), BODY_PT, 'normal', 7, 1.2, 30); continue }
       const num = /^(\d+[.)])\s+(.*)$/.exec(t)
-      if (num) { marker(num[1]); write(clean(num[2]), 11, 'normal', 8, 1.2, 30); continue }
-      write(clean(t), 11, 'normal', 0, 1.8, 30)
+      if (num) { marker(num[1]); write(clean(num[2]), BODY_PT, 'normal', 8, 1.2, 30); continue }
+      write(clean(t), BODY_PT, 'normal', 0, 1.8, 30)
     }
   }
   return {
@@ -120,12 +123,12 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
   doc.setLineWidth(0.8)
   doc.line(M, w.y, M + 24, w.y)
   w.y += 8
-  if (author) w.write(clean(author), 12, 'normal', 0, 2, 70)
-  w.write(new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), 11, 'normal', 0, 2, 110)
+  if (author) w.write(clean(author), BODY_PT + 1, 'normal', 0, 2, 70)
+  w.write(new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), BODY_PT, 'normal', 0, 2, 110)
 
   notes.forEach((n, i) => {
     w.newPage()
-    w.write(clean(n.title || `Note ${i + 1}`), 18, 'bold', 0, 5, 11)
+    w.write(clean(n.title || `Note ${i + 1}`), 20, 'bold', 0, 5, 11)
     w.body(n.content)
   })
   footers(doc, title)
@@ -175,6 +178,25 @@ async function loadLogo(url: string | null | undefined): Promise<LoadedLogo | nu
   }
 }
 
+/** Mots qui annoncent un autre type de document que « travail pratique ». */
+const OTHER_DOC = /^(rapport|mémoire|memoire|dissertation|exposé|expose|devoir|projet|synthèse|synthese|compte[- ]rendu|étude|etude|analyse|essai|fiche|commentaire|rédaction|redaction|travail\s+(dirigé|dirige|de\s+fin|de\s+recherche|de\s+groupe|personnel)|tfc|tfe|td\b|interrogation|examen|présentation|presentation)(?=[\s:.,'’\-–—]|$)/i
+const TP_PREFIX = /^\s*((?:travail|travaux)\s+pratiques?|t\.?\s?p\.?)(?=[\s:.\-–—'’,]|$)\s*(n\s?[°ºo.]\s*\d+|\d+)?\s*([:\-–—.,]\s*)?(de\s+la\s+|de\s+l['’]|de\s+|du\s+|des\s+|d['’]|sur\s+|en\s+)?/i
+
+/**
+ * Titre de la page de garde. Le bandeau annonce déjà « Travail pratique » : on ne le répète pas.
+ * - « Travail pratique de géographie » -> bandeau « Travail pratique », titre « Géographie »
+ * - « Géométrie »                       -> bandeau « Travail pratique », titre « Géométrie »
+ * - « Rapport de stage »                -> pas de bandeau « Travail pratique », titre « Rapport de stage » (intact)
+ */
+export function splitTpTitle(raw: string, defaultKind = 'TRAVAIL PRATIQUE'): { kind: string; title: string } {
+  const t = raw.trim().replace(/\s+/g, ' ')
+  if (!t) return { kind: defaultKind, title: '' }
+  if (OTHER_DOC.test(t)) return { kind: '', title: t }
+  const rest = t.replace(TP_PREFIX, '').trim()
+  if (!rest) return { kind: defaultKind, title: t }
+  return { kind: defaultKind, title: rest.charAt(0).toUpperCase() + rest.slice(1) }
+}
+
 const NAVY: [number, number, number] = [27, 42, 107]
 const GOLD: [number, number, number] = [184, 137, 43]
 
@@ -185,6 +207,7 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const w = writer(doc)
   const cx = W / 2
+  const head = splitTpTitle(c.title, c.kind ?? 'TRAVAIL PRATIQUE')
 
   /** Texte centré, avec espacement entre les lettres si demandé ; renvoie le y après la dernière ligne. */
   const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: [number, number, number], space = 0, maxW = 140, up = false) => {
@@ -251,19 +274,20 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   const bandTop = Math.max(logoBottom + 10, 132)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
-  const titleLines = doc.splitTextToSize(clean(c.title).toUpperCase(), 148) as string[]
-  const bandH = 16 + titleLines.length * 9.5 + 6
+  const titleLines = doc.splitTextToSize(clean(head.title).toUpperCase(), 148) as string[]
+  const topPad = head.kind ? 16 : 11
+  const bandH = topPad + titleLines.length * 9.5 + 6
   doc.setFillColor(NAVY[0], NAVY[1], NAVY[2])
   doc.rect(33, bandTop, W - 66, bandH, 'F')
   doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2])
   doc.setLineWidth(0.8)
   doc.line(33, bandTop, W - 33, bandTop)
   doc.line(33, bandTop + bandH, W - 33, bandTop + bandH)
-  center(c.kind ?? 'TRAVAIL PRATIQUE', 10, 'normal', bandTop + 9, [255, 255, 255], 2.4, 150, true)
+  if (head.kind) center(head.kind, 10, 'normal', bandTop + 9, [255, 255, 255], 2.4, 150, true)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
   doc.setTextColor(255, 255, 255)
-  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, bandTop + 18 + i * 9.5))
+  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, bandTop + topPad + 2 + i * 9.5))
 
   // Bloc « présenté par » : étiquettes dorées à gauche, trait vertical doré, valeurs bleues à droite
   const rows: Array<[string, string]> = [['PRÉSENTÉ PAR', c.student]]
@@ -291,10 +315,15 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   doc.setLineWidth(0.5)
   doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
 
-  // Année académique entre deux filets dorés
-  rule(yearY - 7, 46, 0.5)
-  center(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`, 10, 'bold', yearY, NAVY, 1.6, 150)
-  rule(yearY + 6, 46, 0.5)
+  // Année académique entre deux filets dorés : les filets sont toujours un peu plus larges que le texte.
+  const yearText = clean(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  const yearW = doc.getTextWidth(yearText) + 1.6 * Math.max(0, yearText.length - 1) * 0.3528
+  const yearHalf = Math.max(46, yearW / 2 + 8)
+  rule(yearY - 7, yearHalf, 0.5)
+  center(yearText, 10, 'bold', yearY, NAVY, 1.6, 170)
+  rule(yearY + 6, yearHalf, 0.5)
 
   w.newPage()
   w.body(content)

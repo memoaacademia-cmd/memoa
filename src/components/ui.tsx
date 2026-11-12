@@ -54,7 +54,9 @@ const ICONS: Record<string, string> = {
   upload: 'M12 16 V4 M7 9 L12 4 L17 9 M5 20 H19',
   check: 'M5 12.5 L10 17.5 L19 7',
   clock: 'M4 12 A8 8 0 1 0 6.3 6.3 M4 4 V8 H8 M12 8 V12 L15 14',
-  gear: 'M12 9 A3 3 0 1 0 12 15 A3 3 0 1 0 12 9 M12 3 V5.5 M12 18.5 V21 M3 12 H5.5 M18.5 12 H21',
+  gear: 'M12 15 a3 3 0 1 0 0 -6 a3 3 0 0 0 0 6 z M19.4 15 a1.65 1.65 0 0 0 .33 1.82 l.06.06 a2 2 0 0 1 0 2.83 a2 2 0 0 1 -2.83 0 l-.06-.06 a1.65 1.65 0 0 0 -1.82-.33 a1.65 1.65 0 0 0 -1 1.51 V21 a2 2 0 0 1 -2 2 a2 2 0 0 1 -2-2 v-.09 A1.65 1.65 0 0 0 9 19.4 a1.65 1.65 0 0 0 -1.82.33 l-.06.06 a2 2 0 0 1 -2.83 0 a2 2 0 0 1 0-2.83 l.06-.06 a1.65 1.65 0 0 0 .33-1.82 a1.65 1.65 0 0 0 -1.51-1 H3 a2 2 0 0 1 -2-2 a2 2 0 0 1 2-2 h.09 A1.65 1.65 0 0 0 4.6 9 a1.65 1.65 0 0 0 -.33-1.82 l-.06-.06 a2 2 0 0 1 0-2.83 a2 2 0 0 1 2.83 0 l.06.06 a1.65 1.65 0 0 0 1.82.33 H9 a1.65 1.65 0 0 0 1-1.51 V3 a2 2 0 0 1 2-2 a2 2 0 0 1 2 2 v.09 a1.65 1.65 0 0 0 1 1.51 a1.65 1.65 0 0 0 1.82-.33 l.06-.06 a2 2 0 0 1 2.83 0 a2 2 0 0 1 0 2.83 l-.06.06 a1.65 1.65 0 0 0 -.33 1.82 V9 a1.65 1.65 0 0 0 1.51 1 H21 a2 2 0 0 1 2 2 a2 2 0 0 1 -2 2 h-.09 a1.65 1.65 0 0 0 -1.51 1 z',
+  globe: 'M12 3 A9 9 0 1 0 12 21 A9 9 0 1 0 12 3 M3 12 H21 M12 3 C15 6.5 15 17.5 12 21 C9 17.5 9 6.5 12 3',
+  arrowup: 'M12 19 V5 M6 11 L12 5 L18 11',
   crown: 'M4 18 L3 7 L8 11 L12 5 L16 11 L21 7 L20 18 Z',
   mic: 'M9 3 H15 V14 A3 3 0 0 1 9 14 Z M5.5 11 A6.5 6.5 0 0 0 18.5 11 M12 17.5 V21',
   audio: 'M4 10 V14 M8 7 V17 M12 4 V20 M16 8 V16 M20 11 V13',
@@ -270,8 +272,10 @@ export function RowGroup({ label, children }: { label?: string; children: ReactN
 }
 
 /** Une ligne : icône dans un carré arrondi, titre, sous-titre, valeur à droite, chevron. */
-export function Row({ icon, title, sub, right, to, onClick, disabled, chevron = true, expanded }: {
+export function Row({ icon, iconNode, title, sub, right, to, onClick, disabled, chevron = true, expanded }: {
   icon?: string
+  /** Image à la place d'une icône (ex. l'illustration du Memo). */
+  iconNode?: ReactNode
   title: string
   sub?: string
   right?: ReactNode
@@ -283,7 +287,7 @@ export function Row({ icon, title, sub, right, to, onClick, disabled, chevron = 
 }) {
   const inner = (
     <>
-      {icon && <span className="rg-ico"><Icon name={icon} size={22} /></span>}
+      {(iconNode || icon) && <span className="rg-ico">{iconNode ?? <Icon name={icon!} size={22} />}</span>}
       <span className="rg-body">
         <span className="rg-title">{title}</span>
         {sub && <span className="rg-sub">{sub}</span>}

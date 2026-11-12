@@ -500,7 +500,7 @@ a.pill-btn { text-decoration: none; }
 /* Assistant (chat) : en-tête et barre de saisie fixes, seuls les messages défilent */
 .as-root { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 440px; bottom: 78px; z-index: 9; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
 .as-root.kb { bottom: auto; z-index: 12; }
-.as-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.as-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
 .as-course { flex: 1; min-width: 0; height: 44px; border-radius: 22px; border: 1.5px solid var(--line-strong); background: transparent; color: var(--text); display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; font-weight: 700; font-size: 15px; }
 .as-course > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .as-msgs { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px; display: flex; flex-direction: column; gap: 18px; }
@@ -537,3 +537,32 @@ a.pill-btn { text-decoration: none; }
 .editor .ed-plus svg { width: 18px; height: 18px; }
 .editor .ed-plus, .tp-tools .round-plus { position: relative; }
 .editor .ed-plus::after, .tp-tools .round-plus::after { content: ''; position: absolute; inset: -4px; }
+
+
+/* ---- Assistant : barre de saisie fine façon messagerie moderne (tout est à l'intérieur de la barre) ---- */
+.as-title { font-family: var(--font-title); font-weight: 700; font-size: 17px; color: var(--text); }
+.as-bar { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 6px 16px; border-radius: 26px; border: 1.5px solid var(--line-strong); background: var(--surface); }
+.as-bar:focus-within, .as-bar.live { border-color: var(--btn); }
+.as-ta { width: 100%; resize: none; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 16px; line-height: 1.4; padding: 6px 4px 2px 0; max-height: 150px; overflow-y: auto; }
+.as-tools { display: flex; align-items: center; gap: 4px; min-height: 40px; }
+.as-ico { flex: none; height: 36px; min-width: 36px; padding: 0 8px; border-radius: 18px; border: 0; background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.as-ico.on { background: var(--btn); color: var(--btn-text); }
+.as-ico-t { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.as-act { flex: none; width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--surface-2); color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
+.as-act.go { background: var(--btn); color: var(--btn-text); }
+.as-act[disabled] { opacity: .45; }
+.as-bar.live .as-act:first-of-type { background: var(--surface-2); }
+
+/* ---- Bouton Premium en or ---- */
+.gold-btn { background: linear-gradient(135deg, #fbe29a 0%, #f2b84a 38%, #d99a1f 70%, #f6cf70 100%) !important; color: #3a2400 !important; font-weight: 800; border: 1px solid #b9801a; box-shadow: 0 2px 0 #a8730f, 0 6px 16px rgba(217, 154, 31, .45), inset 0 1px 0 rgba(255, 255, 255, .55); text-shadow: 0 1px 0 rgba(255, 255, 255, .4); }
+.me-premium-pill { background: linear-gradient(135deg, #fbe29a, #e0a22a) !important; }
+
+/* ---- Cartes d'introduction à l'inscription ---- */
+.intro-viewport { overflow: hidden; flex: 1; display: flex; }
+.intro-track { display: flex; width: 100%; transition: transform .35s ease; }
+.intro-card { flex: none; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 8px 6px; }
+.intro-art { width: 132px; height: 132px; border-radius: 36px; background: var(--surface-2); border: 3px solid var(--braise); display: inline-flex; align-items: center; justify-content: center; color: var(--btn); }
+.intro-dots { display: flex; justify-content: center; gap: 7px; }
+.intro-dots i { width: 8px; height: 8px; border-radius: 4px; background: var(--line-strong); transition: width .25s, background .25s; }
+.intro-dots i.on { width: 24px; background: var(--btn); }
+@media (prefers-reduced-motion: reduce) { .intro-track, .intro-dots i { transition: none; } }

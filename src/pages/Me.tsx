@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BottomSheet, ErrorBox, Icon, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf } from '../lib/names'
@@ -63,14 +63,14 @@ export function Me() {
         <span className="sub">Notes IA, TP, audio et résumés avec une utilisation généreuse. Paiement par Orange Money, Airtel Money ou M-Pesa.</span>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
           <div><span className="price">{PRICE_LABEL.USD}</span> <span className="sub">/ 30 jours</span><br /><span className="sub">ou {PRICE_LABEL.CDF}</span></div>
-          <Link to="/premium" className="pill-btn sm" style={{ background: '#f2a33a', color: '#0e1a2b' }}>{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
+          <Link to="/premium" className="pill-btn sm gold-btn">{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
         </div>
       </section>
 
       <RowGroup label="Compte">
         <Row icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
-        <Row icon="star" title="Mon Memo" right="Changer" to="/adoption?change=1" />
-        <Row icon="gear" title="Réglages" sub="Notifications, apparence et langue" to="/parametres" />
+        <Row iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
+        <Row icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
       </RowGroup>
       <RowGroup label="Aide">
         <Row icon="chat" title="Centre d’aide" to="/aide" />
@@ -103,7 +103,6 @@ export function Settings() {
   const lang = LANGUAGES.some(([c]) => c === storedLang) ? storedLang : 'fr'
   const [pushOn, setPushOn] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
-  const [saver, setSaver] = usePref('datasaver', '0')
 
   useEffect(() => { void isSubscribed().then(setPushOn) }, [])
   async function togglePush(want: boolean) {
@@ -141,14 +140,13 @@ export function Settings() {
       <PageHead to="/moi" title="Réglages" />
 
       <RowGroup label="Apparence et langue">
-        <Row icon="gear" title="Langue" right={langName} onClick={() => setPick('lang')} />
-        <Row icon="star" title="Thème" right={theme === 'dark' ? 'Sombre' : 'Clair'} onClick={() => setPick('theme')} />
+        <Row icon="globe" title="Langue" right={langName} onClick={() => setPick('lang')} />
+        <Row icon="sparkle" title="Thème" right={theme === 'dark' ? 'Sombre' : 'Clair'} onClick={() => setPick('theme')} />
       </RowGroup>
       {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
 
-      <RowGroup label="Notifications et données">
+      <RowGroup label="Notifications">
         {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications « Le savais-tu ? »" on={pushOn} set={(v) => void togglePush(v)} />}
-        <SwitchRow label="Économie de données" on={saver === '1'} set={(v) => setSaver(v ? '1' : '0')} />
       </RowGroup>
       {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
 

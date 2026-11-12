@@ -267,7 +267,14 @@ export function Confirmation({ email }: { email: string }) {
 
   return (
     <main className="page auth">
-      <Header title="Vérifie ta boîte mail" text={email ? `Nous avons envoyé un lien de confirmation à ${email}.` : 'Nous avons envoyé un lien de confirmation à ton adresse.'} />
+      {/* Même style que la page de connexion : juste le logo, centré, dans son rond. */}
+      <div style={{ alignSelf: 'center', width: 76, height: 76, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '56px 0 4px' }}>
+        <Logo size={44} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
+        <h1 className="h1 big" style={{ margin: 0 }}>Vérifie ta boîte mail</h1>
+        <p className="lead">{email ? `Nous avons envoyé un lien de confirmation à ${email}.` : 'Nous avons envoyé un lien de confirmation à ton adresse.'}</p>
+      </div>
       <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
       <button className="btn ghost" type="button" disabled={wait > 0 || busy} onClick={resend}>
         {wait > 0 ? `Renvoyer l'email (${wait} s)` : "Renvoyer l'email"}

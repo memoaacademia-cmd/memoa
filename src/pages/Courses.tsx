@@ -8,7 +8,7 @@ import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } fro
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdf, stripAiNoise } from '../lib/pdf'
+import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -288,7 +288,7 @@ function parseQuiz(text: string): QuizQ[] {
   return out
 }
 
-function QuizScreen({ qs, raw, onClose }: { qs: QuizQ[]; raw: string; onClose: () => void }) {
+function QuizScreen({ qs, raw, onClose, onNext, loading, loadError }: { qs: QuizQ[]; raw: string; onClose: () => void; onNext: () => void; loading: boolean; loadError: string | null }) {
   const [i, setI] = useState(0)
   const [picked, setPicked] = useState<number | null>(null)
   const [score, setScore] = useState(0)
@@ -330,9 +330,13 @@ function QuizScreen({ qs, raw, onClose }: { qs: QuizQ[]; raw: string; onClose: (
           <div className="qz-score">{score} / {qs.length}</div>
           <p className="doc-intro">{score === qs.length ? 'Parfait, tu maîtrises ce cours.' : score >= qs.length / 2 ? 'Bien joué. Relis les notes sur les questions ratées.' : 'Pas encore. Relis tes notes et réessaie.'}</p>
         </div>
-        <div className="sf-foot">
-          <PillButton variant="outline" onClick={again}>Recommencer</PillButton>
-          <PillButton onClick={onClose}>Fermer</PillButton>
+        {loadError && <div style={{ padding: '0 20px' }}><div className="error" role="alert">{loadError}</div></div>}
+        <div className="sf-foot" style={{ flexDirection: 'column' }}>
+          <PillButton size="lg" onClick={onNext} disabled={loading}>{loading ? 'Nouvelles questions…' : 'Quiz suivant'}</PillButton>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <PillButton variant="outline" onClick={again} disabled={loading}>Recommencer</PillButton>
+            <PillButton variant="outline" onClick={onClose}>Fermer</PillButton>
+          </div>
         </div>
       </div>
     )
@@ -389,7 +393,9 @@ export function CourseDetail() {
   const [noteGuide, setNoteGuide] = useState('')
   const [noteWeb, setNoteWeb] = useState(true)
   const [open, setOpen] = useState<string | null>(null)
-  const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string } | null>(null)
+  const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string; n: number; seen: string[] } | null>(null)
+  const [quizLoading, setQuizLoading] = useState(false)
+  const [quizError, setQuizError] = useState<string | null>(null)
   const reading = useVoice() !== null
   const [listenOpen, setListenOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
@@ -567,10 +573,27 @@ export function CourseDetail() {
   async function revise() {
     if (!notes.data?.length) return setError("Ajoute d'abord une note pour pouvoir réviser.")
     const r = await run(() => askAI({ task: 'quiz', courseId: id, prompt: QUIZ_PROMPT }))
-    if (r) setQuiz({ qs: parseQuiz(r.reply), raw: r.reply })
+    if (r) { const qs = parseQuiz(r.reply); setQuiz({ qs, raw: r.reply, n: 1, seen: qs.map((x) => x.q) }) }
+  }
+  /** Quiz suivant : de nouvelles questions, différentes de celles déjà posées. */
+  async function nextQuiz() {
+    if (!quiz || quizLoading) return
+    setQuizError(null)
+    setQuizLoading(true)
+    const avoid = quiz.seen.slice(-30).map((q) => `- ${q}`).join('\n')
+    const prompt = QUIZ_PROMPT + `\n\nIMPORTANT : ces questions ont déjà été posées, ne les repose pas et ne les reformule pas :\n${avoid}\nPose 5 NOUVELLES questions, sur d'autres parties du cours.`
+    try {
+      const r = await askAI({ task: 'quiz', courseId: id, prompt })
+      const qs = parseQuiz(r.reply)
+      if (!qs.length) setQuizError("Je n'ai pas réussi à préparer de nouvelles questions. Réessaie.")
+      else setQuiz({ qs, raw: r.reply, n: quiz.n + 1, seen: [...quiz.seen, ...qs.map((x) => x.q)] })
+    } catch (e) {
+      setQuizError(e instanceof Error ? e.message : 'Impossible de préparer le quiz suivant.')
+    } finally {
+      setQuizLoading(false)
+    }
   }
 
-  if (course.loading) return <main className="page"><Spinner /></main>
   if (!course.data) return <main className="page"><BackLink to="/sac" title="Cours introuvable" /><Empty title="Ce cours n'existe pas" text="Il a peut-être été supprimé." /></main>
 
   const all = notes.data ?? []
@@ -681,7 +704,7 @@ export function CourseDetail() {
         </div>
       </BottomSheet>
 
-      {quiz && <QuizScreen qs={quiz.qs} raw={quiz.raw} onClose={() => setQuiz(null)} />}
+      {quiz && <QuizScreen key={quiz.n} qs={quiz.qs} raw={quiz.raw} onClose={() => { setQuiz(null); setQuizError(null) }} onNext={() => void nextQuiz()} loading={quizLoading} loadError={quizError} />}
 
       {summary && summaryOpen && (
         <div className="screen-full" role="dialog" aria-modal="true" aria-label="Résumé">
@@ -895,7 +918,8 @@ export function TpAssistant() {
             <span className="s">{profile?.faculty}</span>
             <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
             <hr />
-            <span className="t">{title}</span>
+            {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
+            <span className="t">{splitTpTitle(title).title}</span>
             <span className="s">Cours : {course.data?.title}</span>
             <span className="s">Présenté par : {profile?.full_name}</span>
             <span className="s">Année académique {year}</span>

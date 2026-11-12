@@ -9,22 +9,51 @@ function Skip({ to }: { to: string }) {
   return <button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={() => nav(to, { replace: true })}>Passer</button>
 }
 
-/* Étape 1 sur 4 : bienvenue */
+/* Cartes de présentation (avant le profil) : chaque carte résume une fonction de Memoa. */
+const CARDS: { icon: string; title: string; text: string }[] = [
+  { icon: 'text', title: 'Tes cours, enfin simples', text: 'Écris, dicte ou photographie tes notes. Memoa les range dans ton sac à dos, cours par cours.' },
+  { icon: 'sparkle', title: 'Résumés et notes enrichies', text: 'L’IA structure tes notes, les complète et en tire un résumé clair à relire avant l’examen.' },
+  { icon: 'quiz', title: 'Révise avec des quiz', text: 'Des quiz tirés de tes propres notes, avec la correction. Un quiz suivant, avec de nouvelles questions, quand tu veux.' },
+  { icon: 'book', title: 'Assistant TP', text: 'Plan, rédaction et page de garde de ton université, puis un PDF prêt à remettre.' },
+  { icon: 'shelf', title: 'Librairie de promotion', text: 'Retrouve les documents partagés par ta promotion et partage les tiens.' },
+  { icon: 'chat', title: 'Un assistant qui te connaît', text: 'Pose tes questions à ton Memo : il s’appuie sur tes notes. Tu peux aussi l’écouter te lire un cours.' }
+]
+
+/* Étape 1 : défilé de cartes. « Suivant » passe à la carte d'après, « Passer » saute tout. */
 export function Welcome() {
   const nav = useNavigate()
+  const [i, setI] = useState(0)
+  const [x0, setX0] = useState<number | null>(null)
+  const last = i === CARDS.length - 1
+  const done = () => nav('/inscription', { replace: true })
+  const go = (n: number) => setI(Math.max(0, Math.min(CARDS.length - 1, n)))
   return (
     <main className="step-page">
-      <div className="step-top"><span /><Skip to="/inscription" /></div>
-      <Steps n={1} />
-      <MemoHero height={300} tags={[
-        { text: 'Résumés IA', style: { left: 22, top: 34 } },
-        { text: 'Quiz', style: { right: 26, top: 70 } },
-        { text: 'Écouter', style: { left: 30, bottom: 130 } }
-      ]} />
-      <h1 className="h1 big" style={{ margin: 0 }}>Tes cours, enfin simples</h1>
-      <p className="lead">Écris tes notes. Memo les résume, te pose des quiz et te les lit à voix haute.</p>
-      <div style={{ flex: 1 }} />
-      <button type="button" className="pill-btn" onClick={() => nav('/inscription', { replace: true })}>Continuer</button>
+      <div className="step-top"><span /><button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={done}>Passer</button></div>
+      <div
+        className="intro-viewport"
+        onTouchStart={(e) => setX0(e.touches[0].clientX)}
+        onTouchEnd={(e) => {
+          if (x0 === null) return
+          const dx = e.changedTouches[0].clientX - x0
+          setX0(null)
+          if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1))
+        }}
+      >
+        <div className="intro-track" style={{ transform: `translateX(-${i * 100}%)` }}>
+          {CARDS.map((c, k) => (
+            <section key={c.title} className="intro-card" aria-hidden={k !== i} aria-roledescription="carte" aria-label={`${k + 1} sur ${CARDS.length}`}>
+              <span className="intro-art"><Icon name={c.icon} size={60} stroke={1.6} /></span>
+              <h1 className="h1 big" style={{ margin: 0 }}>{c.title}</h1>
+              <p className="lead" style={{ margin: 0, maxWidth: 320 }}>{c.text}</p>
+            </section>
+          ))}
+        </div>
+      </div>
+      <div className="intro-dots" role="img" aria-label={`Carte ${i + 1} sur ${CARDS.length}`}>
+        {CARDS.map((c, k) => <i key={c.title} className={k === i ? 'on' : ''} />)}
+      </div>
+      <button type="button" className="pill-btn" onClick={() => (last ? done() : go(i + 1))}>{last ? 'Commencer' : 'Suivant'}</button>
     </main>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
@@ -16,7 +16,11 @@ export default function Assistant() {
   const { user, profile } = useAuth()
   const courses = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
   const convs = useLoad(listConversations, [])
-  const { busy, error, setError, run } = useAction()
+  const { error, setError, run } = useAction()
+  const [thinking, setThinking] = useState(false)
+  const cancelled = useRef(false)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const beforeDict = useRef('')
   const [courseId, setCourseId] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -57,7 +61,7 @@ export default function Assistant() {
   useEffect(() => {
     const el = msgsRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages, busy])
+  }, [messages, thinking])
 
   // Recherche dans les notes (loupe).
   useEffect(() => {
@@ -71,9 +75,9 @@ export default function Assistant() {
     return () => { alive = false; window.clearTimeout(t) }
   }, [q, sheet, user])
 
-  function toggleMic() {
-    if (listening) { dict.current?.stop(); return }
+  function startMic() {
     setError(null)
+    beforeDict.current = text
     const d = startDictation(
       (t) => setText((x) => (x ? x + ' ' : '') + t),
       (err) => {
@@ -85,6 +89,18 @@ export default function Assistant() {
     dict.current = d
     setListening(true)
   }
+  /** Arrête l'écoute en gardant le texte déjà dicté. */
+  function stopMic() { dict.current?.stop(); setListening(false) }
+  /** Croix : arrête l'écoute et efface ce qui vient d'être dicté. */
+  function cancelMic() { stopMic(); setText(beforeDict.current) }
+  /** Le champ grandit vers le bas avec le texte, puis défile à l'intérieur au-delà de 6 lignes. */
+  function grow() {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 150) + 'px'
+  }
+  useEffect(grow, [text])
   async function pickFile(f: File | undefined, kind: 'photo' | 'doc') {
     if (!f) return
     setReading(kind === 'photo' ? 'Lecture de la photo…' : 'Lecture du document…')
@@ -109,19 +125,30 @@ export default function Assistant() {
 
   async function send(question: string) {
     const prompt = question.trim()
-    if (!prompt || busy) return
+    if (!prompt || thinking) return
+    if (listening) stopMic()
     setText('')
     const joined = attach
     setAttach(null)
+    cancelled.current = false
     setMessages((m) => [...m, { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '' }])
+    setThinking(true)
     const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
+    // Si l'étudiant a appuyé sur stop pendant ce temps, la réponse est simplement ignorée.
+    if (cancelled.current) return
+    setThinking(false)
     if (r) {
       setConversationId(r.conversationId)
       setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
       convs.reload()
     }
   }
+  function stopThinking() { cancelled.current = true; setThinking(false); setError(null) }
   function submit(e: FormEvent) { e.preventDefault(); void send(text) }
+  function onKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    // Sur ordinateur : Entrée envoie, Maj+Entrée saute une ligne. Sur téléphone : Entrée saute une ligne.
+    if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer: fine)').matches) { e.preventDefault(); void send(text) }
+  }
 
   async function openConv(id: string) {
     const msgs = await run(() => listMessages(id))
@@ -135,10 +162,7 @@ export default function Assistant() {
     <main className={'as-root' + (kb ? ' kb' : '')} style={box ? { height: box.h, top: box.top } : undefined}>
       <div className="as-head">
         <button type="button" className="icon-btn round" onClick={() => setSheet('menu')} aria-label="Menu : historique et nouvelle conversation"><Icon name="menu" /></button>
-        <button type="button" className="as-course" onClick={() => setSheet('course')} aria-label="Choisir le cours">
-          <span>{courseName ?? 'Aucun cours'}</span>
-          <Icon name="chevdown" size={18} />
-        </button>
+        <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
         <button type="button" className="icon-btn round" onClick={() => { setQ(''); setHits(null); setSheet('search') }} aria-label="Chercher dans mes notes"><Icon name="search" /></button>
       </div>
 
@@ -162,7 +186,7 @@ export default function Assistant() {
             </div>
           </div>
         ))}
-        {busy && <div className="as-ai muted">Réflexion…</div>}
+        {thinking && <div className="as-ai muted">Réflexion…</div>}
       </div>
 
       <form className="as-comp" onSubmit={submit}>
@@ -172,16 +196,45 @@ export default function Assistant() {
             {reading ? <span className="muted">{reading}</span> : attach && <span className="attach-chip"><Icon name="pdf" size={16} /><span>{attach.name}</span><button type="button" className="link" style={{ textDecoration: 'none' }} onClick={() => setAttach(null)} aria-label="Retirer le fichier joint"><Icon name="close" size={16} /></button></span>}
           </div>
         )}
-        <div className="as-pills">
-          <button type="button" className={'pill' + (courseId ? ' on' : '')} onClick={() => setSheet('course')} aria-pressed={!!courseId}>Mes notes</button>
-          {WEB_SEARCH_ENABLED && <button type="button" role="switch" aria-checked={web} className={'pill' + (web ? ' on' : '')} onClick={() => setWeb((v) => !v)}>Web : {web ? 'oui' : 'non'}</button>}
-        </div>
-        <div className="as-field">
-          <button type="button" className="as-round" onClick={() => setSheet('plus')} aria-label="Joindre une photo ou un document"><Icon name="plus" /></button>
+        <div className={'as-bar' + (listening ? ' live' : '')}>
           <label htmlFor="q" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ta question</label>
-          <input id="q" className="as-input" placeholder="Pose ta question à Memo" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
-          {canDictate() && <button type="button" className={'as-round' + (listening ? ' on' : '')} onClick={toggleMic} aria-label={listening ? 'Arrêter la dictée' : 'Dicter ma question'}><Icon name="mic" /></button>}
-          <button type="submit" className="as-round go" aria-label="Envoyer" disabled={busy}><Icon name="send" stroke={2} /></button>
+          <textarea
+            id="q"
+            ref={taRef}
+            className="as-ta"
+            rows={1}
+            placeholder={listening ? 'Je t’écoute…' : 'Pose ta question à Memo'}
+            maxLength={2000}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKey}
+            onFocus={() => { if (listening) stopMic() }}
+          />
+          <div className="as-tools">
+            <button type="button" className="as-ico" onClick={() => setSheet('plus')} aria-label="Joindre une photo ou un document"><Icon name="plus" size={22} /></button>
+            <button type="button" className={'as-ico' + (courseId ? ' on' : '')} onClick={() => setSheet('course')} aria-pressed={!!courseId} aria-label={courseId ? `Mes notes : ${courseName ?? 'cours choisi'}` : 'Mes notes : choisir un cours'}>
+              <Icon name="book" size={20} />
+              {courseId && courseName && <span className="as-ico-t">{courseName}</span>}
+            </button>
+            {WEB_SEARCH_ENABLED && (
+              <button type="button" role="switch" aria-checked={web} className={'as-ico' + (web ? ' on' : '')} onClick={() => setWeb((v) => !v)} aria-label="Recherche sur le web">
+                <Icon name="globe" size={20} />
+              </button>
+            )}
+            <span style={{ flex: 1 }} />
+            {thinking ? (
+              <button type="button" className="as-act go" onClick={stopThinking} aria-label="Arrêter la réponse"><Icon name="stop" size={18} stroke={2.4} /></button>
+            ) : listening ? (
+              <>
+                <button type="button" className="as-act" onClick={cancelMic} aria-label="Annuler la dictée"><Icon name="close" size={20} stroke={2.2} /></button>
+                <button type="submit" className="as-act go" aria-label="Envoyer" disabled={!text.trim()}><Icon name="arrowup" size={20} stroke={2.4} /></button>
+              </>
+            ) : text.trim() ? (
+              <button type="submit" className="as-act go" aria-label="Envoyer"><Icon name="arrowup" size={20} stroke={2.4} /></button>
+            ) : canDictate() ? (
+              <button type="button" className="as-act" onClick={startMic} aria-label="Dicter ma question"><Icon name="mic" size={20} /></button>
+            ) : null}
+          </div>
         </div>
       </form>
 
