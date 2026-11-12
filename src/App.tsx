@@ -3,7 +3,6 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-
 import { Brand, NavBar, Spinner } from './components/ui'
 import MiniPlayer from './components/MiniPlayer'
 import { DraftWatcher } from './components/Drafts'
-import ExpiryBanner from './components/ExpiryBanner'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import { NotifStep, TrialStep, Welcome } from './pages/Welcome'
@@ -46,7 +45,7 @@ function ConnectionBanner() {
       className="no-print"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, textAlign: 'center', padding: '6px 12px', paddingTop: 'calc(6px + env(safe-area-inset-top, 0px))', fontSize: 13, fontWeight: 600, background: online ? 'var(--btn)' : '#3a4a45', color: online ? 'var(--btn-text)' : '#ffffff' }}
     >
-      {online ? 'De retour en ligne' : 'Aucune connexion · Memoa se met à jour dès que le réseau revient'}
+      {online ? 'De retour en ligne' : 'Hors connexion'}
     </div>
   )
 }
@@ -72,8 +71,6 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   if (recovery && user) return <Navigate to="/nouveau-mot-de-passe" replace />
 
   if (need === 'public') {
-    // Compte Google sans mot de passe ou sans numéro : même sur la page de connexion, on l'envoie finir cette étape.
-    if (user && user.needsPassword && loc.pathname !== '/google-suite') return <Navigate to="/google-suite" replace />
     if (user && !user.needsPassword && loc.pathname !== '/google-suite' && profile?.memo_animal) return <Navigate to="/" replace />
     return <div className="shell"><Outlet /></div>
   }
@@ -87,7 +84,6 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
-      <ExpiryBanner />
       <Outlet />
       <MiniPlayer />
       <NavBar />
