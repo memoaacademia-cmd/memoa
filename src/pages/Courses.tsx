@@ -11,9 +11,7 @@ import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdf, COVER_ORDER, COVER_TEMPLATES, stripAiNoise, splitTpTitle, type CoverTemplate } from '../lib/pdf'
-import { officialName } from '../lib/names'
-import { usePref } from '../lib/prefs'
+import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -30,6 +28,7 @@ const NOTE_SOURCES = [
   { id: 'photo', label: 'Photo', icon: 'photo' }
 ]
 const MAX_MEDIA_MB = 20
+const asFile = (b: Blob): File => (b instanceof File ? b : new File([b], 'enregistrement.webm', { type: b.type || 'audio/webm' }))
 
 /* Onglet « Cours » : sert uniquement à créer un cours. Même écran d'écriture que « Ajouter une note ». Une fois créé, le cours est rangé dans le sac à dos. */
 export function NewCourse() {
@@ -46,6 +45,7 @@ export function NewCourse() {
   const [docSheet, setDocSheet] = useState(false)
   const [recOpen, setRecOpen] = useState(false)
   const [draftId, setDraftId] = useState<string | null>(null)
+  const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const online = useOnline()
   const [params, setParams] = useSearchParams()
   const dict = useRef<Dictation | null>(null)
@@ -67,6 +67,7 @@ export function NewCourse() {
       if (!alive) return
       if (d && d.userId === user.id && d.kind === 'course') {
         setTitle(d.title); setContent(d.body); setConsignes(d.guide); setSource(d.source || 'texte'); setDraftId(d.id)
+        if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
       } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })
     }).catch(() => { if (alive) setParams({}, { replace: true }) })
@@ -74,14 +75,20 @@ export function NewCourse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bid, user?.id])
 
+  // Le réseau revient : l'enregistrement gardé est transcrit automatiquement.
+  useEffect(() => {
+    if (online && pendingAudio && !step) void transcribeFile(pendingAudio, 'audio')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
   function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
 
   /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (72 h), puis retourne à la liste. */
   async function keepDraft() {
     if (!user) return
-    if (!title.trim() && !content.trim() && !consignes.trim()) return setError('Écris quelque chose avant de le garder en brouillon.')
+    if (!title.trim() && !content.trim() && !consignes.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
     dict.current?.stop()
-    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: 'course', title, body: content, guide: consignes, source }))
+    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: 'course', title, body: content, guide: consignes, source, audio: pendingAudio }))
     if (d) nav('/sac')
   }
 
@@ -128,11 +135,13 @@ export function NewCourse() {
 
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
-    if (!isOnline()) return setError('La transcription a besoin du réseau. Réessaie quand il revient.')
+    // Sans réseau : l'enregistrement (ou le fichier) est gardé et sera transcrit tout seul au retour du réseau.
+    if (!isOnline()) { setPendingAudio(f); setError(null); return }
+    setPendingAudio(null)
     setStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
     setStep('')
-    if (text === undefined) return
+    if (text === undefined) { setPendingAudio(f); return }
     appendText(text)
     setSource('audio')
     setTitle((t) => t.trim() ? t : f.name.replace(/\.[^.]+$/, '').slice(0, 80))
@@ -149,6 +158,7 @@ export function NewCourse() {
     dict.current?.stop()
     if (!title.trim()) return setError('Donne un nom à ton cours.')
     if (!isOnline()) return setError(OFFLINE_MSG)
+    if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     const id = await run(async () => {
       // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
       let structured = content.trim()
@@ -206,7 +216,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Brouillon » pour garder ta note 72 h, puis crée ton cours quand le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h, puis crée ton cours quand le réseau revient.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place (3 points). Il s’en sert quand tu touches « Créer »."
@@ -216,7 +226,7 @@ export function NewCourse() {
             {WEB_SEARCH_ENABLED && <WebToggle on={web} set={setWeb} />}
           </div>
         }
-        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step || !online} onPlus={() => setDocSheet(true)} />}
+        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
 
       <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
@@ -434,7 +444,7 @@ function QuizScreen({ qs, raw, onClose, onNext, loading, loadError }: { qs: Quiz
 export function CourseDetail() {
   const { id = '' } = useParams()
   const { user, profile } = useAuth()
-  const profileName = officialName(profile)
+  const profileName = profile?.full_name ?? ''
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
   const { busy, error, setError, run } = useAction()
@@ -449,6 +459,7 @@ export function CourseDetail() {
   const [modify, setModify] = useState(false)
   const [mainId, setMainId] = useState<string | null>(null)
   const [draftId, setDraftId] = useState<string | null>(null)
+  const [pendingAudio, setPendingAudio] = useState<File | null>(null)
   const online = useOnline()
   const [params, setParams] = useSearchParams()
   const [pdfPrompt, setPdfPrompt] = useState(params.get('pdf') === '1')
@@ -487,12 +498,19 @@ export function CourseDetail() {
         setNoteTitle(d.title); setNoteText(d.body); setNoteGuide(d.guide); setNoteSource(d.source || 'texte')
         setModify(d.kind === 'edit'); setMainId(d.kind === 'edit' ? d.noteId : null); setDraftId(d.id)
         setError(null); setEditing(true)
+        if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
       } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })
     }).catch(() => { if (alive) setParams({}, { replace: true }) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bid, user?.id])
+
+  // Le réseau revient : l'enregistrement gardé est transcrit automatiquement.
+  useEffect(() => {
+    if (online && pendingAudio && !noteStep) void transcribeFile(pendingAudio, 'audio')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
 
   function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
 
@@ -514,11 +532,13 @@ export function CourseDetail() {
 
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
-    if (!isOnline()) return setError('La transcription a besoin du réseau. Réessaie quand il revient.')
+    // Sans réseau : l'enregistrement (ou le fichier) est gardé et sera transcrit tout seul au retour du réseau.
+    if (!isOnline()) { setPendingAudio(f); setError(null); return }
+    setPendingAudio(null)
     setNoteStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
     setNoteStep('')
-    if (text === undefined) return
+    if (text === undefined) { setPendingAudio(f); return }
     appendText(text)
     setNoteTitle((t) => t.trim() ? t : f.name.replace(/\.[^.]+$/, '').slice(0, 80))
   }
@@ -565,7 +585,7 @@ export function CourseDetail() {
   function resetNote() {
     dict.current?.stop()
     setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null)
-    setModify(false); setMainId(null); setDraftId(null)
+    setModify(false); setMainId(null); setDraftId(null); setPendingAudio(null)
     setEditing(false)
   }
   function closeEditor() {
@@ -576,9 +596,9 @@ export function CourseDetail() {
   /** « Brouillon » : garde la note (ou la modification du cours) sur le téléphone pendant 72 h. Le cours n'est pas touché. */
   async function keepDraft() {
     if (!user) return
-    if (!noteTitle.trim() && !noteText.trim() && !noteGuide.trim()) return setError('Écris quelque chose avant de le garder en brouillon.')
+    if (!noteTitle.trim() && !noteText.trim() && !noteGuide.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
     dict.current?.stop()
-    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: modify ? 'edit' : 'note', courseId: id, noteId: modify ? mainId : null, title: noteTitle, body: noteText, guide: noteGuide, source: noteSource }))
+    const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: modify ? 'edit' : 'note', courseId: id, noteId: modify ? mainId : null, title: noteTitle, body: noteText, guide: noteGuide, source: noteSource, audio: pendingAudio }))
     if (d) resetNote()
   }
 
@@ -636,6 +656,7 @@ export function CourseDetail() {
     const guide = noteGuide.trim()
     if (!base && !guide) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
     if (!isOnline()) return setError(OFFLINE_MSG)
+    if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     let content = base
     if (guide) {
       const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${base || '(aucun)'}` }))
@@ -780,7 +801,7 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Brouillon » pour garder ta note 72 h.</span>}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
+          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
           guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points). Elle s’en sert quand tu touches « Terminé »."
@@ -790,7 +811,7 @@ export function CourseDetail() {
               {WEB_SEARCH_ENABLED && <WebToggle on={noteWeb} set={setNoteWeb} />}
             </div>
           }
-          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep || !online} onPlus={() => setDocSheet(true)} />}
+          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
         />
       )}
 
@@ -860,10 +881,6 @@ export function TpAssistant() {
   const { profile } = useAuth()
   const course = useLoad(() => getCourse(id), [id])
   const { busy, error, setError, run } = useAction()
-  // Modèle de page de garde choisi : retenu d'un TP à l'autre.
-  const [tplPref, setTplPref] = usePref('tp-template', 'classique')
-  const tpl: CoverTemplate = COVER_ORDER.includes(tplPref as CoverTemplate) ? (tplPref as CoverTemplate) : 'classique'
-  const setTpl = (t: CoverTemplate) => setTplPref(t)
   const [title, setTitle] = useState('')
   const [brief, setBrief] = useState('')
   const [atts, setAtts] = useState<Attach[]>([])
@@ -935,7 +952,7 @@ export function TpAssistant() {
     const blob = await run(() => buildTpPdf({
       university: profile.university, faculty: profile.faculty, department: profile.department,
       promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl,
-      title, course: course.data?.title ?? '', student: officialName(profile), year, template: tpl
+      title, course: course.data?.title ?? '', student: profile.full_name, year
     }, doc))
     if (blob) saveBlob(title || 'TP', blob)
   }
@@ -1029,33 +1046,17 @@ export function TpAssistant() {
 
       {doc && (
         <>
-          <div className="tpl-picker" role="radiogroup" aria-label="Modèle de page de garde">
-            <span className="muted" style={{ fontSize: 13, fontWeight: 600 }}>Modèle de page de garde</span>
-            <div className="tpl-row">
-              {COVER_ORDER.map((id) => {
-                const t = COVER_TEMPLATES[id]
-                return (
-                  <button key={id} type="button" role="radio" aria-checked={tpl === id} className={'tpl-chip' + (tpl === id ? ' on' : '')} onClick={() => setTpl(id)}>
-                    <span className="sw" style={{ background: `rgb(${t.main.join(',')})`, borderColor: `rgb(${t.accent.join(',')})` }} />
-                    {t.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <div className="cover" style={{ ['--cv-main' as string]: `rgb(${COVER_TEMPLATES[tpl].main.join(',')})`, ['--cv-acc' as string]: `rgb(${COVER_TEMPLATES[tpl].accent.join(',')})` }}>
+          <div className="cover">
             <small>République démocratique du Congo</small>
             <span className="t" style={{ fontSize: 16 }}>{profile?.university ? universityLabel(profile.university) : ''}</span>
             {logoUrl && <img src={logoUrl} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
             <span className="s">{profile?.faculty}</span>
-            <span className="s dept">Département : {profile?.department}</span>
-            <span className="s">{profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
-            <div className="band">
-              {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
-              <span className="t">{splitTpTitle(title).title}</span>
-            </div>
+            <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
+            <hr />
+            {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
+            <span className="t">{splitTpTitle(title).title}</span>
             <span className="s">Cours : {course.data?.title}</span>
-            <span className="s">Présenté par : {officialName(profile)}</span>
+            <span className="s">Présenté par : {profile?.full_name}</span>
             <span className="s">Année académique {year}</span>
           </div>
           <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
