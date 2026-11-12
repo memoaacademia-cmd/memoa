@@ -93,7 +93,7 @@ export function EditorBar({ onPhoto, onDictate, dictating, dictateDisabled, onRe
   return (
     <div className="ed-bar">
       <button type="button" className="ed-chip" onClick={onPhoto}><Icon name="photo" size={18} />Photo</button>
-      <button type="button" className={'ed-chip' + (dictating ? ' on' : '')} onClick={onDictate} disabled={dictateDisabled} aria-pressed={dictating}><Icon name="mic" size={18} />{dictating ? 'Stop' : 'Dicter'}</button>
+      <button type="button" className={'ed-chip ed-mic' + (dictating ? ' on' : '')} onClick={onDictate} disabled={dictateDisabled} aria-pressed={dictating} aria-label={dictating ? 'Arrêter la dictée' : 'Dicter'}><Icon name="mic" size={20} /></button>
       <button type="button" className="ed-chip" onClick={onRecord} disabled={recordDisabled}><Icon name="audio" size={18} />Enregistrer</button>
       <button type="button" className="ed-plus" onClick={onPlus} aria-label="Ajouter un document"><Icon name="plus" size={24} stroke={2.3} /></button>
     </div>

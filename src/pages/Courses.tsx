@@ -1,11 +1,11 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
-import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad, WebToggle } from '../components/ui'
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
-import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
+import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
@@ -34,6 +34,7 @@ export function NewCourse() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [consignes, setConsignes] = useState('')
+  const [web, setWeb] = useState(true)
   const [step, setStep] = useState('')
   const [source, setSource] = useState('texte')
   const [listening, setListening] = useState(false)
@@ -114,11 +115,17 @@ export function NewCourse() {
     const id = await run(async () => {
       // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
       let structured = content.trim()
-      if (structured) {
+      const instr = consignes.trim()
+      if (!structured && instr) {
+        // Pas de notes : seulement des consignes. L'IA rédige le cours à partir de ses connaissances (et du web si coché).
+        setStep('Rédaction de ton cours par Memo…')
+        const r = await askAI({ task: 'enrich_note', web: WEB_SEARCH_ENABLED && web, prompt: `Consignes de l'étudiant : ${instr}\n\nTexte déjà écrit par l'étudiant :\n(aucun)` })
+        structured = stripAiNoise(r.reply).trim()
+        if (!structured) throw new Error("Memo n'a pas réussi à rédiger le cours. Reformule tes consignes et réessaie.")
+      } else if (structured) {
         setStep('Mise en forme de tes notes…')
         try {
           if (structured.length > 7500) throw new Error('trop long pour la mise en forme IA')
-          const instr = consignes.trim()
           const r = await askAI({ task: 'structure_notes', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${structured}` : structured })
           if (r.reply.trim()) structured = r.reply.trim()
         } catch (e) {
@@ -128,9 +135,9 @@ export function NewCourse() {
       }
       setStep('Création du cours…')
       const course = await createCourse(user.id, title)
-      if (consignes.trim()) await addNote(user.id, course.id, 'Consignes', consignes.trim().slice(0, 2000), 'texte')
-      if (content.trim()) {
-        await addNote(user.id, course.id, 'Notes de départ', structured.slice(0, 60000), source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte')
+      // Le contenu du cours est rangé sous le nom du cours. Les consignes ne sont pas gardées : elles ne servent qu'à guider l'IA.
+      if (structured) {
+        await addNote(user.id, course.id, title.trim(), structured.slice(0, 60000), content.trim() ? (source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte') : 'texte')
       }
       return course.id
     })
@@ -162,8 +169,13 @@ export function NewCourse() {
         banner={<>{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
-        guideHelp="Ex. le prof veut des définitions courtes et des exemples. Memo en tient compte pour mettre tes notes en forme. Elles restent aussi dans le cours."
-        guideExtra={<DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />}
+        guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place (3 points). Il s’en sert quand tu touches « Créer »."
+        guideExtra={
+          <>
+            <DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
+            {WEB_SEARCH_ENABLED && <WebToggle on={web} set={setWeb} />}
+          </>
+        }
         bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
 
@@ -392,7 +404,8 @@ export function CourseDetail() {
   const [noteText, setNoteText] = useState('')
   const [noteGuide, setNoteGuide] = useState('')
   const [noteWeb, setNoteWeb] = useState(true)
-  const [open, setOpen] = useState<string | null>(null)
+  const [modify, setModify] = useState(false)
+  const [mainId, setMainId] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string; n: number; seen: string[] } | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
@@ -483,6 +496,7 @@ export function CourseDetail() {
   function resetNote() {
     dict.current?.stop()
     setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null)
+    setModify(false); setMainId(null)
     setEditing(false)
   }
   function closeEditor() {
@@ -523,6 +537,19 @@ export function CourseDetail() {
     setListenOpen(false)
   }
 
+  /** « Modifier » : rouvre le cours dans l'écran d'écriture (titre et texte) avant de générer le PDF. */
+  function openModify() {
+    const main = (notes.data ?? [])[0]
+    setNoteTitle(course.data?.title ?? '')
+    setNoteText(main?.content ?? '')
+    setNoteGuide('')
+    setNoteSource('texte')
+    setMainId(main?.id ?? null)
+    setModify(true)
+    setError(null)
+    setEditing(true)
+  }
+
   async function save() {
     if (!user) return
     dict.current?.stop()
@@ -539,7 +566,14 @@ export function CourseDetail() {
     }
     const title = noteTitle.trim() || (guide ? guide.slice(0, 50) : '')
     const ok = await run(async () => {
-      await addNote(user.id, id, title, content, src)
+      if (modify) {
+        if (!title) throw new Error('Donne un nom à ton cours.')
+        await renameCourse(id, title)
+        if (mainId) await updateNote(mainId, title, content)
+        else await addNote(user.id, id, title, content, 'texte')
+      } else {
+        await addNote(user.id, id, title, content, src)
+      }
       return true
     })
     if (ok) {
@@ -605,6 +639,7 @@ export function CourseDetail() {
       <PillButton size="lg" onClick={openSheet}><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
 
       <RowGroup label="Outils">
+        <Row icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
         <Row icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub="Un quiz sur tes notes" onClick={() => void revise()} disabled={busy} />
         {canSpeak() && <Row icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
         <Row icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
@@ -619,17 +654,6 @@ export function CourseDetail() {
           <Row icon="text" title="Voir le résumé" sub={summaryScope || 'Notes choisies'} onClick={() => setSummaryOpen(true)} />
         </RowGroup>
       )}
-
-      <RowGroup label="Notes">
-        {notes.loading ? <div className="rg-empty">Chargement…</div> : !all.length ? (
-          <div className="rg-empty">Aucune note pour l’instant. Touche « Ajouter une note » pour commencer.</div>
-        ) : all.map((n) => (
-          <Fragment key={n.id}>
-            <Row title={n.title} right={new Date(n.created_at).toLocaleDateString('fr-FR')} chevron={false} onClick={() => setOpen(open === n.id ? null : n.id)} expanded={open === n.id} />
-            {open === n.id && <div className="rg-open"><RichText text={n.content} /></div>}
-          </Fragment>
-        ))}
-      </RowGroup>
 
       <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
 
@@ -655,17 +679,17 @@ export function CourseDetail() {
         <EditorScreen
           backLabel={course.data.title}
           onBack={closeEditor}
-          status="Brouillon"
+          status={modify ? 'Modification' : 'Brouillon'}
           doneLabel={busy ? 'Un instant…' : 'Terminé'}
           onDone={() => void save()}
           doneDisabled={busy || rec.state !== 'idle'}
           title={noteTitle}
           onTitle={setNoteTitle}
-          titlePlaceholder="Titre de la note"
+          titlePlaceholder={modify ? 'Titre du cours' : 'Titre de la note'}
           dateText={today}
           body={noteText}
           onBody={setNoteText}
-          bodyPlaceholder="Écris ta note ici…"
+          bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
           banner={<>{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
@@ -673,7 +697,7 @@ export function CourseDetail() {
           guideExtra={
             <>
               <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
-              {WEB_SEARCH_ENABLED && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}><input type="checkbox" checked={noteWeb} onChange={(e) => setNoteWeb(e.target.checked)} /> Chercher aussi sur le web</label>}
+              {WEB_SEARCH_ENABLED && <WebToggle on={noteWeb} set={setNoteWeb} />}
             </>
           }
           bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}

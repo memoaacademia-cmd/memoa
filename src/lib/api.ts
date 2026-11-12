@@ -385,6 +385,33 @@ export async function addNote(userId: string, courseId: string, title: string, c
   return data as Note
 }
 
+/** Modifie le titre et le texte d'une note existante (écran « Modifier » d'un cours). */
+export async function updateNote(noteId: string, title: string, content: string): Promise<void> {
+  if (!content.trim()) fail('Ton cours est vide.')
+  if (content.length > 60000) fail('Ce texte est trop long. Découpe-le en plusieurs notes.')
+  if (!isConfigured) {
+    const db = loadDemo()
+    const n = db.notes.find((x) => x.id === noteId)
+    if (n) { n.title = title.trim() || n.title; n.content = content; saveDemo(db) }
+    return
+  }
+  const { error } = await sb().from('notes').update({ title: title.trim() || 'Note', content }).eq('id', noteId)
+  if (error) throw error
+}
+
+export async function renameCourse(id: string, title: string): Promise<void> {
+  const clean = title.trim()
+  if (!clean) fail('Donne un nom à ton cours.')
+  if (!isConfigured) {
+    const db = loadDemo()
+    const c = db.courses.find((x) => x.id === id)
+    if (c) { c.title = clean; saveDemo(db) }
+    return
+  }
+  const { error } = await sb().from('courses').update({ title: clean }).eq('id', id)
+  if (error) throw error
+}
+
 /* ---------------------------- LIBRAIRIE ---------------------------- */
 
 export async function listDocs(promotion: string | null, faculty: string | null): Promise<LibDoc[]> {

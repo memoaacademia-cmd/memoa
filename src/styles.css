@@ -566,3 +566,6 @@ a.pill-btn { text-decoration: none; }
 .intro-dots i { width: 8px; height: 8px; border-radius: 4px; background: var(--line-strong); transition: width .25s, background .25s; }
 .intro-dots i.on { width: 24px; background: var(--btn); }
 @media (prefers-reduced-motion: reduce) { .intro-track, .intro-dots i { transition: none; } }
+
+/* Micro seul (sans le mot « Dicter ») */
+.ed-chip.ed-mic { padding: 0; width: 44px; justify-content: center; }

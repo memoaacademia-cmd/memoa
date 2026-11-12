@@ -24,8 +24,8 @@ export default function DictateButton({ onText, label = 'Dicter' }: { onText: (t
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-      <button type="button" className={'btn small ' + (on ? 'amber' : 'ghost')} onClick={toggle}>
-        <Icon name="mic" size={18} /> {on ? 'J’écoute… touche pour arrêter' : label}
+      <button type="button" className={'ed-chip ed-mic' + (on ? ' on' : '')} onClick={toggle} aria-pressed={on} aria-label={on ? 'Arrêter la dictée' : label}>
+        <Icon name="mic" size={20} />
       </button>
       {msg && <span className="muted" role="alert">{msg}</span>}
     </div>
