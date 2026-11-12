@@ -171,10 +171,10 @@ export function NewCourse() {
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place (3 points). Il s’en sert quand tu touches « Créer »."
         guideExtra={
-          <>
+          <div className="ed-tools-row">
             <DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
             {WEB_SEARCH_ENABLED && <WebToggle on={web} set={setWeb} />}
-          </>
+          </div>
         }
         bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
@@ -695,10 +695,10 @@ export function CourseDetail() {
           onGuide={setNoteGuide}
           guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points). Elle s’en sert quand tu touches « Terminé »."
           guideExtra={
-            <>
+            <div className="ed-tools-row">
               <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
               {WEB_SEARCH_ENABLED && <WebToggle on={noteWeb} set={setNoteWeb} />}
-            </>
+            </div>
           }
           bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
         />

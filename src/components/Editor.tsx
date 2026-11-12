@@ -27,6 +27,14 @@ export function EditorScreen(p: {
   bar: ReactNode
 }) {
   const [guideOpen, setGuideOpen] = useState(false)
+  // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
+  const titleRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [p.title])
   // Quand le clavier s'ouvre, l'écran se réduit à la zone visible : la barre d'outils reste au-dessus du clavier.
   const [box, setBox] = useState<{ h: number; top: number } | null>(null)
   useEffect(() => {
@@ -54,7 +62,17 @@ export function EditorScreen(p: {
       </div>
 
       <div className="ed-main">
-        <input className="ed-title" maxLength={80} placeholder={p.titlePlaceholder} value={p.title} onChange={(e) => p.onTitle(e.target.value)} aria-label={p.titlePlaceholder} />
+        <textarea
+          ref={titleRef}
+          className="ed-title"
+          rows={1}
+          maxLength={80}
+          placeholder={p.titlePlaceholder}
+          value={p.title}
+          onChange={(e) => p.onTitle(e.target.value.replace(/\n/g, ' '))}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+          aria-label={p.titlePlaceholder}
+        />
         {p.dateText && <span className="ed-date">{p.dateText}</span>}
         <textarea className="ed-body" placeholder={p.bodyPlaceholder} value={p.body} onChange={(e) => p.onBody(e.target.value)} aria-label="Texte" />
       </div>

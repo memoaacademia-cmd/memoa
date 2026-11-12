@@ -192,9 +192,14 @@ export function splitTpTitle(raw: string, defaultKind = 'TRAVAIL PRATIQUE'): { k
   const t = raw.trim().replace(/\s+/g, ' ')
   if (!t) return { kind: defaultKind, title: '' }
   if (OTHER_DOC.test(t)) return { kind: '', title: t }
-  const rest = t.replace(TP_PREFIX, '').trim()
-  if (!rest) return { kind: defaultKind, title: t }
-  return { kind: defaultKind, title: rest.charAt(0).toUpperCase() + rest.slice(1) }
+  const m = TP_PREFIX.exec(t)
+  // Le titre ne commence pas par « Travail pratique » : le bandeau l'annonce déjà, on garde le titre tel quel.
+  if (!m) return { kind: defaultKind, title: t.charAt(0).toUpperCase() + t.slice(1) }
+  const rest = t.slice(m[0].length).trim()
+  // Le titre EST « Travail pratique 2 » (rien d'autre) : on l'écrit une seule fois, sans répéter le bandeau.
+  if (!rest) return { kind: '', title: t.toUpperCase() }
+  const num = (m[2] ?? '').replace(/\D/g, '')
+  return { kind: num ? `${defaultKind} ${num}` : defaultKind, title: rest.charAt(0).toUpperCase() + rest.slice(1) }
 }
 
 const NAVY: [number, number, number] = [27, 42, 107]
@@ -315,14 +320,20 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   doc.setLineWidth(0.5)
   doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
 
-  // Année académique entre deux filets dorés : les filets sont toujours un peu plus larges que le texte.
+  // Année académique entre deux filets dorés. Les lettres sont espacées à la main (mesure exacte) :
+  // les filets sont toujours plus larges que le texte, il ne peut plus dépasser.
   const yearText = clean(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  const yearW = doc.getTextWidth(yearText) + 1.6 * Math.max(0, yearText.length - 1) * 0.3528
+  const gap = 0.6
+  const chars = Array.from(yearText)
+  const widths = chars.map((ch) => doc.getTextWidth(ch))
+  const yearW = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, chars.length - 1)
   const yearHalf = Math.max(46, yearW / 2 + 8)
   rule(yearY - 7, yearHalf, 0.5)
-  center(yearText, 10, 'bold', yearY, NAVY, 1.6, 170)
+  doc.setTextColor(NAVY[0], NAVY[1], NAVY[2])
+  let yx = cx - yearW / 2
+  chars.forEach((ch, i) => { doc.text(ch, yx, yearY); yx += widths[i] + gap })
   rule(yearY + 6, yearHalf, 0.5)
 
   w.newPage()
