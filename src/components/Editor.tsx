@@ -11,6 +11,9 @@ export function EditorScreen(p: {
   doneLabel: string
   onDone: () => void
   doneDisabled?: boolean
+  /** Bouton « Brouillon » (hors de la zone de texte) : garde la note sur le téléphone. Absent = pas de bouton. */
+  onDraft?: () => void
+  draftDisabled?: boolean
   title: string
   onTitle: (v: string) => void
   titlePlaceholder: string
@@ -58,6 +61,7 @@ export function EditorScreen(p: {
           <span>{p.backLabel}</span>
         </button>
         {p.status && <span className="ed-status">{p.status}</span>}
+        {p.onDraft && <button type="button" className="ed-draft" onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
         <button type="button" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>
       </div>
 
