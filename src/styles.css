@@ -401,6 +401,18 @@ a.pill-btn { text-decoration: none; }
 .ed-status { font-size: 12px; color: var(--text-3); }
 .ed-done { flex: none; min-height: 40px; padding: 0 20px; border-radius: 20px; border: 0; background: var(--btn); color: var(--btn-text); font-weight: 700; font-size: 15px; }
 .ed-done[disabled] { opacity: .55; }
+.ed-top .ed-status { margin-left: auto; }
+.ed-draft { flex: none; margin-left: auto; min-height: 40px; padding: 0 16px; border-radius: 20px; border: 1.5px solid var(--btn); background: transparent; color: var(--link); font-weight: 700; font-size: 14px; font-family: inherit; }
+.ed-top .ed-status + .ed-draft { margin-left: 0; }
+.ed-draft[disabled] { opacity: .55; }
+/* Brouillons en attente */
+.dr-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.dr-row:last-child { border-bottom: 0; }
+.dr-row .rg-row { border-bottom: 0; flex: 1; min-width: 0; }
+.dr-del { flex: none; width: 44px; height: 44px; margin-right: 8px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-3); }
+.dr-urgent { color: var(--braise); font-weight: 700; }
+.dr-banner { display: flex; align-items: flex-start; gap: 10px; border-radius: 16px; padding: 12px 14px; background: var(--surface); border: 1.5px solid var(--braise); color: var(--text); font-size: 14px; line-height: 1.4; text-align: left; font-family: inherit; width: 100%; }
+.dr-banner b { font-weight: 700; }
 .ed-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 20px 8px; gap: 4px; }
 .ed-title { width: 100%; padding: 0; border: 0; resize: none; overflow: hidden; display: block; font-family: inherit; white-space: pre-wrap; overflow-wrap: anywhere; background: transparent; outline: none; color: var(--text); font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
 .ed-title::placeholder, .ed-body::placeholder { color: var(--ph); opacity: 1; }
