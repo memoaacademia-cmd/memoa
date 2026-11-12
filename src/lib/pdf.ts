@@ -149,6 +149,8 @@ export interface TpCover {
   logoUrl?: string | null
   /** Petit libellé au-dessus du titre dans le bandeau. */
   kind?: string
+  /** Modèle de page de garde (« classique » par défaut). */
+  template?: CoverTemplate
 }
 
 interface LoadedLogo { data: string; w: number; h: number }
@@ -202,69 +204,117 @@ export function splitTpTitle(raw: string, defaultKind = 'TRAVAIL PRATIQUE'): { k
   return { kind: num ? `${defaultKind} ${num}` : defaultKind, title: rest.charAt(0).toUpperCase() + rest.slice(1) }
 }
 
-const NAVY: [number, number, number] = [27, 42, 107]
-const GOLD: [number, number, number] = [184, 137, 43]
+type RGB = [number, number, number]
 
-/** TP : page de garde sur le modèle validé (double cadre, logo, bandeau, présenté par), puis le travail. */
+export type CoverTemplate = 'classique' | 'emeraude' | 'bordeaux' | 'ardoise'
+
+interface CoverLook {
+  label: string
+  main: RGB
+  accent: RGB
+  /** Forme du cadre autour de la page. */
+  frame: 'double' | 'single' | 'corners' | 'sidebar'
+  /** Bandeau du titre : plein (texte blanc) ou seulement entre deux filets. */
+  band: 'filled' | 'outlined'
+}
+
+/** Les modèles de page de garde proposés à l'étudiant. */
+export const COVER_TEMPLATES: Record<CoverTemplate, CoverLook> = {
+  classique: { label: 'Classique', main: [27, 42, 107], accent: [184, 137, 43], frame: 'double', band: 'filled' },
+  emeraude: { label: 'Émeraude', main: [11, 93, 84], accent: [242, 163, 58], frame: 'single', band: 'filled' },
+  bordeaux: { label: 'Bordeaux', main: [110, 24, 48], accent: [160, 124, 60], frame: 'corners', band: 'outlined' },
+  ardoise: { label: 'Ardoise', main: [30, 41, 59], accent: [13, 148, 136], frame: 'sidebar', band: 'outlined' }
+}
+export const COVER_ORDER: CoverTemplate[] = ['classique', 'emeraude', 'bordeaux', 'ardoise']
+
+/** TP : page de garde (4 modèles : double cadre, cadre simple, coins, bandeau latéral), puis le travail. */
 export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   const logo = await loadLogo(c.logoUrl)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const w = writer(doc)
-  const cx = W / 2
+  const look = COVER_TEMPLATES[c.template ?? 'classique'] ?? COVER_TEMPLATES.classique
+  const MAIN = look.main
+  const ACC = look.accent
+  const sideW = look.frame === 'sidebar' ? 12 : 0
+  const cx = (W + sideW) / 2
   const head = splitTpTitle(c.title, c.kind ?? 'TRAVAIL PRATIQUE')
 
-  /** Texte centré, avec espacement entre les lettres si demandé ; renvoie le y après la dernière ligne. */
-  const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: [number, number, number], space = 0, maxW = 140, up = false) => {
+  /** Largeur exacte d'une ligne, lettres espacées de `gap` mm. */
+  const widthOf = (l: string, sz: number, gap: number) => {
+    doc.setFontSize(sz)
+    return Array.from(l).reduce((n, ch) => n + doc.getTextWidth(ch), 0) + gap * Math.max(0, Array.from(l).length - 1)
+  }
+  /** Texte centré sur la page, lettre par lettre quand il est espacé : le centrage est exact. Renvoie le y après la dernière ligne. */
+  const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: RGB, gap = 0, maxW = 140, up = false) => {
     const t = clean(up ? text.toUpperCase() : text)
     doc.setFont('helvetica', style)
     doc.setTextColor(color[0], color[1], color[2])
-    // Largeur réelle d'une ligne, espacement entre lettres compris.
-    const widthOf = (l: string, sz: number) => {
-      doc.setFontSize(sz)
-      return doc.getTextWidth(l) + space * Math.max(0, l.length - 1) * 0.3528
-    }
-    // Retour à la ligne mot par mot sur la vraie largeur.
-    const words = t.split(/\s+/)
     const lines: string[] = []
     let cur = ''
-    for (const wd of words) {
+    for (const wd of t.split(/\s+/)) {
       const test = cur ? `${cur} ${wd}` : wd
-      if (cur && widthOf(test, size) > maxW) { lines.push(cur); cur = wd } else cur = test
+      if (cur && widthOf(test, size, gap) > maxW) { lines.push(cur); cur = wd } else cur = test
     }
     if (cur) lines.push(cur)
-    // Si un mot seul est trop large, on réduit la taille.
     let sz = size
-    while (sz > 7 && lines.some(l => widthOf(l, sz) > maxW)) sz -= 0.5
+    while (sz > 7 && lines.some((l) => widthOf(l, sz, gap) > maxW)) sz -= 0.5
     doc.setFontSize(sz)
     const lh = sz * 0.5
     lines.forEach((l, i) => {
-      doc.text(l, cx - widthOf(l, sz) / 2, y + i * lh, space ? { charSpace: space } : undefined)
+      let x = cx - widthOf(l, sz, gap) / 2
+      if (!gap) { doc.text(l, x, y + i * lh); return }
+      for (const ch of Array.from(l)) { doc.text(ch, x, y + i * lh); x += doc.getTextWidth(ch) + gap }
     })
     return y + lines.length * lh
   }
   const rule = (y: number, half: number, thick = 0.5) => {
-    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2])
+    doc.setDrawColor(ACC[0], ACC[1], ACC[2])
     doc.setLineWidth(thick)
     doc.line(cx - half, y, cx + half, y)
   }
 
-  // Double cadre bleu
-  doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2])
-  doc.setLineWidth(0.9)
-  doc.rect(10, 10, W - 20, H - 20)
-  doc.setLineWidth(0.3)
-  doc.rect(12.5, 12.5, W - 25, H - 25)
+  // Cadre selon le modèle
+  if (look.frame === 'double') {
+    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.setLineWidth(0.9)
+    doc.rect(10, 10, W - 20, H - 20)
+    doc.setLineWidth(0.3)
+    doc.rect(12.5, 12.5, W - 25, H - 25)
+  } else if (look.frame === 'single') {
+    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.setLineWidth(1.6)
+    doc.rect(10, 10, W - 20, H - 20)
+    doc.setDrawColor(ACC[0], ACC[1], ACC[2])
+    doc.setLineWidth(0.35)
+    doc.rect(14, 14, W - 28, H - 28)
+  } else if (look.frame === 'corners') {
+    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.setLineWidth(0.25)
+    doc.rect(12, 12, W - 24, H - 24)
+    doc.setDrawColor(ACC[0], ACC[1], ACC[2])
+    doc.setLineWidth(1.6)
+    const L = 24
+    for (const [x, y, dx, dy] of [[10, 10, 1, 1], [W - 10, 10, -1, 1], [10, H - 10, 1, -1], [W - 10, H - 10, -1, -1]] as const) {
+      doc.line(x, y, x + dx * L, y)
+      doc.line(x, y, x, y + dy * L)
+    }
+  } else {
+    doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.rect(0, 0, sideW, H, 'F')
+    doc.setFillColor(ACC[0], ACC[1], ACC[2])
+    doc.rect(sideW, 0, 1.6, H, 'F')
+  }
 
-  // En-tête : pays, université, faculté
+  // En-tête : pays, université, faculté, département (bien visible)
   let y = 36
   y = center('RÉPUBLIQUE DÉMOCRATIQUE DU CONGO', 10, 'bold', y, [60, 60, 70], 1.2, 150)
   rule(y + 5, 30, 0.7)
-  y = center(universityOnly(c.university), 15, 'bold', y + 16, NAVY, 0.3, 150, true)
-  y = center(`${c.faculty}`, 11.5, 'bold', y + 3, GOLD, 0.5, 140, true)
-  if (c.department) y = center(`Département : ${c.department}`, 10, 'normal', y + 3, [90, 90, 100], 0, 150)
+  y = center(universityOnly(c.university), 15, 'bold', y + 16, MAIN, 0.3, 150, true)
+  y = center(`${c.faculty}`, 11.5, 'bold', y + 3, ACC, 0.5, 140, true)
+  if (c.department) y = center(`Département : ${c.department}`, 12.5, 'bold', y + 4, MAIN, 0, 150)
 
-  // Logo (hauteur max 55 mm, largeur max 70 mm)
+  // Logo (hauteur max 48 mm, largeur max 70 mm)
   let logoBottom = y + 8
   if (logo) {
     const ratio = logo.w / logo.h
@@ -275,53 +325,68 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
     logoBottom = y + 12 + lh
   }
 
-  // Bandeau bleu : type de document et titre
+  // Bandeau : « TRAVAIL PRATIQUE » et le titre forment un seul bloc, centré dans le bandeau
+  // (même marge en haut et en bas, chaque ligne centrée exactement sur le milieu de la page).
   const bandTop = Math.max(logoBottom + 10, 132)
+  const bw = 150
+  const LH = 9.5
+  const TITLE_PT = 20
+  const pad = 9
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
-  const titleLines = doc.splitTextToSize(clean(head.title).toUpperCase(), 148) as string[]
-  const topPad = head.kind ? 16 : 11
-  const bandH = topPad + titleLines.length * 9.5 + 6
-  doc.setFillColor(NAVY[0], NAVY[1], NAVY[2])
-  doc.rect(33, bandTop, W - 66, bandH, 'F')
-  doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2])
-  doc.setLineWidth(0.8)
-  doc.line(33, bandTop, W - 33, bandTop)
-  doc.line(33, bandTop + bandH, W - 33, bandTop + bandH)
-  if (head.kind) center(head.kind, 10, 'normal', bandTop + 9, [255, 255, 255], 2.4, 150, true)
+  doc.setFontSize(TITLE_PT)
+  const titleLines = doc.splitTextToSize(clean(head.title).toUpperCase(), bw - 18) as string[]
+  const labelBase = bandTop + pad + 2.6 // le haut des majuscules du libellé touche la marge du haut
+  const firstBase = head.kind ? labelBase + 5.5 + 5.1 : bandTop + pad + 5.1
+  const lastBase = firstBase + (titleLines.length - 1) * LH
+  const bandH = lastBase - bandTop + pad
+  const filled = look.band === 'filled'
+  if (filled) {
+    doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.rect(cx - bw / 2, bandTop, bw, bandH, 'F')
+  }
+  doc.setDrawColor(ACC[0], ACC[1], ACC[2])
+  doc.setLineWidth(filled ? 0.8 : 1.2)
+  doc.line(cx - bw / 2, bandTop, cx + bw / 2, bandTop)
+  doc.line(cx - bw / 2, bandTop + bandH, cx + bw / 2, bandTop + bandH)
+  if (!filled) {
+    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.setLineWidth(0.3)
+    doc.line(cx - bw / 2, bandTop + 1.8, cx + bw / 2, bandTop + 1.8)
+    doc.line(cx - bw / 2, bandTop + bandH - 1.8, cx + bw / 2, bandTop + bandH - 1.8)
+  }
+  if (head.kind) center(head.kind, 10, 'normal', labelBase, filled ? [255, 255, 255] : ACC, 2.4, bw - 12, true)
+  const titleColor: RGB = filled ? [255, 255, 255] : MAIN
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
-  doc.setTextColor(255, 255, 255)
-  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, bandTop + topPad + 2 + i * 9.5))
+  doc.setFontSize(TITLE_PT)
+  doc.setTextColor(titleColor[0], titleColor[1], titleColor[2])
+  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, firstBase + i * LH))
 
-  // Bloc « présenté par » : étiquettes dorées à gauche, trait vertical doré, valeurs bleues à droite
+  // Bloc « présenté par » : étiquettes à gauche, trait vertical, valeurs à droite
   const rows: Array<[string, string]> = [['PRÉSENTÉ PAR', c.student]]
   if (c.course) rows.push(['COURS', c.course])
   rows.push(['PROMOTION', [c.promotion, c.department].filter(Boolean).join(' / ')])
   if (c.vacation) rows.push(['VACATION', c.vacation.replace(/^Vacation\s+/i, '')])
-  const lineX = 74
+  const lineX = 74 + sideW / 2
   const valueW = W - lineX - 28
   const yearY = H - 46
   let ry = bandTop + bandH + 16
   const startY = ry - 5
   rows.forEach(([label, value]) => {
-    // Étiquette alignée à droite, collée avant le trait (sans espacement de lettres : largeur exacte)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.5)
-    doc.setTextColor(GOLD[0], GOLD[1], GOLD[2])
+    doc.setTextColor(ACC[0], ACC[1], ACC[2])
     doc.text(label, lineX - 6, ry, { align: 'right' })
     doc.setFontSize(11)
-    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2])
+    doc.setTextColor(MAIN[0], MAIN[1], MAIN[2])
     const vl = doc.splitTextToSize(clean(value), valueW) as string[]
     vl.forEach((l, i) => doc.text(l, lineX + 6, ry + i * 5))
     ry += Math.max(1, vl.length) * 5 + 4.5
   })
-  doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2])
+  doc.setDrawColor(ACC[0], ACC[1], ACC[2])
   doc.setLineWidth(0.5)
   doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
 
-  // Année académique entre deux filets dorés. Les lettres sont espacées à la main (mesure exacte) :
-  // les filets sont toujours plus larges que le texte, il ne peut plus dépasser.
+  // Année académique entre deux filets. Les lettres sont espacées à la main (mesure exacte) : le texte ne dépasse jamais.
   const yearText = clean(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
@@ -331,7 +396,7 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   const yearW = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, chars.length - 1)
   const yearHalf = Math.max(46, yearW / 2 + 8)
   rule(yearY - 7, yearHalf, 0.5)
-  doc.setTextColor(NAVY[0], NAVY[1], NAVY[2])
+  doc.setTextColor(MAIN[0], MAIN[1], MAIN[2])
   let yx = cx - yearW / 2
   chars.forEach((ch, i) => { doc.text(ch, yx, yearY); yx += widths[i] + gap })
   rule(yearY + 6, yearHalf, 0.5)

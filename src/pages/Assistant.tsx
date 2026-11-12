@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as Reac
 import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { askAI, listConversations, listCourses, listMessages, searchNotes, type NoteHit } from '../lib/api'
+import { askAI, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
@@ -12,8 +12,17 @@ import { WEB_SEARCH_ENABLED } from '../lib/features'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
 
+/** « 6 h 59 min » : temps restant avant le retour des points. */
+function countdown(ms: number): string {
+  const m = Math.max(0, Math.ceil(ms / 60_000))
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`
+}
+
 export default function Assistant() {
   const { user, profile } = useAuth()
+  // Points gratuits : solde (ou compte à rebours à zéro). null pendant l'essai et avec Premium : rien n'est affiché.
+  const [pts, setPts] = useState<PointsInfo | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const courses = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
   const convs = useLoad(listConversations, [])
   const { error, setError, run } = useAction()
@@ -43,6 +52,17 @@ export default function Assistant() {
   const [kb, setKb] = useState(false)
 
   useEffect(() => () => { dict.current?.stop() }, [])
+  useEffect(() => { void fetchPoints().then(setPts).catch(() => { /* hors connexion : pas de solde */ }) }, [])
+  // À zéro : le compte à rebours avance chaque seconde ; à la fin, on relit le solde (les 20 points sont revenus).
+  const resetMs = pts?.resetAt ? new Date(pts.resetAt).getTime() : 0
+  useEffect(() => {
+    if (!resetMs) return
+    const t = window.setInterval(() => {
+      setNow(Date.now())
+      if (Date.now() >= resetMs) void fetchPoints().then(setPts).catch(() => { /* on réessaiera */ })
+    }, 1000)
+    return () => window.clearInterval(t)
+  }, [resetMs])
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
@@ -138,6 +158,7 @@ export default function Assistant() {
     if (cancelled.current) return
     setThinking(false)
     if (r) {
+      if (r.points !== undefined) setPts(r.points)
       setConversationId(r.conversationId)
       setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
       convs.reload()
@@ -162,7 +183,15 @@ export default function Assistant() {
     <main className={'as-root' + (kb ? ' kb' : '')} style={box ? { height: box.h, top: box.top } : undefined}>
       <div className="as-head">
         <button type="button" className="icon-btn round" onClick={() => setSheet('menu')} aria-label="Menu : historique et nouvelle conversation"><Icon name="menu" /></button>
-        <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
+        <span className="as-title-wrap">
+          <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
+          {pts && (
+            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={pts.left <= 0 ? 'Plus de points' : `${pts.left} points restants`}>
+              <Icon name="bolt" size={14} />
+              {pts.left > 0 || !resetMs ? pts.left : countdown(resetMs - now)}
+            </span>
+          )}
+        </span>
         <button type="button" className="icon-btn round" onClick={() => { setQ(''); setHits(null); setSheet('search') }} aria-label="Chercher dans mes notes"><Icon name="search" /></button>
       </div>
 
@@ -204,7 +233,7 @@ export default function Assistant() {
             className="as-ta"
             rows={1}
             placeholder={listening ? 'Je t’écoute…' : 'Pose ta question à Memo'}
-            maxLength={2000}
+            maxLength={6000}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKey}

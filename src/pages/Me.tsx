@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
+import { getSubscription, hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { initialsOf } from '../lib/names'
+import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
 import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
+import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import { currentStreak } from '../lib/streak'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
@@ -42,7 +43,7 @@ export function Me() {
         </button>
         <input ref={file} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <h1 className="h1" style={{ margin: 0, fontSize: 24 }}>{profile?.full_name || profile?.first_name}</h1>
+          <h1 className="h1" style={{ margin: 0, fontSize: 24 }}>{officialName(profile) || profile?.first_name}</h1>
           <span className="muted">{where}</span>
           <span className="muted">Ton Memo : {profile?.memo_name ?? 'Memo'}</span>
         </div>
@@ -217,7 +218,11 @@ const BENEFITS = [
 export function Premium() {
   const { user } = useAuth()
   const pay = useLoad(listPayments, [])
-  const prem = useLoad(() => hasPremium(user?.id ?? ''), [user?.id])
+  const sub = useLoad(() => getSubscription(user?.id ?? ''), [user?.id])
+  const exp = sub.data?.expires_at
+  const active = !!exp && isActive(exp)
+  const ended = !!exp && !active
+  const left = exp ? daysLeft(exp) : 0
   const { busy, error, setError, run } = useAction()
   const [op, setOp] = useState('orange')
   const [cur, setCur] = useState<'USD' | 'CDF'>('USD')
@@ -234,17 +239,27 @@ export function Premium() {
   return (
     <main className="page" style={{ gap: 18 }}>
       <PageHead to="/moi" title="Memoa Premium" />
+      {active && exp && (
+        <section className="prem-gold" aria-label="Premium actif">
+          <span className="pg-pill">PREMIUM ACTIF</span>
+          <strong className="pg-date">Valable jusqu’au {dateFr(exp)}</strong>
+          <span className="pg-sub">{left <= 1 ? 'Il reste moins d’un jour' : `Il reste ${left} jours`}</span>
+          <span className="pg-sub">Utilisation généreuse de l’IA, sans compte à rebours de points.</span>
+        </section>
+      )}
+      {ended && exp && <div className="notice" role="status">Ton abonnement Premium s’est terminé le {dateFr(exp)}. Recharge pour retrouver Memoa Premium.</div>}
+      {!active && (
       <section className="prem-hero">
         <span className="label-mono" style={{ color: '#f2a33a' }}>Abonnement mensuel · un seul plan</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 44, lineHeight: 1 }}>{PRICE_LABEL.USD}</span>
           <span style={{ color: '#b9c8c2', fontSize: 16 }}>ou {PRICE_LABEL.CDF}</span>
         </div>
-        {prem.data && <span className="badge">Abonnement actif</span>}
         {BENEFITS.map((b) => <div key={b} style={{ display: 'flex', gap: 10 }}><Icon name="check" size={20} color="#3ccfb4" stroke={2.4} /><span style={{ fontSize: 15, lineHeight: 1.4 }}>{b}</span></div>)}
       </section>
+      )}
 
-      <RowGroup label="Payer par Mobile Money">
+      <RowGroup label={active ? 'Prolonger mon abonnement' : 'Payer par Mobile Money'}>
         {OPERATORS.map((o) => (
           <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className="rg-row" onClick={() => setOp(o.id)}>
             <span className="dot" style={{ background: o.dot }} />
@@ -259,7 +274,7 @@ export function Premium() {
       <div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="Numéro Mobile Money · 8X XXX XX XX" aria-label="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
       <ErrorBox message={error} />
       {info && <div className="notice">{info}</div>}
-      <PillButton size="lg" onClick={() => void go()} disabled={busy}>{busy ? 'Un instant…' : `Payer maintenant · ${PRICE_LABEL[cur]}`}</PillButton>
+      <PillButton size="lg" onClick={() => void go()} disabled={busy}>{busy ? 'Un instant…' : `${active ? 'Prolonger' : 'Payer maintenant'} · ${PRICE_LABEL[cur]}`}</PillButton>
       <span className="muted" style={{ textAlign: 'center' }}>Tu valides le paiement sur ton téléphone. Aucune donnée bancaire n'est stockée dans l'app.</span>
 
       <RowGroup label="Historique des paiements">

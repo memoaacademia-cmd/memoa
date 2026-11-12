@@ -584,3 +584,52 @@ a.pill-btn { text-decoration: none; }
 
 /* Micro et globe côte à côte */
 .ed-tools-row { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+
+/* ---------- Lot 3 ---------- */
+/* Écran d'écriture (brouillon) : plus rien ne déborde ; si la place manque (clavier ouvert), la zone défile. */
+.editor { overflow: hidden; max-width: min(440px, 100vw); }
+.ed-top { gap: 6px; padding-left: 12px; padding-right: 12px; min-width: 0; }
+.ed-back { max-width: 40%; min-width: 0; flex: 0 1 auto; }
+.ed-status { flex: 1 1 auto; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-done { flex: none; padding: 0 16px; }
+.ed-main { overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.ed-body { min-height: 120px; overflow-wrap: anywhere; }
+.ed-extra { max-height: 32dvh; overflow-x: hidden; min-width: 0; }
+.ed-bar { gap: 6px; padding-left: 12px; padding-right: 12px; min-width: 0; overflow: hidden; }
+.ed-chip { padding: 0 12px; min-width: 0; flex: 0 1 auto; font-size: 13.5px; }
+.ed-chip.ed-mic { flex: none; }
+.ed-plus { flex: none; }
+@media (max-width: 380px) { .ed-chip { padding: 0 10px; font-size: 13px; gap: 4px; } .ed-back { max-width: 34%; } }
+
+/* Page de garde : aperçu et choix du modèle */
+.cover .dept { font-weight: 700; font-size: 14.5px; color: var(--cv-main, #0b5d54); }
+.cover .band { align-self: stretch; margin: 8px 0; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; border-top: 2px solid var(--cv-acc, #b8892b); border-bottom: 2px solid var(--cv-acc, #b8892b); }
+.cover .band small { color: var(--cv-acc, #b8892b); letter-spacing: .2em; }
+.cover .band .t { color: var(--cv-main, #0b5d54); text-transform: uppercase; text-align: center; }
+.tpl-picker { display: flex; flex-direction: column; gap: 8px; }
+.tpl-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tpl-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 10px; border-radius: 22px; border: 1.5px solid var(--line-strong); background: transparent; color: var(--text); font-size: 14px; font-weight: 600; }
+.tpl-chip.on { border-color: var(--btn); background: var(--surface-2); }
+.tpl-chip .sw { width: 18px; height: 18px; border-radius: 50%; border: 3px solid; display: inline-block; }
+
+/* Points gratuits dans l'Assistant */
+.as-title-wrap { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pts-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: var(--surface-2); color: var(--link); font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+.pts-chip.zero { background: #3a2a0e; color: #f7c777; }
+[data-theme='light'] .pts-chip.zero { background: #fcebd0; color: #8a4b00; }
+
+/* Carte Premium active (même doré que le bouton Premium) */
+.prem-gold { display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: 24px; background: linear-gradient(135deg, #fbe29a 0%, #f2b84a 38%, #d99a1f 70%, #f6cf70 100%); color: #3a2400; border: 1px solid #b9801a; box-shadow: 0 8px 22px rgba(185, 128, 26, .28); }
+.pg-pill { align-self: flex-start; background: #3a2400; color: #fbe29a; font-size: 12px; font-weight: 800; letter-spacing: .08em; padding: 6px 12px; border-radius: 999px; }
+.pg-date { font-family: var(--font-title); font-size: 22px; line-height: 1.2; font-weight: 800; }
+.pg-sub { font-size: 14px; line-height: 1.4; }
+
+/* Rappel d'expiration d'abonnement */
+.expiry-banner { display: flex; align-items: flex-start; gap: 8px; margin: 10px 16px 0; padding: 10px 6px 10px 12px; border-radius: 16px; background: #3a2a0e; color: #f7c777; font-size: 13.5px; line-height: 1.4; font-weight: 600; }
+[data-theme='light'] .expiry-banner { background: #fcebd0; color: #6e3a00; }
+.eb-text { flex: 1; display: flex; gap: 8px; color: inherit; }
+.eb-text svg { flex: none; margin-top: 2px; }
+.eb-x { flex: none; width: 32px; height: 32px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; }
+/* Barre du haut de l'éditeur avec le bouton « Brouillon » (lot 2) : tout reste sur une ligne, même sur un petit écran */
+.ed-draft { padding: 0 12px; font-size: 13.5px; }
+@media (max-width: 380px) { .ed-draft { padding: 0 10px; font-size: 13px; } .ed-done { padding: 0 12px; font-size: 14px; } }

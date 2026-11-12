@@ -72,6 +72,7 @@ const ICONS: Record<string, string> = {
   chevdown: 'M6 9 L12 15 L18 9',
   chevup: 'M6 15 L12 9 L18 15',
   chevright: 'M9 5 L16 12 L9 19',
+  bolt: 'M13 3 L5 14 H11 L10 21 L19 9 H13 Z',
   speaker: 'M4 9 H8 L13 5 V19 L8 15 H4 Z M16 9 A4 4 0 0 1 16 15 M18.5 6.5 A8 8 0 0 1 18.5 17.5',
   stop: 'M7 7 H17 V17 H7 Z',
   close: 'M6 6 L18 18 M18 6 L6 18',

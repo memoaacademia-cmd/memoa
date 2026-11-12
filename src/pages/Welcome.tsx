@@ -61,7 +61,7 @@ export function Welcome() {
 /* Étape 3 sur 4 : l'essai de 5 jours */
 export function TrialStep() {
   const nav = useNavigate()
-  const items = ['IA complète : notes, quiz, TP, audio et résumés', 'Sans carte bancaire', 'Ensuite, 20 points toutes les 5 heures, gratuitement']
+  const items = ['IA complète : notes, quiz, TP, audio et résumés', 'Sans carte bancaire', 'Ensuite, 20 points toutes les 7 heures, gratuitement']
   return (
     <main className="step-page">
       <div className="step-top"><span /><Skip to="/notifications-etape" /></div>

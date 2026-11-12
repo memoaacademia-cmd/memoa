@@ -3,6 +3,7 @@
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 import { adminClient, corsHeaders, json, requireUser, userClient, UUID } from '../_shared/common.ts'
+import { APP_GUIDE } from '../_shared/appGuide.ts'
 
 type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
 const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
@@ -24,9 +25,25 @@ const MAX_ALL_COURSES_CHARS = 6000
 // Après l'essai : « points » sur une fenêtre glissante. Limite atteinte : attendre ou passer à Premium.
 const TRIAL_DAYS = num('TRIAL_DAYS', 5)
 const TRIAL_HIDDEN_PER_DAY = num('TRIAL_HIDDEN_PER_DAY', 150) // plafond technique, jamais montré
-const FREE_POINTS = num('AI_FREE_POINTS', 20) // points par fenêtre — valeur provisoire à ajuster après mesure des coûts
-const WINDOW_HOURS = num('AI_WINDOW_HOURS', 5)
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 3, quiz: 3, tp_plan: 10, tp_write: 10, tp_revise: 3, summary: 3, enrich_note: 3, transcribe: 3 }
+const FREE_POINTS = num('AI_FREE_POINTS', 20) // quota unique, remis à zéro RESET_HOURS heures après qu'il est épuisé
+const RESET_HOURS = num('AI_RESET_HOURS', 7)
+const RESET_MS = RESET_HOURS * 3_600_000
+// Coût fixe par tâche. Les tâches sur des notes (LENGTH_TASKS) coûtent selon la longueur du texte envoyé.
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 3, tp_plan: 10, tp_write: 10, tp_revise: 3, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
+const LENGTH_TASKS: string[] = ['structure_notes', 'summary', 'enrich_note']
+const PAGE_CHARS = 1500 // une page environ
+function costOf(task: string, textLen: number): number {
+  if (!LENGTH_TASKS.includes(task)) return POINTS[task] ?? 1
+  if (textLen < PAGE_CHARS) return 4 // courte : moins d'une page
+  if (textLen <= 3 * PAGE_CHARS) return 8 // moyenne : 1 à 3 pages
+  if (textLen < 6 * PAGE_CHARS) return 14 // longue : plus de 3 pages
+  return 20 // très longue : 6 pages et plus (un cours entier)
+}
+const waitLabel = (ms: number) => {
+  const mins = Math.max(1, Math.ceil(ms / 60_000))
+  return mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}` : `${mins} min`
+}
+const premiumMsg = (wait: string) => `Tu as utilisé tes points gratuits. Reviens dans ${wait} ou passe à Premium pour continuer sans attendre.`
 const KIN_OFFSET_MS = 3_600_000
 const premiumMsg = (wait: string) => `Tu as utilisé tes points gratuits. Reviens dans ${wait} ou passe à Premium pour continuer sans attendre.`
 
@@ -41,37 +58,63 @@ async function trialStart(admin: ReturnType<typeof adminClient>, userId: string)
   return data?.started_at ? new Date(data.started_at) : own
 }
 
-/** Renvoie null si l'accès est permis, sinon { status, error } à renvoyer tel quel. */
-async function checkAccess(admin: ReturnType<typeof adminClient>, userId: string, task: string, sub: { expires_at: string } | null) {
+type Access = { mode: 'premium' } | { mode: 'trial' } | { mode: 'points'; left: number; resetAt: number | null }
+
+/** Où en est l'étudiant : Premium, essai de 5 jours, ou points gratuits (solde et heure de remise à zéro). */
+async function accessState(admin: ReturnType<typeof adminClient>, userId: string, sub: { expires_at: string } | null): Promise<Access> {
+  if (sub) return { mode: 'premium' }
   const now = Date.now()
-  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
-  if (sub) {
-    const { count } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart.toISOString())
-    return (count ?? 0) >= PREMIUM_PER_DAY ? { status: 429, error: "Tu as atteint la limite d'utilisation d'aujourd'hui. Elle se renouvelle demain." } : null
-  }
   // Fin de l'essai = minuit (Kinshasa) à la fin du dernier jour calendaire.
   const start = await trialStart(admin, userId)
   const kinDay = new Date(start.getTime() + KIN_OFFSET_MS); kinDay.setUTCHours(0, 0, 0, 0)
   const trialEnd = kinDay.getTime() + TRIAL_DAYS * 86_400_000 - KIN_OFFSET_MS
-  if (now < trialEnd) {
+  if (now < trialEnd) return { mode: 'trial' }
+  // Les demandes faites pendant l'essai ou un abonnement ne comptent pas dans les points gratuits.
+  const { data: last } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).order('expires_at', { ascending: false }).limit(1)
+  const paidUntil = last?.[0]?.expires_at ? new Date(last[0].expires_at).getTime() : 0
+  const from = Math.max(trialEnd, paidUntil, now - 14 * 86_400_000)
+  const { data: rows } = await admin.from('ai_usage').select('task,points,created_at').eq('user_id', userId).gte('created_at', new Date(from).toISOString()).order('created_at', { ascending: true }).limit(2000)
+  // On rejoue l'historique : quand le solde tombe à 0, un compte à rebours de RESET_HOURS démarre, puis les 20 points reviennent d'un coup.
+  let bal = FREE_POINTS
+  let zeroAt: number | null = null
+  for (const r of rows ?? []) {
+    if (r.task === 'review_doc') continue
+    const t = new Date(r.created_at).getTime()
+    if (zeroAt !== null && t >= zeroAt + RESET_MS) { bal = FREE_POINTS; zeroAt = null }
+    bal -= (r.points ?? POINTS[r.task] ?? 1)
+    if (bal <= 0) { bal = 0; if (zeroAt === null) zeroAt = t }
+  }
+  if (zeroAt !== null && now >= zeroAt + RESET_MS) { bal = FREE_POINTS; zeroAt = null }
+  return { mode: 'points', left: bal, resetAt: zeroAt === null ? null : zeroAt + RESET_MS }
+}
+
+/** Ce que l'appli affiche : solde et heure de remise à zéro (null pendant l'essai et avec Premium). */
+const pointsPayload = (st: Access) => (st.mode === 'points' ? { left: st.left, max: FREE_POINTS, resetAt: st.resetAt ? new Date(st.resetAt).toISOString() : null } : null)
+
+/** Enregistre une consommation. Si la colonne « points » n'existe pas encore (migration pas exécutée), on enregistre quand même sans elle. */
+async function logUsage(admin: ReturnType<typeof adminClient>, row: { user_id: string; task: string; model: string; tokens_in: number; tokens_out: number; points: number }) {
+  const { error } = await admin.from('ai_usage').insert(row)
+  if (error) {
+    const { points: _p, ...plain } = row
+    await admin.from('ai_usage').insert(plain)
+  }
+}
+
+/** Renvoie null si l'accès est permis, sinon { status, error } à renvoyer tel quel. */
+async function checkAccess(admin: ReturnType<typeof adminClient>, userId: string, task: string, sub: { expires_at: string } | null, textLen = 0) {
+  const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
+  const st = await accessState(admin, userId, sub)
+  if (st.mode === 'premium' || st.mode === 'trial') {
     const { count } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart.toISOString())
+    if (st.mode === 'premium') return (count ?? 0) >= PREMIUM_PER_DAY ? { status: 429, error: "Tu as atteint la limite d'utilisation d'aujourd'hui. Elle se renouvelle demain." } : null
     return (count ?? 0) >= TRIAL_HIDDEN_PER_DAY ? { status: 429, error: "Beaucoup de demandes aujourd'hui : fais une pause et reviens demain." } : null
   }
-  const since = new Date(now - WINDOW_HOURS * 3_600_000).toISOString()
-  const { data: rows } = await admin.from('ai_usage').select('task,created_at').eq('user_id', userId).gte('created_at', since).order('created_at', { ascending: true })
-  const cost = POINTS[task] ?? 1
-  let used = (rows ?? []).reduce((s, r) => s + (POINTS[r.task] ?? 1), 0)
-  if (used + cost <= FREE_POINTS) return null
-  // Quand les plus anciennes demandes sortent de la fenêtre, assez de points reviennent : on calcule l'attente.
-  let freeAt = now
-  for (const r of rows ?? []) {
-    used -= POINTS[r.task] ?? 1
-    freeAt = new Date(r.created_at).getTime() + WINDOW_HOURS * 3_600_000
-    if (used + cost <= FREE_POINTS) break
-  }
-  const mins = Math.max(1, Math.ceil((freeAt - now) / 60_000))
-  const wait = mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, '0')}` : `${mins} min`
-  return { status: 429, error: premiumMsg(wait), code: 'premium_required' }
+  const cost = costOf(task, textLen)
+  if (st.left >= cost) return null
+  // Blocage net : jamais de traitement partiel.
+  if (st.left <= 0 && st.resetAt) return { status: 429, error: premiumMsg(waitLabel(st.resetAt - Date.now())), code: 'premium_required' }
+  const what = LENGTH_TASKS.includes(task) ? 'cette note' : task.startsWith('tp_') ? 'ce travail' : 'cette demande'
+  return { status: 429, error: `Il te reste ${st.left} point${st.left > 1 ? 's' : ''}, ${what} en demande ${cost}. Passe à Premium pour continuer.`, code: 'premium_required' }
 }
 
 // ---- Modèle par tâche : tâches simples → modèle économique ; rédaction longue → modèle plus fort ----
@@ -98,7 +141,7 @@ const REVIEW_SYSTEM =
 
 const SYSTEM: Record<Task, string> = {
   review_doc: REVIEW_SYSTEM,
-  chat: BASE,
+  chat: BASE + APP_GUIDE,
   structure_notes:
     BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
@@ -224,7 +267,7 @@ async function transcribe(req: Request, userId: string) {
     const data = await res.json()
     const text = String(data.text ?? '').trim()
     if (!text) return json(req, 422, { error: "Je n'ai entendu aucune parole dans cet audio." })
-    await admin.from('ai_usage').insert({ user_id: userId, task: 'transcribe', model, tokens_in: 0, tokens_out: 0 })
+    await logUsage(admin, { user_id: userId, task: 'transcribe', model, tokens_in: 0, tokens_out: 0, points: POINTS.transcribe })
     return json(req, 200, { text })
   } catch (e) {
     console.error('ai-gateway audio :', (e as Error).message)
@@ -249,7 +292,7 @@ async function reviewDoc(req: Request, userId: string, body: Record<string, unkn
   try {
     const r = await callModel(MODEL_FAST, SYSTEM.review_doc, [{ role: 'user', content: `Titre : ${doc.title}\n\nDébut du document :\n${text.slice(0, 3000)}` }], 20)
     if (/^\W*refus/i.test(r.text)) verdict = 'refus'
-    await admin.from('ai_usage').insert({ user_id: userId, task: 'review_doc', model: MODEL_FAST, tokens_in: r.tokensIn, tokens_out: r.tokensOut })
+    await logUsage(admin, { user_id: userId, task: 'review_doc', model: MODEL_FAST, tokens_in: r.tokensIn, tokens_out: r.tokensOut, points: 0 })
   } catch (e) {
     console.error('review_doc', (e as Error).message)
   }
@@ -290,6 +333,13 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json(req, 400, { error: 'Requête invalide.' }) }
 
+  // Solde de points (affiché dans l'Assistant) : aucune consommation.
+  if (body.task === 'balance') {
+    const adm = adminClient()
+    const { data: sb } = await adm.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
+    return json(req, 200, { points: pointsPayload(await accessState(adm, user.id, sb)) })
+  }
+
   const task = body.task as Task
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
   const courseId = typeof body.courseId === 'string' && UUID.test(body.courseId) ? body.courseId : null
@@ -310,7 +360,7 @@ Deno.serve(async (req) => {
     admin.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
   ])
   if ((lastMinute ?? 0) >= PER_MINUTE) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
-  const denied = await checkAccess(admin, user.id, task, sub)
+  const denied = await checkAccess(admin, user.id, task, sub, prompt.length)
   if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
 
   // ---- Contexte du cours : lu avec les droits de l'étudiant (RLS) → impossible de lire le cours d'un autre ----
@@ -373,7 +423,7 @@ Deno.serve(async (req) => {
   }
 
   // ---- Enregistrement (service_role : les étudiants ne peuvent pas écrire ces tables) ----
-  await admin.from('ai_usage').insert({ user_id: user.id, task, model, tokens_in: result.tokensIn, tokens_out: result.tokensOut })
+  await logUsage(admin, { user_id: user.id, task, model, tokens_in: result.tokensIn, tokens_out: result.tokensOut, points: costOf(task, prompt.length) })
   if (task === 'chat') {
     if (!convId) {
       const { data: created } = await admin.from('ai_conversations').insert({ user_id: user.id, title: prompt.slice(0, 60) }).select('id').single()
@@ -386,5 +436,5 @@ Deno.serve(async (req) => {
       ])
     }
   }
-  return json(req, 200, { reply: result.text, conversationId: task === 'chat' ? convId : null })
+  return json(req, 200, { reply: result.text, conversationId: task === 'chat' ? convId : null, points: pointsPayload(await accessState(admin, user.id, sub)) })
 })

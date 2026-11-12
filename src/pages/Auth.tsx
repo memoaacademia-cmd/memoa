@@ -186,12 +186,14 @@ function strength(p: string): { pct: number; label: string } {
 /* Après Google : créer un mot de passe + ajouter le numéro, pour se reconnecter avec email + mot de passe. */
 export function GoogleNext() {
   const nav = useNavigate()
-  const { user, loading } = useAuth()
+  const { user, loading, refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [phone, setPhone] = useState('')
   const st = strength(password)
+  // Mot de passe déjà choisi (ancien compte Google) : il ne manque que le numéro.
+  const onlyPhone = !!user?.passwordSet
 
   useEffect(() => {
     if (!loading && !user) nav('/creer-un-compte', { replace: true })
@@ -199,12 +201,14 @@ export function GoogleNext() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
-    if (password !== confirm) return setError('Les deux mots de passe ne sont pas identiques.')
+    if (!onlyPhone && password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
+    if (!onlyPhone && password !== confirm) return setError('Les deux mots de passe ne sont pas identiques.')
     const tel = cleanPhone(phone)
     if (!/^[0-9]{9}$/.test(tel)) return setError('Entre ton numéro à 9 chiffres (sans le +243).')
     const ok = await run(async () => {
-      await setPasswordAndPhone(password, '+243' + tel)
+      await setPasswordAndPhone(onlyPhone ? null : password, '+243' + tel)
+      // On relit le compte AVANT de continuer : sinon l'ancienne information (« mot de passe manquant ») nous ramènerait ici.
+      await refresh()
       return true
     })
     if (ok) nav('/inscription', { replace: true })
@@ -212,9 +216,11 @@ export function GoogleNext() {
 
   return (
     <main className="page auth">
-      <Header title="Sécurise ton compte" text="Crée un mot de passe : la prochaine fois, tu te connecteras avec ton email et ce mot de passe." />
+      <Header title="Sécurise ton compte" text={onlyPhone ? 'Ajoute ton numéro de téléphone pour continuer : il sert à protéger ton compte.' : 'Crée un mot de passe et ajoute ton numéro : la prochaine fois, tu te connecteras avec ton email et ce mot de passe.'} />
       {user && <div className="card" style={{ flexDirection: 'row', alignItems: 'center' }}><GoogleG /><span>{user.email}</span></div>}
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+        {!onlyPhone && (
+          <>
         <div className="field">
           <label htmlFor="mdp">Crée un mot de passe</label>
           <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -225,6 +231,8 @@ export function GoogleNext() {
           <label htmlFor="mdp2">Confirme le mot de passe</label>
           <input id="mdp2" className="input" type="password" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
+          </>
+        )}
         <div className="field">
           <label htmlFor="tel">Numéro de téléphone</label>
           <div className="phone"><span>+243</span><input id="tel" type="tel" inputMode="numeric" placeholder="8X XXX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>

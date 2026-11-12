@@ -49,30 +49,61 @@ export interface Dictation {
   stop: () => void
 }
 
-/** Démarre la dictée. onText reçoit le texte définitif au fur et à mesure ; onEnd est appelé à l'arrêt. */
+/** Durée maximale d'une dictée (le navigateur coupe tout seul après quelques secondes de silence : on relance automatiquement). */
+const MAX_DICTATION_MS = 30 * 60_000
+
+/**
+ * Démarre la dictée. onText reçoit le texte définitif au fur et à mesure ; onEnd est appelé à l'arrêt.
+ * La dictée continue tant que l'étudiant ne l'arrête pas : les silences et les coupures automatiques du navigateur
+ * (quelques secondes, parfois une minute) relancent l'écoute sans qu'il s'en aperçoive. Limite : 30 minutes.
+ */
 export function startDictation(onText: (t: string) => void, onEnd: (error?: string) => void): Dictation | null {
   const Ctor = recognitionCtor()
   if (!Ctor) return null
-  const r = new Ctor()
-  r.lang = 'fr-FR'
-  r.interimResults = false
-  r.continuous = true
-  let err: string | undefined
-  r.onresult = (e) => {
-    let out = ''
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) out += e.results[i][0].transcript
+  const startedAt = Date.now()
+  let stopped = false
+  let current: Recognition | null = null
+  let quick = 0 // coupures rapprochées d'affilée : au-delà de 3, on s'arrête (micro indisponible)
+  let began = 0
+
+  const begin = (): boolean => {
+    const r = new Ctor()
+    r.lang = 'fr-FR'
+    r.interimResults = false
+    r.continuous = true
+    let err: string | undefined
+    r.onresult = (e) => {
+      let out = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) out += e.results[i][0].transcript
+      }
+      if (out.trim()) onText(out.trim())
     }
-    if (out.trim()) onText(out.trim())
+    r.onerror = (e) => { err = e.error }
+    r.onend = () => {
+      if (stopped) return onEnd(undefined)
+      const fatal = err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture'
+      if (fatal || Date.now() - startedAt > MAX_DICTATION_MS) { stopped = true; return onEnd(fatal ? err : undefined) }
+      quick = Date.now() - began < 700 ? quick + 1 : 0
+      if (quick >= 3) { stopped = true; return onEnd(err) }
+      // Coupure automatique (silence, limite du navigateur) : on relance l'écoute.
+      window.setTimeout(() => {
+        if (stopped) return
+        if (!begin()) { stopped = true; onEnd(err) }
+      }, 200)
+    }
+    try {
+      began = Date.now()
+      r.start()
+    } catch {
+      return false
+    }
+    current = r
+    return true
   }
-  r.onerror = (e) => { err = e.error }
-  r.onend = () => onEnd(err)
-  try {
-    r.start()
-  } catch {
-    return null
-  }
-  return { stop: () => { try { r.stop() } catch { /* déjà arrêtée */ } } }
+
+  if (!begin()) return null
+  return { stop: () => { stopped = true; try { current?.stop() } catch { /* déjà arrêtée */ } } }
 }
 
 function plain(text: string): string {

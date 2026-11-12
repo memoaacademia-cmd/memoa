@@ -11,8 +11,10 @@ export interface AuthUser {
   id: string
   email: string
   phone: string | null
-  /** Compte créé via Google qui n'a pas encore choisi de mot de passe. */
+  /** Compte Google qui n'a pas encore choisi son mot de passe ET ajouté son numéro : rien d'autre n'est accessible avant. */
   needsPassword: boolean
+  /** Le mot de passe est déjà choisi (il ne manque alors que le numéro). */
+  passwordSet: boolean
 }
 
 const sb = () => {
@@ -65,7 +67,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!isConfigured) {
     const db = loadDemo()
     const u = db.users.find((x) => x.id === db.session)
-    return u ? { id: u.id, email: u.email, phone: u.phone, needsPassword: u.password === '' } : null
+    return u ? { id: u.id, email: u.email, phone: u.phone, needsPassword: u.password === '' || !u.phone, passwordSet: u.password !== '' } : null
   }
   let res: Awaited<ReturnType<ReturnType<typeof sb>['auth']['getSession']>>
   try {
@@ -85,12 +87,21 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     writeUserCache(null)
     return null
   }
-  const viaGoogle = u.app_metadata?.provider === 'google'
+  // Compte Google : on regarde TOUS les moyens de connexion du compte, pas seulement le premier (« provider »).
+  const providers = ((u.app_metadata?.providers as string[] | undefined) ?? []).concat(String(u.app_metadata?.provider ?? ''))
+  const viaGoogle = providers.includes('google')
+  // Un compte créé d'abord avec e-mail + mot de passe a déjà ses identifiants : on ne lui redemande rien.
+  const hasEmailLogin = (u.identities ?? []).some((i) => i.provider === 'email')
+  const phone = (u.user_metadata?.phone as string | undefined) ?? u.phone ?? null
+  const phoneOk = String(phone ?? '').replace(/\D/g, '').length >= 9
+  const passwordSet = hasEmailLogin || !!u.user_metadata?.password_set
   const user: AuthUser = {
     id: u.id,
     email: u.email ?? '',
-    phone: (u.user_metadata?.phone as string) ?? null,
-    needsPassword: viaGoogle && !u.user_metadata?.password_set
+    phone: phone || null,
+    // Compte venu de Google : mot de passe ET numéro obligatoires, toujours, avant d'accéder à quoi que ce soit.
+    needsPassword: viaGoogle && !hasEmailLogin && !(passwordSet && phoneOk),
+    passwordSet
   }
   writeUserCache(user)
   return user
@@ -209,18 +220,18 @@ export async function sendFeedback(userId: string, kind: FeedbackKind, message: 
 }
 
 /** Après Google : création du mot de passe + numéro, pour pouvoir se reconnecter avec email + mot de passe. */
-export async function setPasswordAndPhone(password: string, phone: string): Promise<void> {
+export async function setPasswordAndPhone(password: string | null, phone: string): Promise<void> {
   if (!isConfigured) {
     const db = loadDemo()
     const u = db.users.find((x) => x.id === db.session)
     if (u) {
-      u.password = password
+      if (password) u.password = password
       u.phone = phone
       saveDemo(db)
     }
     return
   }
-  const { error } = await sb().auth.updateUser({ password, data: { phone, password_set: true } })
+  const { error } = await sb().auth.updateUser({ ...(password ? { password } : {}), data: { phone, password_set: true } })
   if (error) throw error
 }
 
@@ -632,12 +643,29 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
 }
 
 
+/** Points gratuits : solde, maximum, et heure de remise à zéro quand le solde est à 0 (null pendant l'essai et avec Premium). */
+export interface PointsInfo {
+  left: number
+  max: number
+  resetAt: string | null
+}
+
 export interface AiResult {
   reply: string
   conversationId: string | null
+  /** Solde de points après cette demande (absent en mode démo). */
+  points?: PointsInfo | null
+}
+
+/** Solde de points de l'étudiant, sans rien consommer. null = essai ou Premium (rien à afficher). */
+export async function fetchPoints(): Promise<PointsInfo | null> {
+  if (!isConfigured) return null
+  const r = await invoke<{ points: PointsInfo | null }>('bright-worker', { task: 'balance' }, 'Solde indisponible.')
+  return r.points ?? null
 }
 
 /** Toutes les tâches IA passent par la fonction serveur « ai-gateway » : aucune clé d'IA dans le navigateur. */
+
 export async function askAI(args: {
   task: AiTask
   prompt: string
@@ -730,6 +758,17 @@ export async function hasPremium(userId: string): Promise<boolean> {
   void userId
   const { data } = await sb().from('subscriptions').select('expires_at').gt('expires_at', new Date().toISOString()).limit(1)
   return (data ?? []).length > 0
+}
+
+/** Dernier abonnement de l'étudiant (actif ou terminé), ou null s'il n'en a jamais eu. */
+export async function getSubscription(userId: string): Promise<{ expires_at: string } | null> {
+  if (!isConfigured) {
+    const paid = loadDemo().payments.filter((p) => p.status === 'paid').sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    return paid ? { expires_at: new Date(new Date(paid.created_at).getTime() + 30 * 86_400_000).toISOString() } : null
+  }
+  void userId
+  const { data } = await sb().from('subscriptions').select('expires_at').eq('user_id', userId).order('expires_at', { ascending: false }).limit(1)
+  return data?.[0] ? { expires_at: data[0].expires_at as string } : null
 }
 
 /* ------------------- NOTIFICATIONS « LE SAVAIS-TU ? » ------------------- */

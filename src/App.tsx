@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-
 import { Brand, NavBar, Spinner } from './components/ui'
 import MiniPlayer from './components/MiniPlayer'
 import { DraftWatcher } from './components/Drafts'
+import ExpiryBanner from './components/ExpiryBanner'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import { NotifStep, TrialStep, Welcome } from './pages/Welcome'
@@ -71,6 +72,8 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   if (recovery && user) return <Navigate to="/nouveau-mot-de-passe" replace />
 
   if (need === 'public') {
+    // Compte Google sans mot de passe ou sans numéro : même sur la page de connexion, on l'envoie finir cette étape.
+    if (user && user.needsPassword && loc.pathname !== '/google-suite') return <Navigate to="/google-suite" replace />
     if (user && !user.needsPassword && loc.pathname !== '/google-suite' && profile?.memo_animal) return <Navigate to="/" replace />
     return <div className="shell"><Outlet /></div>
   }
@@ -84,6 +87,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
+      <ExpiryBanner />
       <Outlet />
       <MiniPlayer />
       <NavBar />

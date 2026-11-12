@@ -11,7 +11,9 @@ import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
+import { buildCoursePdf, buildTpPdf, COVER_ORDER, COVER_TEMPLATES, stripAiNoise, splitTpTitle, type CoverTemplate } from '../lib/pdf'
+import { officialName } from '../lib/names'
+import { usePref } from '../lib/prefs'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -432,7 +434,7 @@ function QuizScreen({ qs, raw, onClose, onNext, loading, loadError }: { qs: Quiz
 export function CourseDetail() {
   const { id = '' } = useParams()
   const { user, profile } = useAuth()
-  const profileName = profile?.full_name ?? ''
+  const profileName = officialName(profile)
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
   const { busy, error, setError, run } = useAction()
@@ -858,6 +860,10 @@ export function TpAssistant() {
   const { profile } = useAuth()
   const course = useLoad(() => getCourse(id), [id])
   const { busy, error, setError, run } = useAction()
+  // Modèle de page de garde choisi : retenu d'un TP à l'autre.
+  const [tplPref, setTplPref] = usePref('tp-template', 'classique')
+  const tpl: CoverTemplate = COVER_ORDER.includes(tplPref as CoverTemplate) ? (tplPref as CoverTemplate) : 'classique'
+  const setTpl = (t: CoverTemplate) => setTplPref(t)
   const [title, setTitle] = useState('')
   const [brief, setBrief] = useState('')
   const [atts, setAtts] = useState<Attach[]>([])
@@ -929,7 +935,7 @@ export function TpAssistant() {
     const blob = await run(() => buildTpPdf({
       university: profile.university, faculty: profile.faculty, department: profile.department,
       promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl,
-      title, course: course.data?.title ?? '', student: profile.full_name, year
+      title, course: course.data?.title ?? '', student: officialName(profile), year, template: tpl
     }, doc))
     if (blob) saveBlob(title || 'TP', blob)
   }
@@ -1023,17 +1029,33 @@ export function TpAssistant() {
 
       {doc && (
         <>
-          <div className="cover">
+          <div className="tpl-picker" role="radiogroup" aria-label="Modèle de page de garde">
+            <span className="muted" style={{ fontSize: 13, fontWeight: 600 }}>Modèle de page de garde</span>
+            <div className="tpl-row">
+              {COVER_ORDER.map((id) => {
+                const t = COVER_TEMPLATES[id]
+                return (
+                  <button key={id} type="button" role="radio" aria-checked={tpl === id} className={'tpl-chip' + (tpl === id ? ' on' : '')} onClick={() => setTpl(id)}>
+                    <span className="sw" style={{ background: `rgb(${t.main.join(',')})`, borderColor: `rgb(${t.accent.join(',')})` }} />
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="cover" style={{ ['--cv-main' as string]: `rgb(${COVER_TEMPLATES[tpl].main.join(',')})`, ['--cv-acc' as string]: `rgb(${COVER_TEMPLATES[tpl].accent.join(',')})` }}>
             <small>République démocratique du Congo</small>
             <span className="t" style={{ fontSize: 16 }}>{profile?.university ? universityLabel(profile.university) : ''}</span>
             {logoUrl && <img src={logoUrl} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
             <span className="s">{profile?.faculty}</span>
-            <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
-            <hr />
-            {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
-            <span className="t">{splitTpTitle(title).title}</span>
+            <span className="s dept">Département : {profile?.department}</span>
+            <span className="s">{profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
+            <div className="band">
+              {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
+              <span className="t">{splitTpTitle(title).title}</span>
+            </div>
             <span className="s">Cours : {course.data?.title}</span>
-            <span className="s">Présenté par : {profile?.full_name}</span>
+            <span className="s">Présenté par : {officialName(profile)}</span>
             <span className="s">Année académique {year}</span>
           </div>
           <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
