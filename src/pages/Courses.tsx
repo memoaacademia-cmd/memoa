@@ -38,7 +38,7 @@ export function NewCourse() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [consignes, setConsignes] = useState('')
-  const [web, setWeb] = useState(true)
+  const [web, setWeb] = useState(false) // éteinte par défaut
   const [step, setStep] = useState('')
   const [source, setSource] = useState('texte')
   const [listening, setListening] = useState(false)
@@ -253,23 +253,35 @@ export function Backpack() {
 
   const all = data ?? []
   const [qc, setQc] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const shown = all.filter((c) => c.title.toLowerCase().includes(qc.trim().toLowerCase()))
   const totalNotes = all.reduce((n, c) => n + c.notes_count, 0)
 
   return (
     <main className="page" style={{ gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
-        <span className="muted">{all.length} {all.length > 1 ? 'cours' : 'cours'} · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
+          <span className="muted">{all.length} {all.length > 1 ? 'cours' : 'cours'} · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
+        </div>
+        <button type="button" className={'round-search' + (searchOpen ? ' on' : '')} aria-label="Chercher un cours" aria-expanded={searchOpen} onClick={() => { if (searchOpen) setQc(''); setSearchOpen((v) => !v) }}>
+          <Icon name="search" size={22} />
+        </button>
       </div>
       <PillButton size="lg" to="/cours"><Icon name="plus" size={22} stroke={2.4} />Nouveau cours</PillButton>
+      {searchOpen && (
+        <div className="cs-bar" role="search">
+          <Icon name="search" size={20} color="var(--text-3)" />
+          <input autoFocus type="search" value={qc} onChange={(e) => setQc(e.target.value)} placeholder="Chercher un cours" aria-label="Chercher un cours" />
+          <button type="button" className="cs-x" aria-label="Fermer la recherche" onClick={() => { setQc(''); setSearchOpen(false) }}><Icon name="close" size={18} stroke={2.2} /></button>
+        </div>
+      )}
       <ErrorBox message={error || actionError} />
       <DraftsSection drafts={drafts} now={now} onDelete={(d) => void deleteDraft(d.id).then(reloadDrafts)} />
       {loading ? <Spinner /> : error && !all.length ? null : !all.length ? (
         <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici." />
       ) : (
         <>
-          <PillInput type="search" value={qc} onChange={(e) => setQc(e.target.value)} placeholder="Chercher un cours" aria-label="Chercher un cours" />
           <RowGroup>
             {shown.length ? shown.map((c) => (
               <Row key={c.id} icon="book" title={c.title} sub={`${c.notes_count} ${c.notes_count > 1 ? 'notes' : 'note'}`} to={`/sac/${c.id}`} />
@@ -455,7 +467,7 @@ export function CourseDetail() {
   const [noteTitle, setNoteTitle] = useState('')
   const [noteText, setNoteText] = useState('')
   const [noteGuide, setNoteGuide] = useState('')
-  const [noteWeb, setNoteWeb] = useState(true)
+  const [noteWeb, setNoteWeb] = useState(false) // éteinte par défaut
   const [modify, setModify] = useState(false)
   const [mainId, setMainId] = useState<string | null>(null)
   const [draftId, setDraftId] = useState<string | null>(null)

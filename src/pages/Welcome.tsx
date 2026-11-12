@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Icon, Logo, MemoHero, Steps } from '../components/ui'
+import { Icon, Logo, MemoAvatar, MemoHero, Steps } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { firstNameOf } from '../lib/names'
 import { enablePush, needsInstallFirst, pushSupported } from '../lib/push'
 
 function Skip({ to }: { to: string }) {
@@ -9,24 +10,28 @@ function Skip({ to }: { to: string }) {
   return <button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={() => nav(to, { replace: true })}>Passer</button>
 }
 
-/* Cartes de présentation (avant le profil) : chaque carte résume une fonction de Memoa. */
-const CARDS: { icon: string; title: string; text: string }[] = [
-  { icon: 'text', title: 'Tes cours, enfin simples', text: 'Écris, dicte ou photographie tes notes. Memoa les range dans ton sac à dos, cours par cours.' },
-  { icon: 'sparkle', title: 'Résumés et notes enrichies', text: 'L’IA structure tes notes, les complète et en tire un résumé clair à relire avant l’examen.' },
-  { icon: 'quiz', title: 'Révise avec des quiz', text: 'Des quiz tirés de tes propres notes, avec la correction. Un quiz suivant, avec de nouvelles questions, quand tu veux.' },
-  { icon: 'book', title: 'Assistant TP', text: 'Plan, rédaction et page de garde de ton université, puis un PDF prêt à remettre.' },
-  { icon: 'shelf', title: 'Librairie de promotion', text: 'Retrouve les documents partagés par ta promotion et partage les tiens.' },
-  { icon: 'chat', title: 'Un assistant qui te connaît', text: 'Pose tes questions à ton Memo : il s’appuie sur tes notes. Tu peux aussi l’écouter te lire un cours.' }
+/* Présentation de l'appli par le Memo de l'étudiant : une fois son animal adopté et nommé, il lui fait visiter Memoa. */
+const tour = (me: string, first: string): { icon: string; tag: string; text: string }[] => [
+  { icon: 'sparkle', tag: 'Salut !', text: `Salut ${first} ! Moi, c’est ${me}, ton compagnon d’étude. Je te fais visiter Memoa en une minute.` },
+  { icon: 'text', tag: 'Tes cours', text: 'Ici, tu crées tes cours : écris, dicte ou photographie tes notes. Je les range dans ton sac à dos, cours par cours.' },
+  { icon: 'sparkle', tag: 'Notes et résumés', text: 'Je mets tes notes en forme, je les complète si tu veux, et je t’en fais un résumé clair à relire avant l’examen.' },
+  { icon: 'quiz', tag: 'Réviser', text: 'Je te pose des quiz tirés de tes propres notes, avec la correction. Et un autre quiz, avec de nouvelles questions, quand tu veux.' },
+  { icon: 'book', tag: 'Assistant TP', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec la page de garde de ton université.' },
+  { icon: 'shelf', tag: 'Librairie', text: 'Retrouve les documents partagés par ta promotion, et partage les tiens pour aider les autres.' },
+  { icon: 'chat', tag: 'Parle-moi', text: 'Dans l’assistant, pose-moi tes questions : je m’appuie sur tes notes. Je peux aussi te lire un cours à voix haute.' }
 ]
 
-/* Étape 1 : défilé de cartes. « Suivant » passe à la carte d'après, « Passer » saute tout. */
-export function Welcome() {
+export function Presentation() {
   const nav = useNavigate()
+  const { profile } = useAuth()
+  const me = profile?.memo_name || 'Memo'
+  const first = firstNameOf(profile) || 'toi'
+  const cards = tour(me, first)
   const [i, setI] = useState(0)
   const [x0, setX0] = useState<number | null>(null)
-  const last = i === CARDS.length - 1
-  const done = () => nav('/inscription', { replace: true })
-  const go = (n: number) => setI(Math.max(0, Math.min(CARDS.length - 1, n)))
+  const last = i === cards.length - 1
+  const done = () => nav('/essai', { replace: true })
+  const go = (n: number) => setI(Math.max(0, Math.min(cards.length - 1, n)))
   return (
     <main className="step-page">
       <div className="step-top"><span /><button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={done}>Passer</button></div>
@@ -41,19 +46,22 @@ export function Welcome() {
         }}
       >
         <div className="intro-track" style={{ transform: `translateX(-${i * 100}%)` }}>
-          {CARDS.map((c, k) => (
-            <section key={c.title} className="intro-card" aria-hidden={k !== i} aria-roledescription="carte" aria-label={`${k + 1} sur ${CARDS.length}`}>
-              <span className="intro-art"><Icon name={c.icon} size={60} stroke={1.6} /></span>
-              <h1 className="h1 big" style={{ margin: 0 }}>{c.title}</h1>
-              <p className="lead" style={{ margin: 0, maxWidth: 320 }}>{c.text}</p>
+          {cards.map((c, k) => (
+            <section key={c.tag} className="intro-card pres" aria-hidden={k !== i} aria-roledescription="carte" aria-label={`${k + 1} sur ${cards.length}`}>
+              <span className="pres-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={112} /></span>
+              <div className="pres-bubble">
+                <span className="pres-tag"><Icon name={c.icon} size={16} stroke={2} />{c.tag}</span>
+                <p>{c.text}</p>
+                <i aria-hidden="true" />
+              </div>
             </section>
           ))}
         </div>
       </div>
-      <div className="intro-dots" role="img" aria-label={`Carte ${i + 1} sur ${CARDS.length}`}>
-        {CARDS.map((c, k) => <i key={c.title} className={k === i ? 'on' : ''} />)}
+      <div className="intro-dots" role="img" aria-label={`Carte ${i + 1} sur ${cards.length}`}>
+        {cards.map((c, k) => <i key={c.tag} className={k === i ? 'on' : ''} />)}
       </div>
-      <button type="button" className="pill-btn" onClick={() => (last ? done() : go(i + 1))}>{last ? 'Commencer' : 'Suivant'}</button>
+      <button type="button" className="pill-btn" onClick={() => (last ? done() : go(i + 1))}>{last ? 'C’est parti' : 'Suivant'}</button>
     </main>
   )
 }

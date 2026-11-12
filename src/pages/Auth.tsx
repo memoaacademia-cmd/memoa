@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brand, ErrorBox, Icon, Logo, MemoHero, PillButton, PillInput, useAction } from '../components/ui'
+import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
@@ -45,7 +45,7 @@ function Header({ title, text }: { title: string; text: string }) {
   return (
     <>
       <div style={{ margin: '56px 0 12px' }}>
-        <Brand size={64} center />
+        <Brand size={44} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
         <h1 className="h1 big">{title}</h1>
@@ -128,7 +128,7 @@ export function Signup() {
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
     else {
       await refresh()
-      nav('/bienvenue', { replace: true })
+      nav('/inscription', { replace: true })
     }
   }
 
@@ -143,9 +143,11 @@ export function Signup() {
 
   return (
     <main className="page auth">
-      <MemoHero height={150} bubble="Salut ! Moi, c’est Memo. On crée ton compte ?" />
-      <h1 className="h1 big" style={{ margin: 0 }}>Crée ton compte</h1>
-      <p className="lead" style={{ margin: 0 }}>Ton numéro active ton essai gratuit de 5 jours. Un seul essai par numéro.</p>
+      <div style={{ margin: '40px 0 4px' }}>
+        <Brand size={44} />
+      </div>
+      <h1 className="h1 big" style={{ margin: 0, textAlign: 'center' }}>Crée ton compte</h1>
+      <p className="lead" style={{ margin: 0, textAlign: 'center' }}>Ton numéro active ton essai gratuit de 5 jours. Un seul essai par numéro.</p>
       <button type="button" className="btn ghost" onClick={google} disabled={busy} style={{ background: '#fff', color: '#0e1a2b', borderColor: '#b7c4be' }}>
         <GoogleG /> Continuer avec Google
       </button>

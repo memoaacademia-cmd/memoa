@@ -82,13 +82,12 @@ export default function Onboarding() {
 
   return (
     <main className="page auth">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8 }}>
         {!editing && <Steps n={2} />}
         <Brand size={44} />
-        {editing && <span className="label-mono">Mon parcours</span>}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h1 className="h1 big">Où étudies-tu ?</h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
+        <h1 className="h1 big">{editing ? 'Modifiez vos informations' : 'Présentez-vous'}</h1>
         <p className="lead">Memoa adapte tes cours et ta Librairie à ton parcours.</p>
       </div>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
@@ -260,13 +259,13 @@ export function PhotoStep() {
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {shown ? (
           <>
-            <button className="btn" type="button" onClick={() => nav('/essai', { replace: true })} disabled={busy}>Continuer</button>
+            <button className="btn" type="button" onClick={() => nav('/presentation', { replace: true })} disabled={busy}>Continuer</button>
             <button className="link" type="button" onClick={() => file.current?.click()} disabled={busy}>Choisir une autre photo</button>
           </>
         ) : (
           <>
             <button className="btn" type="button" onClick={() => file.current?.click()} disabled={busy}>{busy ? 'Un instant…' : 'Choisir une photo'}</button>
-            <button className="link" type="button" onClick={() => nav('/essai', { replace: true })} disabled={busy}>Passer</button>
+            <button className="link" type="button" onClick={() => nav('/presentation', { replace: true })} disabled={busy}>Passer</button>
           </>
         )}
       </div>

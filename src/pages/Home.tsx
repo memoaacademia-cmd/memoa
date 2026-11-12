@@ -6,6 +6,7 @@ import { listActivity, listCourses, searchNotes, type NoteHit } from '../lib/api
 import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
 import { currentStreak, lastWeek, memoMood } from '../lib/streak'
+import { usePoints } from '../lib/points'
 
 const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
@@ -20,6 +21,7 @@ export default function Home() {
   const courses = useLoad(() => listCourses(uid), [uid])
   const days = act.data ?? []
   const streak = currentStreak(days)
+  const pts = usePoints()
   const mood = memoMood(days)
   const first = firstNameOf(profile) || 'toi'
   const list = courses.data ?? []
@@ -48,7 +50,11 @@ export default function Home() {
       <div className="hm-top">
         <span className="hm-brand">memoa</span>
         <div className="hm-right">
-          <span className="hm-streak" aria-label={`${streak} jours de suite`}><Icon name="flame" size={18} />{streak}</span>
+          {pts && (
+            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants`}>
+              <Icon name="bolt" size={14} />{pts.left}
+            </span>
+          )}
           <Link to="/moi" className="hm-avatar" aria-label="Mon profil">
             {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : first.slice(0, 1).toUpperCase()}
           </Link>
@@ -103,7 +109,10 @@ export default function Home() {
         <div className="hm-memo-top">
           <span className="hm-memo-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={42} /></span>
           <div style={{ minWidth: 0 }}>
-            <strong>{streak > 0 ? `${streak} ${streak > 1 ? 'jours' : 'jour'} de suite` : 'Commence ta série'}</strong>
+            <strong>
+              {streak > 0 ? `${streak} ${streak > 1 ? 'jours' : 'jour'} de suite` : 'Commence ta série'}
+              <span className="hm-flame" aria-label={`${streak} jours de suite`}><Icon name="flame" size={14} />{streak}</span>
+            </strong>
             <span>{memoName} · {mood.text}</span>
           </div>
         </div>

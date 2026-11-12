@@ -35,7 +35,7 @@ export default function Assistant() {
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [listening, setListening] = useState(false)
-  const [web, setWeb] = useState(WEB_SEARCH_ENABLED)
+  const [web, setWeb] = useState(false) // éteinte par défaut : l'étudiant l'active quand il en a besoin
   const [attach, setAttach] = useState<{ name: string; text: string } | null>(null)
   const [reading, setReading] = useState('')
   const [sheet, setSheet] = useState<null | 'menu' | 'course' | 'plus' | 'search'>(null)
