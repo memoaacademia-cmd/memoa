@@ -13,12 +13,14 @@ export function Logo({ size = 32 }: { size?: number }) {
   )
 }
 
-/** Logo complet : les trois livres + le nom « memoa » à côté. */
-export function Brand({ size = 56, center = false }: { size?: number; center?: boolean }) {
+/** Marque des écrans d'accueil, d'inscription et de profil : uniquement le logo (sans le nom), toujours centré, dans son rond. */
+export function Brand({ size = 44 }: { size?: number; center?: boolean }) {
+  const circle = size + 32
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: Math.round(size * 0.22) }} aria-label="Memoa">
-      <Logo size={size} />
-      <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: Math.round(size * 0.7), letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>memoa</span>
+    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }} aria-label="Memoa">
+      <span style={{ width: circle, height: circle, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        <Logo size={size} />
+      </span>
     </div>
   )
 }
