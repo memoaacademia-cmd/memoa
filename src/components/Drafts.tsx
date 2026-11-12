@@ -23,7 +23,7 @@ export function DraftsSection({ drafts, now, onDelete, label = 'Brouillons en at
             <span className="rg-ico"><Icon name="pencil" size={22} /></span>
             <span className="rg-body">
               <span className="rg-title">{d.title.trim() || 'Sans titre'}</span>
-              <span className="rg-sub">{kindLabel(d)} · {excerpt(d.body, 70)}</span>
+              <span className="rg-sub">{kindLabel(d)} · {d.audio && !d.body.trim() ? 'Enregistrement audio à transcrire' : excerpt(d.body, 70)}</span>
               <span className={'rg-sub' + (isUrgent(d, now) ? ' dr-urgent' : '')}>Disparaît dans {timeLeft(d.expiresAt, now)}</span>
             </span>
           </button>
