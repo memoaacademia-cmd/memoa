@@ -107,7 +107,12 @@ export interface WriteArgs {
   texts: Record<number, string>
   onProgress: (done: number, total: number, current: string) => void
   onSave: (texts: Record<number, string>) => void
+  /** Renvoie true quand l'étudiant a demandé d'attendre ou d'abandonner : on s'arrête proprement entre deux parties. */
+  shouldStop?: () => boolean
 }
+
+/** Levée quand la rédaction est arrêtée volontairement (Attendre / Abandonner) : ce n'est pas une erreur. */
+export class TpStopped extends Error { constructor() { super('Rédaction arrêtée') } }
 
 /** Rédige le TP partie par partie. Ne refait que les parties manquantes ou incomplètes. Lève une erreur claire si une partie échoue : le travail déjà fait est conservé (onSave). */
 export async function writeTp(a: WriteArgs): Promise<string> {
@@ -118,13 +123,16 @@ export async function writeTp(a: WriteArgs): Promise<string> {
     const todo = parts.filter((p) => !partIsComplete(p, texts[p.n], round === 2))
     if (!todo.length) break
     for (const p of todo) {
+      if (a.shouldStop?.()) throw new TpStopped()
       a.onProgress(parts.length - todo.length + todo.indexOf(p), parts.length, p.title)
       const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
       const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
       const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }))
       const txt = cleanTpText(r.reply).trim()
+      // Abandon : on jette ce résultat. Attente : on le garde, la partie est payée et déjà faite.
       if (txt) texts[p.n] = txt
       a.onSave(texts)
+      if (a.shouldStop?.()) throw new TpStopped()
     }
   }
   const bad = missingParts(parts, texts, true)

@@ -2,7 +2,7 @@
 // L'étudiant peut changer de page dans l'appli, la rédaction continue ; en revenant, il retrouve l'avancement ou le résultat.
 import { useSyncExternalStore } from 'react'
 import { friendlyError } from './api'
-import { writeTp, clearProgress } from './tpwrite'
+import { writeTp, clearProgress, TpStopped } from './tpwrite'
 
 export interface TpJob {
   courseId: string
@@ -14,7 +14,14 @@ export interface TpJob {
   error: string | null
   /** La rédaction a été interrompue (appli en arrière-plan, coupure) : elle repart toute seule au retour. */
   interrupted: boolean
+  /** L'étudiant a appuyé sur « Attendre » : la partie en cours se termine, puis la rédaction s'arrête (le travail est gardé). */
+  stopping: boolean
+  /** La rédaction est en pause : « Reprendre la rédaction » repart où elle s'est arrêtée. */
+  paused: boolean
 }
+const stopFlags = new Map<string, 'pause' | 'abandon'>()
+// Numéro de lancement : un ancien lancement abandonné ne peut jamais écrire dans un nouveau.
+const gen = new Map<string, number>()
 
 const jobs = new Map<string, TpJob>()
 const args = new Map<string, Parameters<typeof writeTp>[0]>()
@@ -22,7 +29,7 @@ const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((f) => f())
 const subscribe = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f) } }
 const set = (id: string, patch: Partial<TpJob>) => {
-  const cur = jobs.get(id) ?? { courseId: id, running: false, step: '', texts: {}, result: null, error: null, interrupted: false }
+  const cur = jobs.get(id) ?? { courseId: id, running: false, step: '', texts: {}, result: null, error: null, interrupted: false, stopping: false, paused: false }
   jobs.set(id, { ...cur, ...patch })
   emit()
 }
@@ -60,18 +67,29 @@ async function run(id: string) {
   const a = args.get(id)
   if (!a) return
   const seed = jobs.get(id)?.texts
-  set(id, { running: true, error: null, result: null, interrupted: false, texts: seed && Object.keys(seed).length ? seed : a.texts })
+  const me = (gen.get(id) ?? 0) + 1
+  gen.set(id, me)
+  const stale = () => gen.get(id) !== me
+  stopFlags.delete(id)
+  set(id, { running: true, stopping: false, paused: false, error: null, result: null, interrupted: false, texts: seed && Object.keys(seed).length ? seed : a.texts })
   void keepAwake(true)
   try {
     const result = await writeTp({
       ...a,
       texts: jobs.get(id)?.texts ?? a.texts,
-      onProgress: (d, t, cur) => set(id, { step: `Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}` }),
-      onSave: (t) => { set(id, { texts: { ...t } }); a.onSave({ ...t }) }
+      shouldStop: () => stale() || stopFlags.has(id),
+      onProgress: (d, t, cur) => { if (!stale() && !stopFlags.has(id)) set(id, { step: `Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}` }) },
+      onSave: (t) => { if (stale()) return; set(id, { texts: { ...t } }); a.onSave({ ...t }) }
     })
+    if (stale()) return
     set(id, { running: false, step: '', result })
     void notify('Ton TP est prêt', 'Ouvre Memoa pour le télécharger en PDF.')
   } catch (e) {
+    if (stale()) return // abandonné : tout a déjà été effacé par abandonTpJob
+    if (e instanceof TpStopped || stopFlags.has(id)) {
+      set(id, { running: false, stopping: false, paused: true, step: '', error: null })
+      return
+    }
     const hidden = document.visibilityState === 'hidden'
     set(id, { running: false, step: '', error: friendlyError(e), interrupted: hidden })
     if (hidden) void notify('Ton TP est en pause', 'Reviens dans Memoa : la rédaction reprend où elle s’est arrêtée.')
@@ -97,6 +115,23 @@ export function takeTpResult(courseId: string): { text: string; texts: Record<nu
   clearProgress(courseId)
   emit()
   return out
+}
+
+/** « Attendre » : la partie en cours se termine, puis tout s'arrête. Rien n'est perdu ; on peut corriger l'énoncé ou le plan et reprendre. */
+export function pauseTpJob(courseId: string) {
+  const j = jobs.get(courseId)
+  if (!j?.running) return
+  stopFlags.set(courseId, 'pause')
+  set(courseId, { stopping: true, step: 'Je termine la partie en cours, puis je m’arrête…' })
+}
+
+/** « Abandonner » : on arrête tout et on efface le travail enregistré pour ce cours. L'écran se remet à zéro. */
+export function abandonTpJob(courseId: string) {
+  stopFlags.set(courseId, 'abandon')
+  gen.set(courseId, (gen.get(courseId) ?? 0) + 1)
+  jobs.delete(courseId); args.delete(courseId)
+  clearProgress(courseId)
+  emit()
 }
 
 export function dismissTpError(courseId: string) {
