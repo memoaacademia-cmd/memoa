@@ -7,6 +7,8 @@ export interface Voice {
   sub?: string
   /** Identifiant de ce qui est lu (ex. un message de l'Assistant), pour afficher « Arrêter » au bon endroit. */
   id?: string
+  /** Vrai quand la lecture est en pause (le mini-lecteur affiche alors « Reprendre »). */
+  paused?: boolean
 }
 let current: Voice | null = null
 let session = 0
@@ -110,41 +112,91 @@ function plain(text: string): string {
   return text.replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+// Lecture morceau par morceau : on garde la position pour pouvoir mettre en pause et reprendre.
+// (La pause native du navigateur ne marche pas sur beaucoup de téléphones Android : on arrête le morceau et on le relit au « Reprendre ».)
+let parts: string[] = []
+let idx = 0
+let paused = false
+let seq = 0
+let endCb: (() => void) | undefined
+let meta: Voice = { label: 'Lecture en cours' }
+
+function finish(my: number) {
+  if (my !== session) return
+  parts = []
+  paused = false
+  setCurrent(null)
+  endCb?.()
+}
+
+function playChunk(my: number) {
+  if (my !== session || paused) return
+  if (idx >= parts.length) return finish(my)
+  const synth = window.speechSynthesis
+  const mine = ++seq // ignore les événements tardifs d'un morceau annulé
+  const u = new SpeechSynthesisUtterance(parts[idx])
+  u.lang = 'fr-FR'
+  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith('fr'))
+  if (voice) u.voice = voice
+  u.rate = 1
+  u.onend = () => { if (mine !== seq || my !== session || paused) return; idx++; playChunk(my) }
+  u.onerror = (e) => {
+    if (mine !== seq || my !== session || paused) return
+    const err = (e as SpeechSynthesisErrorEvent).error
+    if (err === 'canceled' || err === 'interrupted') return
+    finish(my)
+  }
+  synth.speak(u)
+}
+
 /** Lit le texte à voix haute en français. Les textes longs sont coupés en morceaux (sinon certains téléphones s'arrêtent). */
-export function speak(text: string, onEnd?: () => void, meta: Voice = { label: 'Lecture en cours' }): boolean {
+export function speak(text: string, onEnd?: () => void, m: Voice = { label: 'Lecture en cours' }): boolean {
   if (!canSpeak()) return false
   const synth = window.speechSynthesis
   const my = ++session // les anciens morceaux annulés ne doivent plus rien déclencher
+  seq++
   synth.cancel()
   const chunks = plain(text).match(/[^.!?\n]+[.!?]*\s*/g) ?? []
-  const parts: string[] = []
+  const next: string[] = []
   let cur = ''
   for (const c of chunks) {
-    if ((cur + c).length > 220) { if (cur) parts.push(cur); cur = c } else cur += c
+    if ((cur + c).length > 220) { if (cur) next.push(cur); cur = c } else cur += c
   }
-  if (cur) parts.push(cur)
-  if (!parts.length) { setCurrent(null); return false }
-  const done = () => {
-    if (my !== session) return
-    setCurrent(null)
-    onEnd?.()
-  }
-  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith('fr'))
-  setCurrent(meta)
-  parts.forEach((p, i) => {
-    const u = new SpeechSynthesisUtterance(p)
-    u.lang = 'fr-FR'
-    if (voice) u.voice = voice
-    u.rate = 1
-    if (i === parts.length - 1) u.onend = done
-    u.onerror = done
-    synth.speak(u)
-  })
+  if (cur) next.push(cur)
+  if (!next.length) { setCurrent(null); return false }
+  parts = next
+  idx = 0
+  paused = false
+  endCb = onEnd
+  meta = m
+  setCurrent({ ...m, paused: false })
+  playChunk(my)
   return true
 }
 
+/** Met la lecture en pause (la phrase en cours sera relue depuis son début à la reprise). */
+export function pauseSpeaking() {
+  if (!current || paused || !parts.length) return
+  paused = true
+  seq++
+  if (canSpeak()) window.speechSynthesis.cancel()
+  setCurrent({ ...meta, paused: true })
+}
+
+export function resumeSpeaking() {
+  if (!current || !paused || !parts.length) return
+  paused = false
+  setCurrent({ ...meta, paused: false })
+  playChunk(session)
+}
+
+export function togglePause() { if (paused) resumeSpeaking(); else pauseSpeaking() }
+
 export function stopSpeaking() {
   session++
+  seq++
+  parts = []
+  paused = false
   if (canSpeak()) window.speechSynthesis.cancel()
   if (current) setCurrent(null)
 }

@@ -28,13 +28,21 @@ self.addEventListener('fetch', (e) => {
   }
   if (url.origin !== self.location.origin) return
   // Pages : le réseau d'abord (toujours la dernière version), le cache en secours hors connexion.
+  // Sans réseau on ouvre la copie tout de suite ; avec un signal faible on n'attend que 3 s avant de la prendre.
   if (req.mode === 'navigate') {
+    const fromCache = () => caches.match(req).then((r) => r || caches.match('./'))
     e.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone()
-        caches.open(CACHE).then((c) => c.put(req, copy))
-        return res
-      }).catch(() => caches.match(req).then((r) => r || caches.match('./')))
+      (self.navigator && self.navigator.onLine === false ? fromCache() : Promise.resolve(null)).then((hit) => {
+        if (hit) return hit
+        const net = fetch(req).then((res) => {
+          const copy = res.clone()
+          caches.open(CACHE).then((c) => c.put(req, copy))
+          return res
+        })
+        const slow = new Promise((resolve) => setTimeout(() => fromCache().then(resolve), 3000))
+        // Le réseau gagne s'il répond vite ; sinon la copie s'ouvre, et le réseau met la copie à jour en arrière-plan.
+        return Promise.race([net, slow.then((r) => r || net)]).catch(() => fromCache().then((r) => r || net))
+      })
     )
     return
   }

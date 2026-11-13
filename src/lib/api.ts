@@ -70,12 +70,17 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const u = db.users.find((x) => x.id === db.session)
     return u ? { id: u.id, email: u.email, phone: u.phone, needsPassword: u.password === '' || !u.phone, passwordSet: u.password !== '' } : null
   }
+  // Téléphone sans réseau : inutile d'attendre le serveur, on reprend tout de suite le dernier étudiant connu.
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const known = readUserCache()
+    if (known) return known
+  }
   let res: Awaited<ReturnType<ReturnType<typeof sb>['auth']['getSession']>>
   try {
-    // Sans réseau, le renouvellement de la session peut traîner : au bout de 8 s on reprend le dernier étudiant connu.
+    // Réseau lent ou faux signal : au bout de 3 s on reprend le dernier étudiant connu (la session se met à jour ensuite).
     res = await Promise.race([
       sb().auth.getSession(),
-      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 8000))
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 3000))
     ])
   } catch {
     return readUserCache()
@@ -237,6 +242,7 @@ export async function setPasswordAndPhone(password: string | null, phone: string
 }
 
 export async function signOut(): Promise<void> {
+  clearOfflineCopy()
   if (!isConfigured) {
     const db = loadDemo()
     db.session = null
@@ -252,7 +258,7 @@ export async function signOut(): Promise<void> {
 
 export async function getProfile(userId: string): Promise<Profile | null> {
   if (!isConfigured) return loadDemo().profiles.find((p) => p.id === userId) ?? null
-  const { data, error } = await sb().from('profiles').select('*').eq('id', userId).maybeSingle()
+  const { data, error } = await withTimeout(sb().from('profiles').select('*').eq('id', userId).maybeSingle(), 5000)
   if (error) throw error
   return (data as Profile | null) ?? null
 }
@@ -297,6 +303,28 @@ export async function uploadAvatar(userId: string, original: File): Promise<stri
   return sb().storage.from('avatars').getPublicUrl(path).data.publicUrl + `?v=${Date.now()}`
 }
 
+/* ------------------------ LECTURE HORS CONNEXION ------------------------ */
+// Les cours et notes déjà ouverts sont gardés sur le téléphone pour pouvoir les lire (et les écouter) sans réseau.
+// Effacés à la déconnexion. Rien n'est jamais envoyé : c'est une simple copie locale.
+const OFFLINE_PREFIX = 'memoa-offline:'
+function readOffline<T>(key: string): T | null {
+  try { const v = localStorage.getItem(OFFLINE_PREFIX + key); return v ? (JSON.parse(v) as T) : null } catch { return null }
+}
+function writeOffline(key: string, value: unknown) {
+  try { localStorage.setItem(OFFLINE_PREFIX + key, JSON.stringify(value)) } catch { /* stockage plein : la copie locale sera simplement plus ancienne */ }
+}
+/** Abandonne une requête qui traîne (faux signal, réseau très lent) pour passer à la copie locale. */
+function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
+  return Promise.race([Promise.resolve(p), new Promise<never>((_, rej) => window.setTimeout(() => rej(new Error('network timeout')), ms))])
+}
+/** Vrai si l'erreur vient d'une coupure réseau (et pas d'un refus du serveur). */
+const isNetErr = (e: { message?: string }) => (typeof navigator !== 'undefined' && !navigator.onLine) || /failed to fetch|networkerror|load failed|network request failed|timeout/i.test(e.message ?? '')
+export function clearOfflineCopy() {
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith(OFFLINE_PREFIX)).forEach((k) => localStorage.removeItem(k))
+  } catch { /* rien */ }
+}
+
 /* ------------------------ COURS / SAC À DOS ------------------------ */
 
 export const TRASH_DAYS = 30
@@ -310,15 +338,27 @@ export async function listCourses(userId: string): Promise<Course[]> {
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
   }
   void userId
-  const { data, error } = await sb()
-    .from('courses')
-    .select('id,title,created_at,notes(count)')
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-  if (error) throw error
+  // Sans réseau : la copie locale s'affiche tout de suite, sans attendre.
+  if (typeof navigator !== 'undefined' && !navigator.onLine) { const old = readOffline<Course[]>('courses'); if (old) return old }
+  let res
+  try {
+    res = await withTimeout(sb()
+      .from('courses')
+      .select('id,title,created_at,notes(count)')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }), 4000)
+  } catch (e) {
+    // Pas de réseau : on montre la dernière liste connue (lecture seule).
+    const old = readOffline<Course[]>('courses')
+    if (old) return old
+    throw e
+  }
+  const { data, error } = res
+  if (error) { const old = isNetErr(error) ? readOffline<Course[]>('courses') : null; if (old) return old; throw error }
   const list = (data ?? []).map((c: any) => ({
     id: c.id, title: c.title, created_at: c.created_at, notes_count: c.notes?.[0]?.count ?? 0
   }))
+  writeOffline('courses', list)
   // Liste gardée sur le téléphone : sert à choisir un cours quand on ajoute une note sans réseau.
   if (userId) cacheCourses(userId, list)
   return list
@@ -388,8 +428,19 @@ export async function listNotes(courseId: string): Promise<Note[]> {
   if (!isConfigured) {
     return loadDemo().notes.filter((n) => n.course_id === courseId).sort((a, b) => a.created_at.localeCompare(b.created_at))
   }
-  const { data, error } = await sb().from('notes').select('*').eq('course_id', courseId).order('created_at', { ascending: true })
-  if (error) throw error
+  if (typeof navigator !== 'undefined' && !navigator.onLine) { const old = readOffline<Note[]>('notes:' + courseId); if (old) return old }
+  let res
+  try {
+    res = await withTimeout(sb().from('notes').select('*').eq('course_id', courseId).order('created_at', { ascending: true }), 4000)
+  } catch (e) {
+    // Pas de réseau : les notes déjà ouvertes restent lisibles.
+    const old = readOffline<Note[]>('notes:' + courseId)
+    if (old) return old
+    throw e
+  }
+  const { data, error } = res
+  if (error) { const old = isNetErr(error) ? readOffline<Note[]>('notes:' + courseId) : null; if (old) return old; throw error }
+  writeOffline('notes:' + courseId, data as Note[])
   return data as Note[]
 }
 

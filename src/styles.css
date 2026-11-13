@@ -677,3 +677,13 @@ a.pill-btn { text-decoration: none; }
 .cover .made { margin-top: 10px; font-size: 10.5px; color: #8a8f8d; }
 .tpl-chip { flex: 1 1 auto; justify-content: center; }
 .cover, .cover .t, .cover .s { max-width: 100%; overflow-wrap: anywhere; }
+
+/* Info repliable de l'éditeur : une seule ligne en aperçu, tout le texte au toucher. */
+.ed-hint { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 13px; line-height: 1.4; text-align: left; }
+.ed-hint svg { flex: none; margin-top: 2px; }
+.ed-hint-text { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
+.ed-hint.open .ed-hint-text { -webkit-line-clamp: unset; display: block; }
+.ed-extra { max-height: 26dvh; }
+
+/* Mini-lecteur : bouton pause / reprise à côté de « Arrêter ». */
+.mini-pause { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; }

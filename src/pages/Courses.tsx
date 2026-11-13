@@ -17,8 +17,9 @@ import { isPremiumNow, usePremium } from '../lib/premium'
 import { usePref } from '../lib/prefs'
 import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
-import { adjustLength, assemble, clearProgress, loadProgress, parsePlan, partIsComplete, saveProgress, writeTp } from '../lib/tpwrite'
+import { adjustLength, assemble, loadProgress, parsePlan, partIsComplete, saveProgress } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
+import { startTpJob, takeTpResult, dismissTpError, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
@@ -230,7 +231,8 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.' : undefined}
+        banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place. Créer un cours avec Memo coûte 15 points. Il s’en sert quand tu touches « Créer »."
@@ -798,13 +800,17 @@ export function CourseDetail() {
 
       <PillButton size="lg" onClick={openSheet}><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
 
+      {!online && <span className="muted" role="status" style={{ padding: '0 4px' }}>Sans connexion : tu peux lire ton cours (« Lire le PDF ») et l’écouter tel quel. Résumé, révision, TP et téléchargement reviennent avec le réseau.</span>}
+
       <RowGroup label="Outils">
         <Row icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
-        <Row icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub="Un quiz sur tes notes" onClick={() => void revise()} disabled={busy} />
+        <Row icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
         {canSpeak() && <Row icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
         <Row icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
-        <Row icon="download" title="Télécharger" sub="Enregistrer en PDF" onClick={() => void pdf('save')} disabled={!all.length || busy} />
-        <Row icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
+        <Row icon="download" title="Télécharger" sub={online ? 'Enregistrer en PDF' : 'Besoin du réseau'} onClick={() => void pdf('save')} disabled={!all.length || busy || !online} />
+        {online
+          ? <Row icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
+          : <Row icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />}
       </RowGroup>
 
       <ErrorBox message={editing || listenOpen ? null : error} />
@@ -863,7 +869,8 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Brouillon » pour le ranger dans un cours ou le garder 72 h.</span>}{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
+          hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Brouillon » pour le ranger dans un cours ou le garder 72 h.' : undefined}
+          banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
           guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (4 à 20 points selon la longueur). Elle s’en sert quand tu touches « Terminé »."
@@ -897,7 +904,7 @@ export function CourseDetail() {
         <ErrorBox message={error} />
         <div style={{ display: 'flex', gap: 10 }}>
           <PillButton variant="outline" onClick={() => void listenChosen(false)} disabled={busy}>Lire tel quel</PillButton>
-          <PillButton onClick={() => void listenChosen(true)} disabled={busy}>{busy ? 'Un instant…' : 'Résumé puis lecture'}</PillButton>
+          <PillButton onClick={() => void listenChosen(true)} disabled={busy || !online}>{busy ? 'Un instant…' : online ? 'Résumé puis lecture' : 'Résumé : réseau requis'}</PillButton>
         </div>
       </BottomSheet>
 
@@ -923,7 +930,7 @@ export function CourseDetail() {
                 <Icon name="headphones" size={20} />Écouter le résumé
               </PillButton>
             )}
-            <PillButton variant="outline" onClick={() => void downloadSummary()} disabled={busy}><Icon name="download" size={20} />Télécharger le résumé (PDF)</PillButton>
+            <PillButton variant="outline" onClick={() => void downloadSummary()} disabled={busy || !online}><Icon name="download" size={20} />Télécharger le résumé (PDF)</PillButton>
           </div>
         </div>
       )}
@@ -942,7 +949,7 @@ export function TpAssistant() {
   const { id = '' } = useParams()
   const { profile, user } = useAuth()
   const course = useLoad(() => getCourse(id), [id])
-  const { busy, error, setError, run } = useAction()
+  const { busy: actionBusy, error, setError, run } = useAction()
   const isPrem = usePremium()
   const [tplPref, setTplPref] = usePref('tp-cover-template', 'classique')
   const wantedTpl = (COVER_ORDER as string[]).includes(tplPref) ? (tplPref as CoverTemplate) : 'classique'
@@ -1069,29 +1076,38 @@ export function TpAssistant() {
   const [texts, setTexts] = useState<Record<number, string>>({})
   const planParts = plan ? parsePlan(plan) : []
   const doneCount = planParts.filter((p) => partIsComplete(p, texts[p.n], true)).length
-  const writing = useRef(false)
+  // La rédaction tourne dans un module à part (lib/tpjob) : elle continue si on change de page dans l'appli.
+  const job = useTpJob(id)
+  const writing = !!job?.running
+  const busy = actionBusy || writing
+  const stepText = writing ? job?.step ?? '' : step
   useEffect(() => {
     const p = loadProgress(id)
-    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); setTexts(p.texts ?? {}); tpSession.current = p.session }
+    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+  // L'avancement en direct (si on revient sur la page pendant la rédaction).
+  useEffect(() => { if (job?.running || (job && Object.keys(job.texts).length)) setTexts({ ...job.texts }) }, [job?.texts, job?.running])
+  // Rédaction terminée (même si on était parti ailleurs) : on récupère le TP.
+  useEffect(() => {
+    if (job?.result == null) return
+    const r = takeTpResult(id)
+    if (r) { setDoc(cleanTpText(r.text)); docTexts.current = { ...r.texts }; setTexts({}) }
+  }, [job?.result, id])
+  useEffect(() => { if (job?.error && !job.running) { setError(job.error); dismissTpError(id) } }, [job?.error, job?.running, id])
   function persist(nextPlan: string | null, t: Record<number, string>) {
     if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now() })
   }
   async function write() {
-    if (!plan || writing.current) return // protège contre les doubles appuis
+    if (!plan || writing) return // protège contre les doubles appuis
     if (!tpSession.current) return setError('Cette session de TP a expiré. Relance « Proposer un plan ».')
-    writing.current = true
-    lastTexts.current = { ...texts }
     setError(null)
-    try {
-      const result = await run(() => writeTp({
-        courseId: id, title, brief: fullBrief, plan, session: tpSession.current as string, texts,
-        onProgress: (d, t, cur) => setStep(`Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}`),
-        onSave: (t) => { lastTexts.current = { ...t }; setTexts({ ...t }); persist(plan, t) }
-      }))
-      if (result) { setDoc(cleanTpText(result)); docTexts.current = lastTexts.current; clearProgress(id); setTexts({}) }
-    } finally { setStep(''); writing.current = false }
+    lastTexts.current = { ...texts }
+    const planNow = plan
+    startTpJob({
+      courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts,
+      onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now() }) }
+    })
   }
 
   const LogoCheck = () => (
@@ -1148,7 +1164,7 @@ export function TpAssistant() {
             <DictateButton onText={(t) => setBrief((b) => (b ? b + ' ' : '') + t)} label="Dicter" />
           </div>
         </div>
-        {step && <span className="muted" role="status">{step}</span>}
+        {stepText && <span className="muted" role="status">{stepText}</span>}
         <ErrorBox message={error} />
         {!plan && <LogoCheck />}
         {!plan && <PillButton size="lg" onClick={makePlan} disabled={busy}>{busy ? 'Un instant…' : 'Proposer un plan'}</PillButton>}
@@ -1220,7 +1236,7 @@ export function TpAssistant() {
           </div>
           <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
           <div className="warn-braise no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
-          {busy && step && <span className="muted" role="status">{step}</span>}
+          {busy && stepText && <span className="muted" role="status">{stepText}</span>}
           {notice && <div className="warn-braise no-print">{notice}</div>}
           <PillButton size="lg" disabled={busy} onClick={downloadTp}>{busy ? 'Un instant…' : 'Télécharger le PDF du TP'}</PillButton>
         </>

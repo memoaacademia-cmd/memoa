@@ -75,6 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
       setUser(u)
+      // Profil déjà connu : on ouvre l'appli tout de suite avec lui, la mise à jour arrive ensuite.
+      const known = readCache(u.id)
+      if (known) { setProfile((prev) => prev ?? known); setLoading(false) }
+      if (typeof navigator !== 'undefined' && !navigator.onLine && known) { setLoadFailed(true); return }
       try {
         const p = await getProfile(u.id)
         setProfile(p)

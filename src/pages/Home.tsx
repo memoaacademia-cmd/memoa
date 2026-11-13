@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
 import { currentStreak, lastWeek, memoMood } from '../lib/streak'
 import { usePoints } from '../lib/points'
+import { useAvatar } from '../lib/avatar'
 
 const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
@@ -23,6 +24,7 @@ export default function Home() {
   const streak = currentStreak(days)
   const pts = usePoints()
   const mood = memoMood(days)
+  const avatarSrc = useAvatar(profile?.avatar_url)
   const first = firstNameOf(profile) || 'toi'
   const list = courses.data ?? []
   const last = list[0]
@@ -56,7 +58,7 @@ export default function Home() {
             </span>
           )}
           <Link to="/moi" className="hm-avatar" aria-label="Mon profil">
-            {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : first.slice(0, 1).toUpperCase()}
+            {avatarSrc ? <img src={avatarSrc} alt="" /> : first.slice(0, 1).toUpperCase()}
           </Link>
         </div>
       </div>

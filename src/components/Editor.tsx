@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BottomSheet, Icon, PillButton, Row, RowGroup } from './ui'
 
 /* Écran d'écriture plein écran, style Notes : sans cadre, titre grand, texte qui occupe la page.
@@ -21,6 +21,8 @@ export function EditorScreen(p: {
   body: string
   onBody: (v: string) => void
   bodyPlaceholder: string
+  /** Message d'information long (ex. « Sans connexion… ») : affiché en aperçu d'une ligne, il se déplie quand on le touche. */
+  hint?: string
   /** Messages (erreur, « Transcription en cours… ») juste au-dessus des outils. */
   banner?: ReactNode
   guide: string
@@ -30,13 +32,16 @@ export function EditorScreen(p: {
   bar: ReactNode
 }) {
   const [guideOpen, setGuideOpen] = useState(false)
+  const [hintOpen, setHintOpen] = useState(false)
   // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
+  // On ne touche à la hauteur que si elle change vraiment : la remettre à « auto » à chaque lettre perturbe le clavier de certains téléphones.
   const titleRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = titleRef.current
     if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
+    // On ne réajuste que si le texte déborde ou si la hauteur est devenue trop grande.
+    if (el.scrollHeight > el.clientHeight + 1) el.style.height = el.scrollHeight + 'px'
+    else if (el.clientHeight > 0 && el.scrollHeight < el.clientHeight - 1) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
   }, [p.title])
   // Quand le clavier s'ouvre, l'écran se réduit à la zone visible : la barre d'outils reste au-dessus du clavier.
   const [box, setBox] = useState<{ h: number; top: number } | null>(null)
@@ -73,8 +78,13 @@ export function EditorScreen(p: {
           maxLength={80}
           placeholder={p.titlePlaceholder}
           value={p.title}
-          onChange={(e) => p.onTitle(e.target.value.replace(/\n/g, ' '))}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="sentences"
+          spellCheck={false}
+          enterKeyHint="next"
+          onChange={(e) => { const v = e.target.value; p.onTitle(v.includes('\n') ? v.replace(/\n/g, ' ') : v) }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.querySelector<HTMLTextAreaElement>('.ed-body')?.focus() } }}
           aria-label={p.titlePlaceholder}
         />
         {p.dateText && <span className="ed-date">{p.dateText}</span>}
@@ -82,6 +92,13 @@ export function EditorScreen(p: {
       </div>
 
       <div className="ed-extra">
+        {p.hint && (
+          <button type="button" className={'ed-hint' + (hintOpen ? ' open' : '')} onClick={() => setHintOpen((v) => !v)} aria-expanded={hintOpen}>
+            <Icon name="info" size={16} color="var(--text-3)" />
+            <span className="ed-hint-text">{p.hint}</span>
+            <Icon name={hintOpen ? 'chevdown' : 'chevup'} size={16} color="var(--text-3)" />
+          </button>
+        )}
         {p.banner}
         <button type="button" className="ed-guide-btn" onClick={() => setGuideOpen((v) => !v)} aria-expanded={guideOpen}>
           <Icon name="sparkle" size={18} color="var(--link)" />

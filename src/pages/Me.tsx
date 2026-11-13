@@ -7,6 +7,7 @@ import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
 import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
+import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import { currentStreak } from '../lib/streak'
 
@@ -19,6 +20,7 @@ export function Me() {
   const file = useRef<HTMLInputElement>(null)
   const streak = currentStreak(act.data ?? [])
   const initials = initialsOf(profile)
+  const avatarSrc = useAvatar(profile?.avatar_url)
 
   async function pick(f: File | undefined) {
     if (!f || !user) return
@@ -39,7 +41,7 @@ export function Me() {
     <main className="page" style={{ gap: 18 }}>
       <section style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button type="button" className="hm-memo-av" style={{ width: 72, height: 72, padding: 0 }} onClick={() => file.current?.click()} aria-label="Changer ma photo (facultatif)">
-          {profile?.avatar_url ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="h2">{initials}</span>}
+          {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="h2">{initials}</span>}
         </button>
         <input ref={file} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>

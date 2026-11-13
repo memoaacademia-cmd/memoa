@@ -83,7 +83,8 @@ const ICONS: Record<string, string> = {
   quiz: 'M5 4 H19 V20 H5 Z M9 9 H15 M9 13 H13',
   trash: 'M5 7 H19 M9 7 V4 H15 V7 M7 7 L8 20 H16 L17 7',
   menu: 'M4 7 H20 M4 12 H20 M4 17 H20',
-  copy: 'M9 9 H20 V20 H9 Z M5 15 V4 H16'
+  copy: 'M9 9 H20 V20 H9 Z M5 15 V4 H16',
+  info: 'M12 3 A9 9 0 1 0 12 21 A9 9 0 1 0 12 3 M12 11 V16 M12 7.8 V8'
 }
 
 export function Icon({ name, size = 22, color = 'currentColor', stroke = 1.9 }: { name: string; size?: number; color?: string; stroke?: number }) {
