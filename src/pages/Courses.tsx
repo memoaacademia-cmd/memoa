@@ -352,8 +352,10 @@ function saveBlob(name: string, blob: Blob) {
   const a = document.createElement('a')
   a.href = url
   a.download = fileName(name)
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 5000)
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url) }, 30000)
 }
 
 /* Un cours du sac à dos : un grand bouton « Ajouter une note », la liste des outils, puis les notes. */
@@ -756,13 +758,29 @@ export function CourseDetail() {
   async function pdf(mode: 'read' | 'save') {
     if (!course.data || !notes.data?.length) return
     // La fenêtre de lecture s'ouvre tout de suite (sinon le téléphone la bloque), puis reçoit le PDF.
-    const w = mode === 'read' ? window.open('', '_blank') : null
-    const blob = await run(async () => buildCoursePdf(course.data!.title, profileName, notes.data as Note[], 'NOTES DE COURS', await coverOpts()))
-    if (!blob) { w?.close(); return }
-    if (w) {
+    let w: Window | null = null
+    if (mode === 'read') {
+      try {
+        w = window.open('', '_blank')
+        if (w) w.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF</title><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#444">Préparation du PDF…</body>')
+      } catch { w = null }
+    }
+    const made = await run(async () => buildCoursePdf(course.data!.title, profileName, notes.data as Note[], 'NOTES DE COURS', await coverOpts()))
+    if (!made) { try { w?.close() } catch { /* rien */ } return }
+    // Certains navigateurs ne reconnaissent pas le PDF sans type explicite.
+    const blob = made.type === 'application/pdf' ? made : new Blob([made], { type: 'application/pdf' })
+    if (mode === 'read') {
       const url = URL.createObjectURL(blob)
-      w.location.href = url
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      let shown = false
+      if (w && !w.closed) {
+        try { w.location.replace(url); shown = true } catch { shown = false }
+      }
+      if (!shown) {
+        // Fenêtre bloquée ou refusée (téléphone, appli installée) : on télécharge le PDF pour que ça marche quand même.
+        try { w?.close() } catch { /* rien */ }
+        saveBlob(course.data.title, blob)
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000)
     } else saveBlob(course.data.title, blob)
   }
 
