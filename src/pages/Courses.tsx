@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import DictateButton from '../components/Dictate'
@@ -12,7 +12,9 @@ import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { OfflineSaveSheet, PendingAudioChip } from '../components/OfflineSave'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle } from '../lib/pdf'
+import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle, COVER_ORDER, COVER_TEMPLATES, effectiveTemplate, type CoverTemplate } from '../lib/pdf'
+import { isPremiumNow, usePremium } from '../lib/premium'
+import { usePref } from '../lib/prefs'
 import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
 import { adjustLength, assemble, clearProgress, loadProgress, parsePlan, partIsComplete, saveProgress, writeTp } from '../lib/tpwrite'
@@ -727,11 +729,19 @@ export function CourseDetail() {
     }
   }
 
+  /** Champs du profil pour la page de garde + état Premium (revérifié au moment de fabriquer le PDF). */
+  async function coverOpts() {
+    return {
+      premium: await isPremiumNow(user?.id),
+      university: profile?.university, faculty: profile?.faculty, department: profile?.department, promotion: profile?.promotion
+    }
+  }
+
   async function pdf(mode: 'read' | 'save') {
     if (!course.data || !notes.data?.length) return
     // La fenêtre de lecture s'ouvre tout de suite (sinon le téléphone la bloque), puis reçoit le PDF.
     const w = mode === 'read' ? window.open('', '_blank') : null
-    const blob = await run(() => buildCoursePdf(course.data!.title, profileName, notes.data as Note[]))
+    const blob = await run(async () => buildCoursePdf(course.data!.title, profileName, notes.data as Note[], 'NOTES DE COURS', await coverOpts()))
     if (!blob) { w?.close(); return }
     if (w) {
       const url = URL.createObjectURL(blob)
@@ -744,7 +754,7 @@ export function CourseDetail() {
     if (!course.data || !summary) return
     const scope = summaryScope ? `Portée du résumé : ${summaryScope}.\n\n` : ''
     const note: Note = { id: 'resume', course_id: id, title: 'Résumé', content: scope + summary, source: 'ia', created_at: new Date().toISOString() }
-    const blob = await run(() => buildCoursePdf(`Résumé — ${course.data!.title}`, profileName, [note], 'RÉSUMÉ'))
+    const blob = await run(async () => buildCoursePdf(`Résumé — ${course.data!.title}`, profileName, [note], 'RÉSUMÉ', await coverOpts()))
     if (blob) saveBlob(`Résumé ${course.data.title}`, blob)
   }
 
@@ -930,9 +940,16 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 export function TpAssistant() {
   const { id = '' } = useParams()
-  const { profile } = useAuth()
+  const { profile, user } = useAuth()
   const course = useLoad(() => getCourse(id), [id])
   const { busy, error, setError, run } = useAction()
+  const isPrem = usePremium()
+  const [tplPref, setTplPref] = usePref('tp-cover-template', 'classique')
+  const wantedTpl = (COVER_ORDER as string[]).includes(tplPref) ? (tplPref as CoverTemplate) : 'classique'
+  // Le modèle doré est réservé à Premium : sans abonnement on garde « classique » (le choix reste mémorisé).
+  const tpl = effectiveTemplate(wantedTpl, isPrem)
+  const look = COVER_TEMPLATES[tpl]
+  const [supervisor, setSupervisor] = useState('')
   const [title, setTitle] = useState('')
   const [brief, setBrief] = useState('')
   const [atts, setAtts] = useState<Attach[]>([])
@@ -1009,10 +1026,13 @@ export function TpAssistant() {
   async function downloadTp() {
     if (!doc || !profile) return
     setNotice('')
+    // Abonnement relu au moment du PDF : la mention « Créé avec Memoa » dépend de cet état.
+    const premiumNow = await isPremiumNow(user?.id)
     const cover = {
       university: profile.university, faculty: profile.faculty, department: profile.department,
       promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl,
-      title, course: course.data?.title ?? '', student: profile.full_name, year
+      title, course: course.data?.title ?? '', student: profile.full_name, year,
+      supervisor: supervisor.trim() || undefined, template: effectiveTemplate(wantedTpl, premiumNow), premium: premiumNow
     }
     const wanted = Math.max(1, Math.min(60, Math.round(Number(pagesWanted) || 0))) || null
     const out = await run(async () => {
@@ -1164,18 +1184,39 @@ export function TpAssistant() {
 
       {doc && (
         <>
-          <div className="cover">
+          <div className="tpl-picker no-print">
+            <div className="rg-label">Style de la page de garde</div>
+            <div className="tpl-row" role="radiogroup" aria-label="Style de la page de garde">
+              {COVER_ORDER.map((k) => {
+                const t = COVER_TEMPLATES[k]
+                const locked = k === 'premium' && !isPrem
+                return (
+                  <button key={k} type="button" role="radio" aria-checked={tpl === k} className={`tpl-chip${tpl === k ? ' on' : ''}`}
+                    onClick={() => { if (locked) { setNotice('Le style Premium doré est réservé aux abonnés Premium.'); return } setNotice(''); setTplPref(k) }}>
+                    <span className="sw" style={{ borderColor: `rgb(${t.main.join(',')})`, background: `rgb(${t.accent.join(',')})` }} />
+                    {t.label}{locked ? ' 🔒' : ''}
+                  </button>
+                )
+              })}
+            </div>
+            {!isPrem && <small style={{ opacity: 0.75 }}>Style doré : <Link to="/premium">avec Premium</Link>.</small>}
+          </div>
+          <PillInput id="tpsup" value={supervisor} onChange={(e) => setSupervisor(e.target.value)} placeholder="Encadrant (facultatif)" aria-label="Encadrant" maxLength={80} />
+          <div className={`cover cv-${look.frame}${look.band === 'filled' ? ' cv-filled' : ''}`} style={{ '--cv-main': `rgb(${look.main.join(',')})`, '--cv-acc': `rgb(${look.accent.join(',')})` } as CSSProperties}>
             <small>République démocratique du Congo</small>
-            <span className="t" style={{ fontSize: 16 }}>{profile?.university ? universityLabel(profile.university) : ''}</span>
+            {profile?.university && <span className="t" style={{ fontSize: 16, color: 'var(--cv-main)' }}>{universityLabel(profile.university)}</span>}
             {logoUrl && <img src={logoUrl} alt="" style={{ height: 72, maxWidth: 140, objectFit: 'contain', margin: '6px 0' }} />}
-            <span className="s">{profile?.faculty}</span>
-            <span className="s">Département : {profile?.department} · {profile?.promotion}{profile?.vacation ? ` · ${profile.vacation}` : ''}</span>
-            <hr />
-            {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
-            <span className="t">{splitTpTitle(title).title}</span>
-            <span className="s">Cours : {course.data?.title}</span>
-            <span className="s">Présenté par : {profile?.full_name}</span>
+            {profile?.faculty && <span className="s" style={{ color: 'var(--cv-acc)', fontWeight: 700 }}>{profile.faculty}</span>}
+            {profile?.department && <span className="dept">Département : {profile.department}</span>}
+            <div className="band">
+              {splitTpTitle(title).kind && <small>{splitTpTitle(title).kind}</small>}
+              <span className="t">{splitTpTitle(title).title}</span>
+            </div>
+            {course.data?.title && <span className="s">Cours : {course.data.title}</span>}
+            {profile?.full_name && <span className="s">Présenté par : {profile.full_name}</span>}
+            {supervisor.trim() && <span className="s">Encadrant : {supervisor.trim()}</span>}
             <span className="s">Année académique {year}</span>
+            {!isPrem && <span className="made">Créé avec Memoa</span>}
           </div>
           <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
           <div className="warn-braise no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
