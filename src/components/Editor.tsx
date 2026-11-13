@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { BottomSheet, Icon, MemoAvatar, PillButton, Row, RowGroup } from './ui'
-import { useAuth } from '../lib/auth'
+import { BottomSheet, Icon, PillButton, Row, RowGroup } from './ui'
 
 /* Écran d'écriture plein écran, style Notes : sans cadre, titre grand, texte qui occupe la page.
    Utilisé par « Ajouter une note » (CourseDetail) et, au bloc 2, par « Nouveau cours » (NewCourse). */
@@ -32,8 +31,6 @@ export function EditorScreen(p: {
   guideExtra?: ReactNode
   bar: ReactNode
 }) {
-  const { profile } = useAuth()
-  const memoName = profile?.memo_name?.trim() || 'Memo'
   const [guideOpen, setGuideOpen] = useState(false)
   const [hintOpen, setHintOpen] = useState(false)
   // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
@@ -70,12 +67,13 @@ export function EditorScreen(p: {
         </button>
         {p.status && <span className="ed-status">{p.status}</span>}
         {p.onDraft && <button type="button" className="ed-draft" onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
-        <button type="button" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>
+        <button type="button" data-tour="editor-done" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>
       </div>
 
       <div className="ed-main">
         <textarea
           ref={titleRef}
+          data-tour="editor-title"
           className="ed-title"
           rows={1}
           maxLength={80}
@@ -91,7 +89,7 @@ export function EditorScreen(p: {
           aria-label={p.titlePlaceholder}
         />
         {p.dateText && <span className="ed-date">{p.dateText}</span>}
-        <textarea className="ed-body" placeholder={p.bodyPlaceholder} value={p.body} onChange={(e) => p.onBody(e.target.value)} aria-label="Texte" />
+        <textarea data-tour="editor-body" className="ed-body" placeholder={p.bodyPlaceholder} value={p.body} onChange={(e) => p.onBody(e.target.value)} aria-label="Texte" />
       </div>
 
       <div className="ed-extra">
@@ -103,14 +101,14 @@ export function EditorScreen(p: {
           </button>
         )}
         {p.banner}
-        <button type="button" className="ed-guide-btn" onClick={() => setGuideOpen((v) => !v)} aria-expanded={guideOpen}>
-          <span className="grow">Guider {memoName} · facultatif</span>
-          <span className="ed-guide-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={26} /></span>
+        <button type="button" data-tour="editor-guide" className="ed-guide-btn" onClick={() => setGuideOpen((v) => !v)} aria-expanded={guideOpen}>
+          <Icon name="sparkle" size={18} color="var(--link)" />
+          <span className="grow">Guider l’IA · facultatif</span>
           <Icon name={guideOpen ? 'chevdown' : 'chevup'} size={18} color="var(--text-3)" />
         </button>
         {guideOpen && (
           <div className="ed-guide-box">
-            <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label={`Consignes pour ${memoName}`} />
+            <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label="Consignes pour l’IA" />
             {p.guideExtra}
             <span className="muted">{p.guideHelp}</span>
           </div>
@@ -133,7 +131,7 @@ export function EditorBar({ onPhoto, onDictate, dictating, dictateDisabled, onRe
   onPlus: () => void
 }) {
   return (
-    <div className="ed-bar">
+    <div className="ed-bar" data-tour="editor-bar">
       <button type="button" className="ed-chip" onClick={onPhoto}><Icon name="photo" size={18} />Photo</button>
       <button type="button" className={'ed-chip ed-mic' + (dictating ? ' on' : '')} onClick={onDictate} disabled={dictateDisabled} aria-pressed={dictating} aria-label={dictating ? 'Arrêter la dictée' : 'Dicter'}><Icon name="mic" size={20} /></button>
       <button type="button" className="ed-chip" onClick={onRecord} disabled={recordDisabled}><Icon name="audio" size={18} />Enregistrer</button>

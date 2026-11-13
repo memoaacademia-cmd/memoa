@@ -125,7 +125,7 @@ export function NavBar() {
     { to: '/moi', label: 'Moi', icon: 'user' }
   ]
   return (
-    <nav className="nav" aria-label="Navigation principale">
+    <nav className="nav" aria-label="Navigation principale" data-tour="nav">
       {items.map((i) => (
         <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => 'nav-item' + (isActive || (i.also && loc.pathname.startsWith(i.also)) ? ' active' : '')}>
           <span className="nav-pill"><Icon name={i.icon} size={24} /></span>
@@ -245,7 +245,7 @@ export function MemoHero({ bubble, height = 150, tags }: { bubble?: string; heig
 /* ====================== Refonte : composants communs ====================== */
 
 /** Bouton pilule. « solid » = l'action principale (une seule par écran), « outline » = action secondaire. */
-export function PillButton({ children, to, onClick, type = 'button', variant = 'solid', size = 'md', disabled, className = '' }: {
+export function PillButton({ children, to, onClick, type = 'button', variant = 'solid', size = 'md', disabled, className = '', tour }: {
   children: ReactNode
   to?: string
   onClick?: () => void
@@ -254,10 +254,12 @@ export function PillButton({ children, to, onClick, type = 'button', variant = '
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
   className?: string
+  /** Repère pour les visites guidées (data-tour). */
+  tour?: string
 }) {
   const cls = ['pill-btn', variant === 'outline' ? 'outline' : '', size === 'lg' ? 'lg' : '', size === 'sm' ? 'sm' : '', className].filter(Boolean).join(' ')
-  if (to) return <Link to={to} className={cls}>{children}</Link>
-  return <button type={type} className={cls} onClick={onClick} disabled={disabled}>{children}</button>
+  if (to) return <Link to={to} className={cls} data-tour={tour}>{children}</Link>
+  return <button type={type} className={cls} onClick={onClick} disabled={disabled} data-tour={tour}>{children}</button>
 }
 
 /** Champ pilule : le texte d'aide est le placeholder (pas de libellé au-dessus). */
@@ -276,9 +278,9 @@ export function PageHead({ to, title, size = 22 }: { to: string; title?: string;
 }
 
 /** Groupe de lignes (liste « iOS ») : une surface arrondie, des filets, jamais de cartes imbriquées. */
-export function RowGroup({ label, children }: { label?: string; children: ReactNode }) {
+export function RowGroup({ label, children, tour }: { label?: string; children: ReactNode; tour?: string }) {
   return (
-    <section>
+    <section data-tour={tour}>
       {label && <div className="rg-label">{label}</div>}
       <div className="rg">{children}</div>
     </section>
@@ -286,7 +288,7 @@ export function RowGroup({ label, children }: { label?: string; children: ReactN
 }
 
 /** Une ligne : icône dans un carré arrondi, titre, sous-titre, valeur à droite, chevron. */
-export function Row({ icon, iconNode, title, sub, right, to, onClick, disabled, chevron = true, expanded }: {
+export function Row({ icon, iconNode, title, sub, right, to, onClick, disabled, chevron = true, expanded, tour }: {
   icon?: string
   /** Image à la place d'une icône (ex. l'illustration du Memo). */
   iconNode?: ReactNode
@@ -298,6 +300,8 @@ export function Row({ icon, iconNode, title, sub, right, to, onClick, disabled, 
   disabled?: boolean
   chevron?: boolean
   expanded?: boolean
+  /** Repère pour les visites guidées (data-tour). */
+  tour?: string
 }) {
   const inner = (
     <>
@@ -310,8 +314,8 @@ export function Row({ icon, iconNode, title, sub, right, to, onClick, disabled, 
       {chevron && <Icon name="chevright" size={18} color="var(--text-3)" />}
     </>
   )
-  if (to) return <Link to={to} className="rg-row">{inner}</Link>
-  return <button type="button" className="rg-row" onClick={onClick} disabled={disabled} aria-expanded={expanded}>{inner}</button>
+  if (to) return <Link to={to} className="rg-row" data-tour={tour}>{inner}</Link>
+  return <button type="button" className="rg-row" onClick={onClick} disabled={disabled} aria-expanded={expanded} data-tour={tour}>{inner}</button>
 }
 
 /** Feuille du bas : coins hauts 28 px, poignée 40×4. `dark` = version sombre (enregistrement). */
