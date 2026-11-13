@@ -25,8 +25,8 @@ Deno.serve(async (req) => {
   webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'mailto:contact@memoa.app', VAPID_PUBLIC_KEY, priv)
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-  // Pas deux fois dans la même journée, même si la planification se déclenche en double.
-  const since = new Date(Date.now() - 20 * 3_600_000).toISOString()
+  // Pas deux fois dans la même journée, même si la planification se déclenche en double (12 h : l'envoi de 8 h suit bien celui de la veille, y compris après le passage de 17 h à 8 h).
+  const since = new Date(Date.now() - 12 * 3_600_000).toISOString()
   const { data: subs, error } = await admin.from('push_subscriptions').select('id,user_id,endpoint,p256dh,auth,last_sent_at').or(`last_sent_at.is.null,last_sent_at.lt.${since}`).limit(5000)
   if (error) { console.error('daily-fact-push lecture :', error.message); return new Response('Erreur de lecture', { status: 500 }) }
 

@@ -73,4 +73,4 @@ export interface Payment {
   created_at: string
 }
 
-export type AiTask = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
+export type AiTask = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'

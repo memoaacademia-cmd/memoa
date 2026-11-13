@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ANIMALS } from '../data/animals'
 import type { Fact } from '../data/facts'
 import { useAuth } from '../lib/auth'
-import { dailyIndex, loadFacts, otherIndex } from '../lib/facts'
+import { dailyFactIndex, factCategories, getFactThemes, loadFacts, msUntilKinshasaMidnight, otherIndex, setFactThemes } from '../lib/facts'
 import { canInvite, enablePush, noteInvited } from '../lib/push'
 import { Icon, MemoAvatar } from './ui'
 
@@ -241,11 +241,28 @@ export default function FactCard({ memoName, animal }: { memoName: string; anima
   const [engaged, setEngaged] = useState(false)
   const [open, setOpen] = useState(false)
 
+  const uid = user?.id ?? ''
+  const [themes, setThemes] = useState<string[]>(() => getFactThemes(uid))
+  const [themesOpen, setThemesOpen] = useState(false)
+  const [dayTick, setDayTick] = useState(0)
+  useEffect(() => { setThemes(getFactThemes(uid)) }, [uid])
   useEffect(() => {
     let alive = true
-    loadFacts().then((all) => { if (alive) { setFacts(all); setIdx(dailyIndex(all.length)) } }).catch(() => { if (alive) setErr('La carte du jour ne se charge pas. Réessaie dans un instant.') })
+    loadFacts().then((all) => { if (alive) setFacts(all) }).catch(() => { if (alive) setErr('La carte du jour ne se charge pas. Réessaie dans un instant.') })
     return () => { alive = false }
   }, [])
+  // Carte du jour propre à cet étudiant (ses thèmes + son compte). Elle change à 00h00 heure de Kinshasa, même si l'appli reste ouverte.
+  useEffect(() => {
+    if (!facts) return
+    setIdx(dailyFactIndex(facts, uid, themes))
+    setHint(false); setRevealed(false); setLiked(false)
+    const t = window.setTimeout(() => setDayTick((x) => x + 1), msUntilKinshasaMidnight() + 1000)
+    return () => window.clearTimeout(t)
+  }, [facts, uid, themes, dayTick])
+  function toggleTheme(c: string) {
+    const next = themes.includes(c) ? themes.filter((x) => x !== c) : [...themes, c]
+    setThemes(next); setFactThemes(uid, next)
+  }
 
   // Le bon moment pour proposer les notifications : juste après le premier geste positif sur une carte, jamais avant.
   function markEngaged() {
@@ -350,7 +367,18 @@ export default function FactCard({ memoName, animal }: { memoName: string; anima
         <button type="button" className="btn ghost small" onClick={next}>Encore une</button>
         <button type="button" className="btn ghost small" onClick={() => void save()} disabled={busy}>Enregistrer</button>
         <button type="button" className="btn amber small" onClick={() => void share()} disabled={busy}>Partager</button>
+        <button type="button" className="btn ghost small" aria-expanded={themesOpen} onClick={() => setThemesOpen((v) => !v)}>Mes thèmes</button>
       </div>
+      {themesOpen && facts && (
+        <div role="group" aria-label="Mes thèmes" style={{ background: 'rgba(255,255,255,0.16)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span style={{ ...safe, fontSize: 14 }}>Choisis les thèmes qui t’intéressent : ta carte du jour viendra de là. Sans choix, tu les reçois tous.</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {factCategories(facts).map((c) => (
+              <button key={c} type="button" aria-pressed={themes.includes(c)} onClick={() => toggleTheme(c)} style={{ minHeight: 40, padding: '0 14px', borderRadius: 20, border: '1.5px solid #fff', background: themes.includes(c) ? '#F2A33A' : 'transparent', color: themes.includes(c) ? '#0E1A2B' : '#fff', fontWeight: 700, fontSize: 14 }}>{c}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {invite === 'show' && (
         <div role="group" aria-label="Notifications" style={{ background: 'rgba(255,255,255,0.16)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>

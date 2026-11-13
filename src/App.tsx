@@ -14,6 +14,7 @@ import Assistant from './pages/Assistant'
 import { Me, Premium, Settings } from './pages/Me'
 import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
 import { AuthProvider, useAuth } from './lib/auth'
+import { OutboxSync } from './components/OfflineSave'
 import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
@@ -84,6 +85,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
+      <OutboxSync />
       <Outlet />
       <MiniPlayer />
       <NavBar />

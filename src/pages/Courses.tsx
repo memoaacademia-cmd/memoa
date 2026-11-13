@@ -10,9 +10,11 @@ import { useAuth } from '../lib/auth'
 import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
+import { OfflineSaveSheet } from '../components/OfflineSave'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
+import { assemble, clearProgress, loadProgress, parsePlan, partIsComplete, saveProgress, writeTp } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
@@ -46,6 +48,7 @@ export function NewCourse() {
   const [recOpen, setRecOpen] = useState(false)
   const [draftId, setDraftId] = useState<string | null>(null)
   const [pendingAudio, setPendingAudio] = useState<File | null>(null)
+  const [offlineSheet, setOfflineSheet] = useState(false)
   const online = useOnline()
   const [params, setParams] = useSearchParams()
   const dict = useRef<Dictation | null>(null)
@@ -157,7 +160,12 @@ export function NewCourse() {
     if (!user) return
     dict.current?.stop()
     if (!title.trim()) return setError('Donne un nom à ton cours.')
-    if (!isOnline()) return setError(OFFLINE_MSG)
+    if (!isOnline()) {
+      // Sans réseau : l'IA n'est pas joignable, mais la note peut être gardée (nouveau cours OU ajout à un cours existant) et envoyée plus tard.
+      if (!content.trim()) return setError(consignes.trim() ? 'Sans réseau, Memo ne peut pas rédiger ton cours. Écris ta note toi-même, ou garde-la en brouillon.' : 'Écris ta note pour pouvoir la garder.')
+      if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Garde-le en brouillon : il sera transcrit au retour du réseau.")
+      return setOfflineSheet(true)
+    }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     const id = await run(async () => {
       // L'IA passe d'abord : si les points sont épuisés, rien n'est créé et « Passer en Premium » s'affiche.
@@ -216,7 +224,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h, puis crée ton cours quand le réseau revient.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place. Créer un cours avec Memo coûte 15 points. Il s’en sert quand tu touches « Créer »."
@@ -231,6 +239,13 @@ export function NewCourse() {
 
       <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
+      {user && (
+        <OfflineSaveSheet
+          open={offlineSheet} onClose={() => setOfflineSheet(false)} userId={user.id}
+          title={title} content={content} source={source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte'}
+          onQueued={() => { if (draftId) void deleteDraft(draftId).catch(() => {}); setOfflineSheet(false); nav('/') }}
+        />
+      )}
     </main>
   )
 }
@@ -493,6 +508,7 @@ export function CourseDetail() {
   const [noteSource, setNoteSource] = useState('texte')
   const [noteStep, setNoteStep] = useState('')
   const [listening, setListening] = useState(false)
+  const [offlineSheet, setOfflineSheet] = useState(false)
   const dict = useRef<Dictation | null>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
   const photoRef = useRef<HTMLInputElement>(null)
@@ -671,7 +687,12 @@ export function CourseDetail() {
     const base = noteText.trim()
     const guide = noteGuide.trim()
     if (!base && !guide) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
-    if (!isOnline()) return setError(OFFLINE_MSG)
+    if (!isOnline()) {
+      // Sans réseau : ajout à ce cours, ou à un autre, ou nouveau cours ; envoyé automatiquement plus tard. Les modifications d'un cours existant restent réservées au réseau.
+      if (modify || !base) return setError(OFFLINE_MSG)
+      if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Garde-le en brouillon : il sera transcrit au retour du réseau.")
+      return setOfflineSheet(true)
+    }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     let content = base
     if (guide) {
@@ -778,6 +799,14 @@ export function CourseDetail() {
         </RowGroup>
       )}
 
+      {user && course.data && (
+        <OfflineSaveSheet
+          open={offlineSheet} onClose={() => setOfflineSheet(false)} userId={user.id}
+          title={noteTitle} content={noteText} currentCourse={{ id, title: course.data.title }}
+          source={noteSource === 'enreg' || noteSource === 'video' ? 'audio' : noteSource}
+          onQueued={() => { if (draftId) void deleteDraft(draftId).catch(() => {}); setOfflineSheet(false); resetNote() }}
+        />
+      )}
       <DraftsSection label="Brouillons" drafts={drafts.filter((d) => d.courseId === id)} now={now} onDelete={(d) => void deleteDraft(d.id).then(reloadDrafts)} />
 
       <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
@@ -955,7 +984,7 @@ export function TpAssistant() {
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setPlan(r.reply); setDoc(null) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = stripAiNoise(r.reply); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -963,7 +992,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setPlan(stripAiNoise(r.reply)); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = stripAiNoise(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -974,9 +1003,33 @@ export function TpAssistant() {
     }, doc))
     if (blob) saveBlob(title || 'TP', blob)
   }
+  // Rédaction partie par partie : chaque partie du plan est écrite dans son propre appel, puis le serveur de l'appli vérifie que rien ne manque.
+  // Le travail déjà fait est gardé sur le téléphone (24 h) : après une coupure réseau, « Reprendre la rédaction » ne refait que les parties manquantes.
+  const [texts, setTexts] = useState<Record<number, string>>({})
+  const planParts = plan ? parsePlan(plan) : []
+  const doneCount = planParts.filter((p) => partIsComplete(p, texts[p.n], true)).length
+  const writing = useRef(false)
+  useEffect(() => {
+    const p = loadProgress(id)
+    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); setTexts(p.texts ?? {}); tpSession.current = p.session }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+  function persist(nextPlan: string | null, t: Record<number, string>) {
+    if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now() })
+  }
   async function write() {
-    const r = await run(() => askAI({ task: 'tp_write', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\nPlan validé :\n${plan}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setDoc(stripAiNoise(r.reply)) }
+    if (!plan || writing.current) return // protège contre les doubles appuis
+    if (!tpSession.current) return setError('Cette session de TP a expiré. Relance « Proposer un plan ».')
+    writing.current = true
+    setError(null)
+    try {
+      const result = await run(() => writeTp({
+        courseId: id, title, brief: fullBrief, plan, session: tpSession.current as string, texts,
+        onProgress: (d, t, cur) => setStep(`Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}`),
+        onSave: (t) => { setTexts({ ...t }); persist(plan, t) }
+      }))
+      if (result) { setDoc(stripAiNoise(result)); clearProgress(id); setTexts({}) }
+    } finally { setStep(''); writing.current = false }
   }
 
   const LogoCheck = () => (
@@ -1058,7 +1111,7 @@ export function TpAssistant() {
           </div>
           <LogoCheck />
           <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
-          <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : 'Valider et rédiger le TP'}</PillButton>
+          <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : doneCount > 0 ? `Reprendre la rédaction (${doneCount}/${planParts.length})` : 'Valider et rédiger le TP'}</PillButton>
         </div>
       )}
 

@@ -45,8 +45,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 
-type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
-const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
+type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
+const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_section', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
 
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
@@ -75,7 +75,7 @@ const kinDayStart = (t: number) => Math.floor((t + KIN_OFFSET_MS) / DAY_MS) * DA
 const CHAT_PAID = 1 // chat : 1 point tous les 2 messages (voir plus bas)
 const COURSE_POINTS = 15 // génération complète d'un cours, quelle que soit la méthode (notes, consignes seules…)
 const TP_POINTS = 10 // un TP complet (plan + ajustements + rédaction) : payé UNE seule fois, à l'ouverture de la « session de TP »
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
 const LENGTH_TASKS: string[] = ['structure_notes', 'summary', 'enrich_note']
 const PAGE_CHARS = 1500 // une page environ
 /** « course » = création d'un cours (appelé par l'écran Nouveau cours, sans cours existant) : 15 points au total, tout compris. */
@@ -173,8 +173,8 @@ const refund = async (admin: ReturnType<typeof adminClient>, id: number) => { aw
 // Vérifie les noms de modèles disponibles chez ton fournisseur avant la mise en production.
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
-const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
-const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : 1536)
+const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_section' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
+const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : 1536)
 
 const BASE =
   "Tu es Memo, le compagnon d'étude d'un étudiant universitaire en République démocratique du Congo. " +
@@ -297,15 +297,17 @@ Barre du bas : Accueil, Cours, Librairie, Assistant, Moi.
 Réponses types : « C'est quoi Memoa ? » → compagnon d'étude (ci-dessus). « Où je change mon Memo ? » → Moi, puis Mon Memo. « Comment télécharger mon cours ? » → ouvre le cours, bouton Télécharger.
 `
 
+// Format strict du plan : le client le découpe en parties pour rédiger le TP partie par partie puis vérifier que rien ne manque.
+const PLAN_FORMAT = " FORMAT OBLIGATOIRE, une ligne par titre, sans astérisques, sans tirets, sans symboles : les parties principales numérotées « 1. Titre », « 2. Titre »…, leurs sous-parties « 1.1 Titre », « 1.2 Titre »…. Le plan commence par « 1. Introduction » et se termine par la Conclusion puis « Bibliographie à vérifier ». Écris le plan EN ENTIER jusqu'à la dernière partie, sans phrase d'introduction ni de conclusion adressée à l'étudiant."
 const SYSTEM: Record<Task, string> = {
   review_doc: REVIEW_SYSTEM,
   chat: APP_GUIDE + '\n' + BASE,  // le nom de Memo et les règles lingala sont ajoutés à chaque message (voir plus bas)
   structure_notes:
     BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
-  tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes.",
+  tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes." + PLAN_FORMAT,
   tp_revise:
-    BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs.",
+    BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs. Ne raccourcis jamais le plan : garde toutes les parties existantes sauf celles que l'étudiant demande de retirer." + PLAN_FORMAT,
   enrich_note:
     BASE + " L'étudiant te donne des consignes pour créer ou compléter une note de cours, et parfois un texte de départ. Rédige le contenu de la note avec tes connaissances et, s'il y en a, les <resultats_web> fournis : titres courts, points clés, définitions, exemples. Quand une information vient du web, cite l'adresse (URL) ; sinon n'invente aucune source. Ne répète pas le texte de départ : écris seulement ce qui le complète. Réponds uniquement avec le contenu de la note, sans phrase d'introduction.",
   summary:
@@ -314,6 +316,8 @@ const SYSTEM: Record<Task, string> = {
       "N'ajoute RIEN qui ne figure pas dans le texte : ni explication, ni exemple, ni commentaire, ni connaissance extérieure. " +
       "Structure-le en quelques courtes phrases ou paragraphes bien enchaînés, faciles à retenir et à écouter à voix haute : pas de titres, pas de listes, pas de symboles, pas d'astérisques. " +
       "Longueur : environ un quart du texte au maximum, et jamais plus de 250 mots, même si le texte est long. Réponds uniquement avec le résumé, sans introduction.",
+  tp_section:
+    BASE + " Tu rédiges UNE SEULE partie d'un travail pratique universitaire. On te donne le plan complet, la partie à rédiger (numéro et titre exacts) avec ses sous-parties, et la fin de la partie précédente pour la continuité. Commence par le titre de la partie tel quel (même numéro, même intitulé), puis, pour chaque sous-partie, son titre tel quel suivi d'un vrai développement (explications, exemples, arguments). N'écris RIEN des autres parties, n'en reprends pas le contenu et ne répète pas ce qui précède. Si la partie est la bibliographie, écris sous le titre seulement des pistes de références générales à vérifier, sans inventer de références précises. Réponds uniquement avec le texte de la partie : aucune phrase d'introduction (« Voici… »), aucun conseil ni consigne adressés à l'étudiant, aucune ligne de séparation ---, aucune consigne entre crochets, ni astérisques ni symboles décoratifs.",
   tp_write:
     BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.' +
       " Le plan validé est la structure OBLIGATOIRE du document : chaque partie et chaque sous-partie du plan doit apparaître, dans le même ordre, avec son titre repris tel quel et un vrai développement. N'en saute aucune, ne les fusionne pas, ne te contente pas de résumer le plan. Les notes du cours ne servent que d'appui." +
@@ -400,7 +404,7 @@ async function callModelFull(model: string, system: string, turns: Turn[], maxTo
   let tokensIn = r.tokensIn
   let tokensOut = r.tokensOut
   for (let i = 0; i < 2 && r.truncated && Date.now() - started < 60_000; i++) {
-    const more: Turn[] = [...turns, { role: 'assistant', content: text }, { role: 'user', content: "Continue exactement là où tu t'es arrêté, sans répéter ce qui précède, jusqu'à la fin du plan (conclusion et bibliographie comprises)." }]
+    const more: Turn[] = [...turns, { role: 'assistant', content: text }, { role: 'user', content: "Continue exactement là où tu t'es arrêté, sans répéter ce qui précède, jusqu'à la fin (dernière partie comprise)." }]
     r = await callModel(model, system, more, maxTokens)
     text += (/\s$/.test(text) ? '' : '\n') + r.text
     tokensIn += r.tokensIn
@@ -538,7 +542,7 @@ Deno.serve(async (req) => {
   if (!prompt) return json(req, 400, { error: 'Écris ta demande.' })
   if (LONG_TASKS.includes(task)) {
     if (prompt.length > MAX_LONG_TEXT) return json(req, 400, { error: 'Ce texte est trop long (environ 15 pages au maximum). Choisis moins de notes à la fois.' })
-  } else if (prompt.length > MAX_PROMPT) return json(req, 400, { error: 'Ta demande est trop longue.' })
+  } else if (prompt.length > (task === 'tp_section' ? 14000 : MAX_PROMPT)) return json(req, 400, { error: 'Ta demande est trop longue.' })
   if (task === 'review_doc') return reviewDoc(req, user.id, body, prompt)
 
   const admin = adminClient()
@@ -549,7 +553,7 @@ Deno.serve(async (req) => {
     admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', minuteAgo),
     admin.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
   ])
-  if ((lastMinute ?? 0) >= PER_MINUTE) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
+  if (body.task !== 'tp_section' && (lastMinute ?? 0) >= PER_MINUTE) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
   const st = await accessState(admin, user.id, sub)
 
   // ---- Coût de la demande. TP : un TP complet = 10 points au total (plan + ajustements + rédaction), payés une seule fois. ----
@@ -561,6 +565,8 @@ Deno.serve(async (req) => {
     const { data: ok } = await admin.rpc('use_tp_session', { p_user: user.id, p_session: body.tpSession, p_kind: task })
     if (ok === true) tpSession = body.tpSession
   }
+  // Une partie de TP n'ouvre JAMAIS de session et ne coûte jamais de points : sans session payée valide, on refuse (aucun débit).
+  if (task === 'tp_section' && !tpSession) return json(req, 403, { error: 'Cette session de TP a expiré. Relance le plan pour continuer.', code: 'tp_session_invalid' })
   let cost = isTp ? (tpSession ? 0 : TP_POINTS) : costOf(task, prompt.length, purpose)
   // Chat : 2 messages = 1 point. Dans la journée, le 1er message paie 1 point, le 2e est gratuit, le 3e paie, etc.
   // (on compte toutes les lignes « chat » du jour, y compris les gratuites à 0 point, donc impossible de tricher en alternant).
@@ -642,7 +648,7 @@ Deno.serve(async (req) => {
   try {
     result = task === 'summary' && prompt.length > CHUNK_CHARS * 1.3
       ? await summarizeLong(model, prompt)
-      : task === 'tp_write'
+      : task === 'tp_write' || task === 'tp_section' || task === 'tp_plan' || task === 'tp_revise'
         ? await callModelFull(model, system, turns, maxTokensFor(task))
         : await callModel(model, system, turns, maxTokensFor(task))
   } catch (e) {

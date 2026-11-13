@@ -2,6 +2,7 @@
 //  - Supabase (production) ; toute la sécurité repose sur les règles RLS de supabase/migrations
 //  - Démo (localStorage) quand les clés Supabase sont absentes.
 // Les pages n'appellent QUE ce fichier : changer de backend ne touche pas à l'interface.
+import { cacheCourses } from './outbox'
 import { isConfigured, supabase } from './supabase'
 import { loadDemo, saveDemo, uid } from './demo'
 import { shrinkImage } from './image'
@@ -315,9 +316,12 @@ export async function listCourses(userId: string): Promise<Course[]> {
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map((c: any) => ({
+  const list = (data ?? []).map((c: any) => ({
     id: c.id, title: c.title, created_at: c.created_at, notes_count: c.notes?.[0]?.count ?? 0
   }))
+  // Liste gardée sur le téléphone : sert à choisir un cours quand on ajoute une note sans réseau.
+  if (userId) cacheCourses(userId, list)
+  return list
 }
 
 /** Cours dans la corbeille (30 jours). Efface d'abord pour de bon ceux dont le délai est passé. */
