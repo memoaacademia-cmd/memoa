@@ -22,6 +22,15 @@ npm run build      # vérifie aussi les types TypeScript
 
 Le mode démo sert à explorer l'interface. Il ne protège rien (mots de passe en clair dans le navigateur) : jamais en production.
 
+## Visites guidées
+
+Chaque page principale (Accueil, Mes cours, Un cours, Créer un cours, Librairie, Assistant, Moi) a sa petite visite, lancée à la première arrivée de l’étudiant puis relançable depuis **Moi › Visites guidées** (`/visites`) ou le Centre d’aide.
+
+- Parcours et textes : `src/lib/tours.ts` · affichage (voile, projecteur, bulle de Memo, flèche) : `src/components/Tour.tsx` · liste et relance : `src/pages/Tours.tsx`.
+- Un élément est visé par l’attribut `data-tour="…"` posé dans les pages ; s’il est absent, l’étape est sautée.
+- Progression : copie locale par compte + métadonnées du compte (`user_metadata.tours`) — aucune migration SQL.
+- Banc d’essai : `tools/tour-tests/` (voir son README).
+
 ## Brancher Supabase
 
 1. Crée un projet sur supabase.com.
