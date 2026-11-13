@@ -1002,7 +1002,7 @@ export function TpAssistant() {
   const [target, setTarget] = useState<'brief' | 'remarks'>('brief')
   const [step, setStep] = useState('')
   // Nombre de pages de CONTENU voulu (la page de garde est comptée à part). Vide = longueur naturelle.
-  const [pagesWanted, setPagesWanted] = useState('')
+  const [pagesWanted, setPagesWanted] = useState('4')
   const [notice, setNotice] = useState('')
   const lastTexts = useRef<Record<number, string>>({})
   const docTexts = useRef<Record<number, string>>({})
@@ -1149,7 +1149,7 @@ export function TpAssistant() {
     if (!window.confirm('Abandonner ce TP ? Tout sera effacé (énoncé, plan, texte déjà rédigé) et tu devras recommencer depuis le début.')) return
     abandonTpJob(id)
     setTitle(''); setBrief(''); setAtts([]); setPlan(null); setRemarks(''); setRemAtts([])
-    setDoc(null); setTexts({}); setStep(''); setPagesWanted(''); setNotice(''); setError(null)
+    setDoc(null); setTexts({}); setStep(''); setPagesWanted('4'); setNotice(''); setError(null)
     setSupervisor(''); setMyLogo(null); setSheetFor(null)
     tpSession.current = null; lastTexts.current = {}; docTexts.current = {}
   }
@@ -1234,7 +1234,7 @@ export function TpAssistant() {
           <div>
             <div className="rg-label">Nombre de pages du travail (sans la page de garde)</div>
             <input className="pages-input" type="number" inputMode="numeric" min={1} max={60} value={pagesWanted} onChange={(e) => setPagesWanted(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Laisse vide : longueur naturelle" aria-label="Nombre de pages du travail" />
-            <small style={{ opacity: 0.75 }}>Ex. 9 donne un PDF de 10 pages avec la page de garde.</small>
+            <small style={{ opacity: 0.75 }}>Par défaut 4 : le PDF fait 5 pages avec la page de garde. Efface le chiffre pour laisser la longueur naturelle.</small>
           </div>
           <LogoCheck />
           <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
