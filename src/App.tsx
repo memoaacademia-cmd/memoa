@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Brand, NavBar, Spinner } from './components/ui'
 import MiniPlayer from './components/MiniPlayer'
+import { TourProvider } from './components/Tour'
 import { DraftWatcher } from './components/Drafts'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
@@ -13,6 +14,7 @@ import Library from './pages/Library'
 import Assistant from './pages/Assistant'
 import { Me, Premium, Settings } from './pages/Me'
 import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
+import Tours from './pages/Tours'
 import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
 import { isConfigured } from './lib/supabase'
@@ -86,9 +88,11 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
       <OutboxSync />
-      <Outlet />
-      <MiniPlayer />
-      <NavBar />
+      <TourProvider>
+        <Outlet />
+        <MiniPlayer />
+        <NavBar />
+      </TourProvider>
     </div>
   )
 }
@@ -142,6 +146,7 @@ export default function App() {
             <Route path="/moi" element={<Me />} />
             <Route path="/parametres" element={<Settings />} />
             <Route path="/premium" element={<Premium />} />
+            <Route path="/visites" element={<Tours />} />
             <Route path="/aide" element={<Help />} />
             <Route path="/signaler" element={<Feedback mode="report" />} />
             <Route path="/avis" element={<Feedback mode="rating" />} />

@@ -420,8 +420,7 @@ a.pill-btn { text-decoration: none; }
 .ed-body { flex: 1; min-height: 0; width: 100%; margin-top: 12px; padding: 0; border: 0; background: transparent; outline: none; resize: none; overflow-y: auto; color: var(--text); font-size: 16px; line-height: 1.75; caret-color: var(--btn); }
 .ed-extra { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px 8px; max-height: 40dvh; overflow-y: auto; }
 .ed-guide-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px dashed var(--line-strong); background: transparent; color: var(--text-2); font-size: 14px; font-weight: 600; text-align: left; }
-.ed-guide-btn .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ed-guide-av { flex: none; display: inline-flex; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; align-items: center; justify-content: center; background: var(--surface-2); }
+.ed-guide-btn .grow { flex: 1; }
 .ed-guide-box { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
 .ed-guide-box textarea { width: 100%; min-height: 72px; border: 0; background: transparent; outline: none; resize: none; font-size: 15px; line-height: 1.5; color: var(--text); }
 .ed-guide-box textarea::placeholder { color: var(--ph); opacity: 1; }
@@ -618,10 +617,7 @@ a.pill-btn { text-decoration: none; }
 
 /* Points gratuits dans l'Assistant */
 .as-title-wrap { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.pts-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #3a2e0a; color: #f5c518; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
-[data-theme='light'] .pts-chip { background: #fdf1c7; color: #8a6400; }
-.pts-chip svg path { stroke: #f5c518; fill: #f5c518; }
-[data-theme='light'] .pts-chip svg path { stroke: #d9a400; fill: #e8b400; }
+.pts-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: var(--surface-2); color: var(--link); font-size: 12.5px; font-weight: 800; white-space: nowrap; }
 .pts-chip.zero { background: #3a2a0e; color: #f7c777; }
 [data-theme='light'] .pts-chip.zero { background: #fcebd0; color: #8a4b00; }
 
@@ -692,11 +688,32 @@ a.pill-btn { text-decoration: none; }
 /* Mini-lecteur : bouton pause / reprise à côté de « Arrêter ». */
 .mini-pause { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; }
 
-/* Assistant TP : Attendre (carré) et Abandonner (croix) pendant la rédaction, petits boutons ronds */
-.tp-ctrl { display: flex; justify-content: center; gap: 16px; }
-.tp-ctrl-btn { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; color: var(--text); display: inline-flex; align-items: center; justify-content: center; position: relative; }
-.tp-ctrl-btn.wait { border-color: var(--braise); color: var(--braise); }
-.tp-ctrl-btn.wait svg { fill: currentColor; }
-.tp-ctrl-btn.drop { border-color: var(--danger); color: var(--danger); }
-.tp-ctrl-btn[disabled] { opacity: .55; }
-.tp-ctrl-btn::after { content: ''; position: absolute; inset: -4px; }
+/* ===================== Visites guidées ===================== */
+.tour-root { position: fixed; inset: 0; z-index: 100; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.tour-block { position: absolute; inset: 0; touch-action: none; }
+.tour-veil { position: absolute; inset: 0; background: rgba(4, 12, 10, .78); }
+.tour-spot { position: absolute; border-radius: 16px; pointer-events: none; box-shadow: 0 0 0 3px #3ccfb4, 0 0 0 100vmax rgba(4, 12, 10, .78); }
+.tour-spot::after { content: ''; position: absolute; inset: -3px; border-radius: inherit; border: 2px solid #3ccfb4; animation: tour-pulse 1.7s ease-out infinite; }
+.tour-spot.moving { transition: top .28s ease, left .28s ease, width .28s ease, height .28s ease; }
+@keyframes tour-pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.12); opacity: 0; } }
+.tour-bubble { position: absolute; box-sizing: border-box; padding: 14px 16px 10px; border-radius: 22px; background: var(--surface); color: var(--text); border: 2px solid var(--btn); box-shadow: 0 12px 34px rgba(0, 0, 0, .4); }
+.tour-bubble.moving { transition: top .28s ease, left .28s ease; }
+.tour-tail { position: absolute; width: 16px; height: 16px; background: var(--surface); transform: rotate(45deg); }
+.tour-tail.up { top: -10px; border-left: 2px solid var(--btn); border-top: 2px solid var(--btn); }
+.tour-tail.down { bottom: -10px; border-right: 2px solid var(--btn); border-bottom: 2px solid var(--btn); }
+.tour-head { display: flex; align-items: center; gap: 10px; }
+.tour-av { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--surface-2); border: 3px solid #f2a33a; overflow: hidden; }
+.tour-who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.tour-who b { font-size: 14px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tour-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--link); font-size: 12px; font-weight: 800; }
+.tour-count { flex: none; font-size: 12.5px; font-weight: 700; color: var(--text-3); }
+.tour-text { margin: 10px 0 8px; font-size: 15.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--line-strong); transition: width .25s, background .25s; }
+.tour-dots i.past { background: var(--btn); opacity: .55; }
+.tour-dots i.on { width: 22px; background: var(--btn); }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.tour-skip { min-height: 44px; padding: 0 12px 0 2px; border: 0; background: transparent; color: var(--text-2); font-weight: 600; font-size: 15px; }
+.tour-next { min-height: 44px; padding: 0 26px; border: 0; border-radius: 22px; background: var(--btn); color: var(--btn-text); font-weight: 700; font-size: 16px; }
+.tour-bubble button:focus-visible { outline: 3px solid #f2a33a; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tour-spot::after { animation: none; opacity: 0; } .tour-spot.moving, .tour-bubble.moving, .tour-dots i { transition: none; } }
