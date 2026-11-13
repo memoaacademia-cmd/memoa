@@ -51,7 +51,7 @@ export default function Home() {
         <span className="hm-brand">memoa</span>
         <div className="hm-right">
           {pts && (
-            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants`}>
+            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants aujourd’hui (renouvelés chaque jour à minuit, heure de Kinshasa)`}>
               <Icon name="bolt" size={14} />{pts.left}
             </span>
           )}

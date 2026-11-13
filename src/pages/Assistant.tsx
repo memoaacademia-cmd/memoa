@@ -12,7 +12,7 @@ import { WEB_SEARCH_ENABLED } from '../lib/features'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
 
-/** « 6 h 59 min » : temps restant avant le retour des points. */
+/** « 6 h 59 » : temps restant avant minuit (heure de Kinshasa), quand les 20 points reviennent. */
 function countdown(ms: number): string {
   const m = Math.max(0, Math.ceil(ms / 60_000))
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`
@@ -186,7 +186,7 @@ export default function Assistant() {
         <span className="as-title-wrap">
           <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
           {pts && (
-            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={pts.left <= 0 ? 'Plus de points' : `${pts.left} points restants`}>
+            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={pts.left <= 0 ? 'Plus de points. Ils reviennent à minuit, heure de Kinshasa.' : `${pts.left} points restants aujourd’hui. Ils reviennent à 20 chaque jour à minuit, heure de Kinshasa.`}>
               <Icon name="bolt" size={14} />
               {pts.left > 0 || !resetMs ? pts.left : countdown(resetMs - now)}
             </span>

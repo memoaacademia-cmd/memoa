@@ -643,11 +643,11 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
 }
 
 
-/** Points gratuits : solde, maximum, et heure de remise à zéro quand le solde est à 0 (null pendant l'essai et avec Premium). */
+/** Points gratuits du jour : solde, maximum, et prochain renouvellement (minuit à Kinshasa). null pendant l'essai et avec Premium. */
 export interface PointsInfo {
   left: number
   max: number
-  resetAt: string | null
+  resetAt: string
 }
 
 export interface AiResult {
@@ -655,6 +655,8 @@ export interface AiResult {
   conversationId: string | null
   /** Solde de points après cette demande (absent en mode démo). */
   points?: PointsInfo | null
+  /** Session de TP ouverte (ou réutilisée) par le serveur : à renvoyer avec les demandes suivantes du même TP. */
+  tpSession?: string
 }
 
 /** Solde de points de l'étudiant, sans rien consommer. null = essai ou Premium (rien à afficher). */
@@ -678,6 +680,10 @@ export async function askAI(args: {
   web?: boolean
   /** Vérification d'un document de la Librairie (tâche review_doc). */
   docId?: string
+  /** « course » : création d'un cours depuis l'écran Nouveau cours (15 points au total). Le serveur vérifie et fixe le prix. */
+  purpose?: 'course'
+  /** Session de TP déjà payée (renvoyée par le serveur après le plan) : les ajustements et la rédaction ne coûtent plus rien. */
+  tpSession?: string | null
 }): Promise<AiResult> {
   if (!isConfigured) {
     await new Promise((r) => setTimeout(r, 600))

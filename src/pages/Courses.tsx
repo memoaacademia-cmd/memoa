@@ -166,14 +166,14 @@ export function NewCourse() {
       if (!structured && instr) {
         // Pas de notes : seulement des consignes. L'IA rédige le cours à partir de ses connaissances (et du web si coché).
         setStep('Rédaction de ton cours par Memo…')
-        const r = await askAI({ task: 'enrich_note', web: WEB_SEARCH_ENABLED && web, prompt: `Consignes de l'étudiant : ${instr}\n\nTexte déjà écrit par l'étudiant :\n(aucun)` })
+        const r = await askAI({ task: 'enrich_note', purpose: 'course', web: WEB_SEARCH_ENABLED && web, prompt: `Consignes de l'étudiant : ${instr}\n\nTexte déjà écrit par l'étudiant :\n(aucun)` })
         structured = stripAiNoise(r.reply).trim()
         if (!structured) throw new Error("Memo n'a pas réussi à rédiger le cours. Reformule tes consignes et réessaie.")
       } else if (structured) {
         setStep('Mise en forme de tes notes…')
         try {
           if (structured.length > 7500) throw new Error('trop long pour la mise en forme IA')
-          const r = await askAI({ task: 'structure_notes', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${structured}` : structured })
+          const r = await askAI({ task: 'structure_notes', purpose: 'course', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${structured}` : structured })
           if (r.reply.trim()) structured = r.reply.trim()
         } catch (e) {
           if (e instanceof LimitError) throw e
@@ -219,7 +219,7 @@ export function NewCourse() {
         banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h, puis crée ton cours quand le réseau revient.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
-        guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place (3 points). Il s’en sert quand tu touches « Créer »."
+        guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place. Créer un cours avec Memo coûte 15 points. Il s’en sert quand tu touches « Créer »."
         guideExtra={
           <div className="ed-tools-row">
             <DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
@@ -349,9 +349,13 @@ function parseQuiz(text: string): QuizQ[] {
     const q = b.slice(0, first).trim()
     const head = b.slice(first).split(/R[ÉE]PONSE/i)[0]
     const opts: string[] = []
-    const re = /^\s*([A-D])\s*[).:-]\s*(.+)$/gm
-    let m: RegExpExecArray | null
-    while ((m = re.exec(head)) !== null) opts[m[1].charCodeAt(0) - 65] = m[2].trim()
+    // Un choix peut tenir sur plusieurs lignes : les lignes qui suivent « B) … » en font partie, jusqu'au choix suivant.
+    let cur = -1
+    for (const line of head.split('\n')) {
+      const m = /^\s*([A-D])\s*[).:-]\s*(.*)$/.exec(line)
+      if (m) { cur = m[1].charCodeAt(0) - 65; opts[cur] = m[2].trim() }
+      else if (cur >= 0 && line.trim()) opts[cur] = (opts[cur] + ' ' + line.trim()).trim()
+    }
     const dense = opts.filter(Boolean)
     if (!q || dense.length < 2 || dense.length !== opts.length) continue
     const am = /R[ÉE]PONSE\s*:?\s*\(?([A-D])/i.exec(b)
@@ -816,7 +820,7 @@ export function CourseDetail() {
           banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
-          guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (3 points). Elle s’en sert quand tu touches « Terminé »."
+          guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (4 à 20 points selon la longueur). Elle s’en sert quand tu touches « Terminé »."
           guideExtra={
             <div className="ed-tools-row">
               <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
@@ -897,6 +901,8 @@ export function TpAssistant() {
   const [brief, setBrief] = useState('')
   const [atts, setAtts] = useState<Attach[]>([])
   const [plan, setPlan] = useState<string | null>(null)
+  // Session de TP payée une seule fois (10 points) : le serveur la crée au premier appel et la réutilise pour les ajustements et la rédaction.
+  const tpSession = useRef<string | null>(null)
   const [remarks, setRemarks] = useState('')
   const [remAtts, setRemAtts] = useState<Attach[]>([])
   const [doc, setDoc] = useState<string | null>(null)
@@ -948,16 +954,16 @@ export function TpAssistant() {
 
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
-    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
-    if (r) { setPlan(r.reply); setDoc(null) }
+    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setPlan(r.reply); setDoc(null) }
   }
   async function adjustPlan() {
     if (!plan) return
     const extra = remAtts.map((a) => `[${a.name}]\n${a.text}`).join('\n\n')
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
-    const r = await run(() => askAI({ task: 'tp_revise', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
-    if (r) { setPlan(stripAiNoise(r.reply)); setRemarks(''); setRemAtts([]) }
+    const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setPlan(stripAiNoise(r.reply)); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -969,8 +975,8 @@ export function TpAssistant() {
     if (blob) saveBlob(title || 'TP', blob)
   }
   async function write() {
-    const r = await run(() => askAI({ task: 'tp_write', courseId: id, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\nPlan validé :\n${plan}` }))
-    if (r) setDoc(stripAiNoise(r.reply))
+    const r = await run(() => askAI({ task: 'tp_write', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\nPlan validé :\n${plan}` }))
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; setDoc(stripAiNoise(r.reply)) }
   }
 
   const LogoCheck = () => (
