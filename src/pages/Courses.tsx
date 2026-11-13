@@ -12,9 +12,10 @@ import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { OfflineSaveSheet, PendingAudioChip } from '../components/OfflineSave'
 import { logoUrlFor, universityLabel } from '../data/academic'
-import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
+import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle } from '../lib/pdf'
+import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
-import { assemble, clearProgress, loadProgress, parsePlan, partIsComplete, saveProgress, writeTp } from '../lib/tpwrite'
+import { adjustLength, assemble, clearProgress, loadProgress, parsePlan, partIsComplete, saveProgress, writeTp } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
@@ -944,6 +945,11 @@ export function TpAssistant() {
   const [sheetFor, setSheetFor] = useState<'brief' | 'remarks' | null>(null)
   const [target, setTarget] = useState<'brief' | 'remarks'>('brief')
   const [step, setStep] = useState('')
+  // Nombre de pages de CONTENU voulu (la page de garde est comptée à part). Vide = longueur naturelle.
+  const [pagesWanted, setPagesWanted] = useState('')
+  const [notice, setNotice] = useState('')
+  const lastTexts = useRef<Record<number, string>>({})
+  const docTexts = useRef<Record<number, string>>({})
   // Logo envoyé par l'étudiant : valable pour CE travail seulement, gardé sur le téléphone (rien n'est envoyé au serveur).
   const [myLogo, setMyLogo] = useState<string | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -990,7 +996,7 @@ export function TpAssistant() {
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = stripAiNoise(r.reply); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -998,16 +1004,45 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = stripAiNoise(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
-    const blob = await run(() => buildTpPdf({
+    setNotice('')
+    const cover = {
       university: profile.university, faculty: profile.faculty, department: profile.department,
       promotion: profile.promotion, vacation: profile.vacation || undefined, logoUrl,
       title, course: course.data?.title ?? '', student: profile.full_name, year
-    }, doc))
-    if (blob) saveBlob(title || 'TP', blob)
+    }
+    const wanted = Math.max(1, Math.min(60, Math.round(Number(pagesWanted) || 0))) || null
+    const out = await run(async () => {
+      let text = doc
+      let res = await buildTpPdfDetailed(cover, text, wanted)
+      // Le nombre de pages est contrôlé sur le vrai PDF. Si la mise en page seule (dans les limites de lisibilité) ne suffit pas,
+      // on demande à l'IA d'étoffer ou de condenser quelques parties précises (jamais de pages vides, jamais de suppression au hasard).
+      for (let round = 0; wanted && !res.report.exact && round < 2 && plan && tpSession.current && Object.keys(docTexts.current).length; round++) {
+        try {
+          const next = await adjustLength({
+            courseId: id, title, brief: fullBrief, plan, session: tpSession.current, texts: docTexts.current, gap: res.report.gap * 1.05,
+            onProgress: (m) => setStep(m)
+          })
+          docTexts.current = next
+          text = assemble(parsePlan(plan), next)
+          res = await buildTpPdfDetailed(cover, text, wanted)
+        } catch { break }
+      }
+      setStep('')
+      if (text !== doc) setDoc(text)
+      return res
+    })
+    if (!out) return
+    saveBlob(title || 'TP', out.blob)
+    const r = out.report
+    if (wanted && !r.exact) {
+      setNotice(r.status === 'too_short'
+        ? `Le PDF compte ${r.contentPages} pages de contenu au lieu de ${wanted}. Le sujet est trop court pour ${wanted} pages sans remplissage : demande des parties en plus dans « Ajuster le plan », puis relance la rédaction.`
+        : `Le PDF compte ${r.contentPages} pages de contenu au lieu de ${wanted}. Le texte est trop long pour ${wanted} pages lisibles : retire des parties dans « Ajuster le plan », ou choisis ${r.contentPages} pages.`)
+    }
   }
   // Rédaction partie par partie : chaque partie du plan est écrite dans son propre appel, puis le serveur de l'appli vérifie que rien ne manque.
   // Le travail déjà fait est gardé sur le téléphone (24 h) : après une coupure réseau, « Reprendre la rédaction » ne refait que les parties manquantes.
@@ -1027,14 +1062,15 @@ export function TpAssistant() {
     if (!plan || writing.current) return // protège contre les doubles appuis
     if (!tpSession.current) return setError('Cette session de TP a expiré. Relance « Proposer un plan ».')
     writing.current = true
+    lastTexts.current = { ...texts }
     setError(null)
     try {
       const result = await run(() => writeTp({
         courseId: id, title, brief: fullBrief, plan, session: tpSession.current as string, texts,
         onProgress: (d, t, cur) => setStep(`Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}`),
-        onSave: (t) => { setTexts({ ...t }); persist(plan, t) }
+        onSave: (t) => { lastTexts.current = { ...t }; setTexts({ ...t }); persist(plan, t) }
       }))
-      if (result) { setDoc(stripAiNoise(result)); clearProgress(id); setTexts({}) }
+      if (result) { setDoc(cleanTpText(result)); docTexts.current = lastTexts.current; clearProgress(id); setTexts({}) }
     } finally { setStep(''); writing.current = false }
   }
 
@@ -1115,6 +1151,11 @@ export function TpAssistant() {
               </div>
             </div>
           </div>
+          <div>
+            <div className="rg-label">Nombre de pages du travail (sans la page de garde)</div>
+            <input className="pages-input" type="number" inputMode="numeric" min={1} max={60} value={pagesWanted} onChange={(e) => setPagesWanted(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Laisse vide : longueur naturelle" aria-label="Nombre de pages du travail" />
+            <small style={{ opacity: 0.75 }}>Ex. 9 donne un PDF de 10 pages avec la page de garde.</small>
+          </div>
           <LogoCheck />
           <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
           <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : doneCount > 0 ? `Reprendre la rédaction (${doneCount}/${planParts.length})` : 'Valider et rédiger le TP'}</PillButton>
@@ -1138,6 +1179,8 @@ export function TpAssistant() {
           </div>
           <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
           <div className="warn-braise no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
+          {busy && step && <span className="muted" role="status">{step}</span>}
+          {notice && <div className="warn-braise no-print">{notice}</div>}
           <PillButton size="lg" disabled={busy} onClick={downloadTp}>{busy ? 'Un instant…' : 'Télécharger le PDF du TP'}</PillButton>
         </>
       )}

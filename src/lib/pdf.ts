@@ -2,36 +2,14 @@
 import { universityLabel } from '../data/academic'
 import type { Note } from './types'
 
-// Les polices PDF standard ne connaissent pas tous les caractères : on remplace ou on retire ceux qui poseraient problème.
-function clean(s: string): string {
-  return s
-    .replace(/[‘’‚]/g, "'")
-    .replace(/[“”„]/g, '"')
-    .replace(/[–—]/g, '-')
-    .replace(/…/g, '...')
-    .replace(/→/g, '->')
-    .replace(/[  ]/g, ' ')
-    .replace(/\*\*/g, '')
-    .replace(/(^|\s)\*(\S)/g, '$1$2')
-    .replace(/(\S)\*(\s|$)/g, '$1$2')
-    .replace(/`/g, '')
-    .replace(/[^\n\x20-\x7EÀ-ÿ]/g, '')
-}
+import { sanitize, parseBlocks, layoutDocument, audit, PAGE_W, PAGE_H, type Block, type Page, type Measure, type Params } from './pdflayout'
+import { cleanDocText, cleanTpText } from './tpclean'
 
-/** Retire ce que l'IA glisse parfois autour d'un texte : phrases d'introduction ou de conclusion, séparateurs --- et consignes entre crochets. */
+const clean = sanitize
+
+/** Retire ce que l'IA glisse parfois autour d'un texte : introductions, séparateurs, balises de plan, champs vides, consignes. */
 export function stripAiNoise(text: string): string {
-  const lines = text.replace(/\r/g, '').split('\n')
-  const chatty = /^(voici|bien sûr|bien sur|d'accord|certainement|avec plaisir|j'espère|n'hésite|n'hesite|si tu veux|souhaites-tu|veux-tu|dis-moi|je reste|peux-tu)/i
-  const out: string[] = []
-  for (const raw of lines) {
-    const t = raw.trim()
-    if (/^[-_*=]{3,}$/.test(t)) continue
-    if (/^\[[^\]]*(saut de page|insérer|inserer|insert|page break)[^\]]*\]$/i.test(t)) continue
-    out.push(raw.replace(/\[(insérer|inserer|insert)[^\]]*\]/gi, ''))
-  }
-  while (out.length && (!out[0].trim() || chatty.test(out[0].trim()))) out.shift()
-  while (out.length && (!out[out.length - 1].trim() || chatty.test(out[out.length - 1].trim()))) out.pop()
-  return out.join('\n')
+  return cleanDocText(text)
 }
 
 /** Taille de police par défaut du texte dans tous les PDF de l'application (en points). */
@@ -66,46 +44,98 @@ function writer(doc: Doc) {
     }
     y += gap
   }
-  const marker = (m: string) => {
-    ensure(6)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(BODY_PT)
-    doc.setTextColor(11)
-    doc.text(m, M + 1, y + 4.5)
-  }
-  /** Écrit un texte simple (titres #, listes - et 1.) comme l'IA les produit. */
-  const body = (content: string) => {
-    for (const raw of stripAiNoise(content).split('\n')) {
-      const t = raw.trim()
-      if (!t) { y += 2.5; continue }
-      const h = /^(#{1,4})\s+(.*)$/.exec(t)
-      if (h) { y += 2; write(clean(h[2]), h[1].length <= 2 ? BODY_PT + 4 : BODY_PT + 1.5, 'bold', 0, 2, 20); continue }
-      const b = /^[-*•]\s+(.*)$/.exec(t)
-      if (b) { marker('-'); write(clean(b[1]), BODY_PT, 'normal', 7, 1.2, 30); continue }
-      const num = /^(\d+[.)])\s+(.*)$/.exec(t)
-      if (num) { marker(num[1]); write(clean(num[2]), BODY_PT, 'normal', 8, 1.2, 30); continue }
-      write(clean(t), BODY_PT, 'normal', 0, 1.8, 30)
-    }
-  }
   return {
     write,
-    body,
     get y() { return y },
     set y(v: number) { y = v },
     newPage() { doc.addPage(); y = M }
   }
 }
 
-/** Numérotation des pages à partir de la deuxième ; la page de garde n'en porte pas. */
-function footers(doc: Doc, label: string) {
+/** Mesure du texte avec les vraies polices du PDF (c'est ce qui rend le comptage des pages exact). */
+function measurer(doc: Doc, scale = 1): Measure {
+  return (text, size, bold) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal')
+    doc.setFontSize(size)
+    return doc.getTextWidth(text) * scale
+  }
+}
+
+/** Dessine les pages calculées par le moteur. Chaque page du moteur devient une page du PDF (nouvelle page ajoutée à chaque fois). */
+function drawPages(doc: Doc, pages: Page[]) {
+  const col = (c: number | [number, number, number], fn: 'text' | 'draw' | 'fill') => {
+    const [r, g, b] = typeof c === 'number' ? [c, c, c] : c
+    if (fn === 'text') doc.setTextColor(r, g, b); else if (fn === 'draw') doc.setDrawColor(r, g, b); else doc.setFillColor(r, g, b)
+  }
+  for (const pg of pages) {
+    doc.addPage()
+    for (const it of pg.items) {
+      if (it.k === 'text') {
+        doc.setFont('helvetica', it.bold ? 'bold' : 'normal')
+        doc.setFontSize(it.size)
+        col(it.color, 'text')
+        doc.text(it.s, it.x, it.y)
+      } else if (it.k === 'rect') { col(it.fill, 'fill'); doc.rect(it.x, it.y, it.w, it.h, 'F') }
+      else if (it.k === 'line') { col(it.color, 'draw'); doc.setLineWidth(it.w); doc.line(it.x1, it.y1, it.x2, it.y2) }
+      else { col(it.color, 'fill'); doc.circle(it.x, it.y, it.r, 'F') }
+    }
+  }
+}
+
+/** Pieds de page discrets : filet fin, titre à gauche, numéro à droite. La page de garde n'est pas numérotée ; le contenu commence à 1. */
+function footers(doc: Doc, label: string, p: Params) {
   const total = doc.getNumberOfPages()
-  for (let p = 2; p <= total; p++) {
-    doc.setPage(p)
+  for (let pg = 2; pg <= total; pg++) {
+    doc.setPage(pg)
+    doc.setDrawColor(215)
+    doc.setLineWidth(0.2)
+    doc.line(p.ml, PAGE_H - 15, PAGE_W - p.mr, PAGE_H - 15)
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(130)
-    doc.text(clean(label).slice(0, 60), M, H - 10)
-    doc.text(`${p - 1}`, W - M, H - 10, { align: 'right' })
+    doc.setFontSize(8.5)
+    doc.setTextColor(135)
+    doc.text(clean(label).slice(0, 70), p.ml, PAGE_H - 10)
+    doc.text(`${pg - 1}`, PAGE_W - p.mr, PAGE_H - 10, { align: 'right' })
+  }
+}
+
+export interface PdfReport {
+  /** Pages de contenu réellement présentes dans le PDF (page de garde non comptée). */
+  contentPages: number
+  /** Pages demandées (null = automatique). */
+  target: number | null
+  exact: boolean
+  /** « too_long » / « too_short » : le texte est trop long ou trop court pour la cible, même avec la mise en page la plus serrée ou la plus aérée. */
+  status: 'auto' | 'exact' | 'too_long' | 'too_short'
+  /** Pages (fractionnaires) à retirer (>0) ou à ajouter (<0) pour atteindre la cible. */
+  gap: number
+  /** Défauts de mise en page trouvés (titre isolé, débordement…) : doit rester vide. */
+  issues: string[]
+}
+
+/** Calcule la mise en page ; si le vrai PDF n'a pas le bon nombre de pages, essaie des réglages voisins (contrôle réel, pas une estimation). */
+function buildBody(doc: Doc, blocks: Block[], target: number | null): { params: Params; report: PdfReport } {
+  const startPages = doc.getNumberOfPages()
+  let best: { fit: ReturnType<typeof layoutDocument>; real: number } | null = null
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const fit = layoutDocument(blocks, measurer(doc, 1 + attempt * 0.004), target)
+    // épreuve : on dessine pour de vrai sur un PDF jetable et on compte les pages
+    const probe = new (doc.constructor as new (o: object) => Doc)({ unit: 'mm', format: 'a4' })
+    drawPages(probe, fit.pages)
+    const real = probe.getNumberOfPages() - 1
+    if (!best || Math.abs(real - (target ?? real)) < Math.abs(best.real - (target ?? best.real))) best = { fit, real }
+    if (!target || real === target) break
+  }
+  const fit = best!.fit
+  drawPages(doc, fit.pages)
+  const content = doc.getNumberOfPages() - startPages
+  const exact = target ? content === target : true
+  return {
+    params: fit.params,
+    report: {
+      contentPages: content, target, exact,
+      status: !target ? 'auto' : exact ? 'exact' : content > target ? 'too_long' : 'too_short',
+      gap: exact ? 0 : fit.gap, issues: audit(fit.pages, fit.params)
+    }
   }
 }
 
@@ -126,12 +156,14 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
   if (author) w.write(clean(author), BODY_PT + 1, 'normal', 0, 2, 70)
   w.write(new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), BODY_PT, 'normal', 0, 2, 110)
 
+  // Les notes s'enchaînent sans pages à moitié vides : chaque note commence par son titre, avec un espace au-dessus.
+  const blocks: Block[] = []
   notes.forEach((n, i) => {
-    w.newPage()
-    w.write(clean(n.title || `Note ${i + 1}`), 20, 'bold', 0, 5, 11)
-    w.body(n.content)
+    blocks.push({ t: 'title', text: clean(n.title || `Note ${i + 1}`) })
+    blocks.push(...parseBlocks(cleanDocText(n.content), 1))
   })
-  footers(doc, title)
+  const { params } = buildBody(doc, blocks, null)
+  footers(doc, title, params)
   return doc.output('blob')
 }
 
@@ -228,11 +260,15 @@ export const COVER_TEMPLATES: Record<CoverTemplate, CoverLook> = {
 export const COVER_ORDER: CoverTemplate[] = ['classique', 'emeraude', 'bordeaux', 'ardoise']
 
 /** TP : page de garde (4 modèles : double cadre, cadre simple, coins, bandeau latéral), puis le travail. */
-export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
+export async function buildTpPdf(c: TpCover, content: string, targetPages: number | null = null): Promise<Blob> {
+  return (await buildTpPdfDetailed(c, content, targetPages)).blob
+}
+
+/** Comme buildTpPdf, mais renvoie aussi le contrôle réel du PDF produit (nombre de pages de contenu, défauts). */
+export async function buildTpPdfDetailed(c: TpCover, content: string, targetPages: number | null = null): Promise<{ blob: Blob; report: PdfReport }> {
   const { jsPDF } = await import('jspdf')
   const logo = await loadLogo(c.logoUrl)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const w = writer(doc)
   const look = COVER_TEMPLATES[c.template ?? 'classique'] ?? COVER_TEMPLATES.classique
   const MAIN = look.main
   const ACC = look.accent
@@ -401,10 +437,11 @@ export async function buildTpPdf(c: TpCover, content: string): Promise<Blob> {
   chars.forEach((ch, i) => { doc.text(ch, yx, yearY); yx += widths[i] + gap })
   rule(yearY + 6, yearHalf, 0.5)
 
-  w.newPage()
-  w.body(content)
-  footers(doc, c.title)
-  return doc.output('blob')
+  // Contenu : texte nettoyé (balises, champs vides, consignes), puis mise en page ajustée au nombre de pages demandé.
+  const blocks = parseBlocks(cleanTpText(content))
+  const { params, report } = buildBody(doc, blocks, targetPages && targetPages > 0 ? Math.round(targetPages) : null)
+  footers(doc, c.title, params)
+  return { blob: doc.output('blob'), report }
 }
 
 function universityOnly(u: string): string {

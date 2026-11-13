@@ -1,5 +1,5 @@
 import { askAI, LimitError } from './api'
-import { stripAiNoise } from './pdf'
+import { cleanTpText } from './tpclean'
 
 /** Une partie principale du plan, avec ses sous-parties. */
 export interface TpPart { n: number; title: string; subs: string[]; raw: string }
@@ -8,13 +8,15 @@ const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u
 /** Retire la numérotation (« 1. », « I) », « 2.3 », « Partie 1 : ») pour comparer seulement le titre. */
 const bare = (s: string) => norm(s.replace(/^\s*(partie\s+)?([0-9]+(\.[0-9]+)*|[ivxl]+|[a-z])\s*[.)\-:–]\s*/i, '').replace(/^\s*[0-9]+(\.[0-9]+)+\s+/, ''))
 
-const SUB = /^\s*(\d+\.\d+|[a-z]\)|[-•·▪●])/i
-const TOP = /^\s*(partie\s+)?(\d+|[ivxl]+)\s*[.)\-:–]\s*\S/i
+const SUB = /^\s*(\d+\.\d+|[ivxl]+\.\d+|[a-z]\)|[-•·▪●])/i
+const TOP = /^\s*(partie\s+)?(\d+|[ivxl]+)\s*[.)\-:–]\s*(?!\d)\S/i
+/** Introduction, conclusion et bibliographie sont toujours des parties principales, même sans numéro. */
+const KEYTOP = /^(introduction|conclusion|bibliographie)\b/i
 
 /** Découpe le plan (texte) en parties. Toujours au moins une partie ; jamais d'erreur. */
 export function parsePlan(plan: string): TpPart[] {
-  const lines = stripAiNoise(plan).split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim())
-  const isTop = (l: string) => TOP.test(l) && !SUB.test(l)
+  const lines = cleanTpText(plan).split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim())
+  const isTop = (l: string) => (TOP.test(l) && !SUB.test(l)) || (!/^\s/.test(l) && KEYTOP.test(l))
   let tops = lines.filter(isTop).length
   const parts: TpPart[] = []
   const push = (title: string) => parts.push({ n: parts.length + 1, title: title.trim(), subs: [], raw: title.trim() })
@@ -70,7 +72,7 @@ export function missingParts(parts: TpPart[], texts: Record<number, string>, rel
   return bad
 }
 
-export const assemble = (parts: TpPart[], texts: Record<number, string>) => parts.map((p) => (texts[p.n] ?? '').trim()).filter(Boolean).join('\n\n')
+export const assemble = (parts: TpPart[], texts: Record<number, string>) => cleanTpText(parts.map((p) => (texts[p.n] ?? '').trim()).filter(Boolean).join('\n\n'))
 
 const KEY = (courseId: string) => `memoa-tp-progress:${courseId}`
 export interface TpProgress { courseId: string; title: string; brief: string; plan: string; session: string | null; texts: Record<number, string>; at: number }
@@ -120,7 +122,7 @@ export async function writeTp(a: WriteArgs): Promise<string> {
       const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
       const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
       const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }))
-      const txt = stripAiNoise(r.reply).trim()
+      const txt = cleanTpText(r.reply).trim()
       if (txt) texts[p.n] = txt
       a.onSave(texts)
     }
@@ -128,4 +130,44 @@ export async function writeTp(a: WriteArgs): Promise<string> {
   const bad = missingParts(parts, texts, true)
   if (bad.length) throw new Error(`Il manque encore la partie ${bad.join(', ')}. Appuie sur « Reprendre la rédaction » : seules les parties manquantes seront refaites, sans point en plus.`)
   return assemble(parts, texts)
+}
+
+/**
+ * Ajuste la LONGUEUR du texte quand la mise en page seule ne suffit pas pour obtenir le nombre de pages demandé.
+ * Rien n'est supprimé au hasard et aucune page vide n'est ajoutée : on demande à l'IA d'étoffer (ou de condenser) quelques parties précises,
+ * en gardant leurs titres. Une partie de rédaction coûte 0 point (même session de TP). Au plus 6 appels par ajustement.
+ * `gap` = pages à retirer (> 0) ou à ajouter (< 0), mesuré sur le PDF réel.
+ */
+export async function adjustLength(a: { courseId: string; title: string; brief: string; plan: string; session: string; texts: Record<number, string>; gap: number; onProgress: (msg: string) => void }): Promise<Record<number, string>> {
+  const parts = parsePlan(a.plan)
+  const texts: Record<number, string> = { ...a.texts }
+  const grow = a.gap < 0
+  const pageChars = 2300 // ordre de grandeur d'une page de texte courant
+  let wanted = Math.round(Math.abs(a.gap) * pageChars)
+  const body = parts.filter((p) => !/introduction|conclusion|biblio/i.test(p.title) && (texts[p.n] ?? '').length > 0)
+  const pool = (body.length ? body : parts.filter((p) => (texts[p.n] ?? '').length > 0))
+    .sort((x, y) => grow ? (texts[x.n] ?? '').length - (texts[y.n] ?? '').length : (texts[y.n] ?? '').length - (texts[x.n] ?? '').length)
+  let calls = 0
+  for (const p of pool) {
+    if (wanted <= 150 || calls >= 6) break
+    const cur = texts[p.n] ?? ''
+    const share = Math.min(wanted, grow ? Math.max(500, Math.round(cur.length * 0.6)) : Math.round(cur.length * 0.4))
+    const newLen = grow ? cur.length + share : Math.max(400, cur.length - share)
+    a.onProgress(`${grow ? 'Je développe' : 'Je condense'} : ${p.title.slice(0, 50)}`)
+    const consigne = `CONSIGNE DE LONGUEUR : réécris cette partie ${grow ? 'en l\u2019étoffant (explications, exemples, arguments utiles, sans remplissage ni répétition)' : 'en la condensant (garde l\u2019essentiel, supprime les redites)'} pour obtenir environ ${newLen} caractères. Garde EXACTEMENT les mêmes titres et sous-parties, dans le même ordre.\n\nTEXTE ACTUEL DE LA PARTIE :\n${cur.slice(0, 6000)}`
+    const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 1500)}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n\n${consigne}`
+    try {
+      const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }))
+      const txt = cleanTpText(r.reply).trim()
+      // on n'accepte la réécriture que si elle est complète (titres présents) et va dans le bon sens
+      if (txt && partIsComplete(p, txt, false) && (grow ? txt.length > cur.length * 1.1 : txt.length < cur.length * 0.95)) {
+        wanted -= Math.abs(txt.length - cur.length)
+        texts[p.n] = txt
+      }
+    } catch (e) {
+      if (e instanceof LimitError || !transient(e)) break
+    }
+    calls++
+  }
+  return texts
 }
