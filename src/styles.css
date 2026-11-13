@@ -420,7 +420,8 @@ a.pill-btn { text-decoration: none; }
 .ed-body { flex: 1; min-height: 0; width: 100%; margin-top: 12px; padding: 0; border: 0; background: transparent; outline: none; resize: none; overflow-y: auto; color: var(--text); font-size: 16px; line-height: 1.75; caret-color: var(--btn); }
 .ed-extra { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px 8px; max-height: 40dvh; overflow-y: auto; }
 .ed-guide-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px dashed var(--line-strong); background: transparent; color: var(--text-2); font-size: 14px; font-weight: 600; text-align: left; }
-.ed-guide-btn .grow { flex: 1; }
+.ed-guide-btn .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-guide-av { flex: none; display: inline-flex; width: 28px; height: 28px; border-radius: 50%; overflow: hidden; align-items: center; justify-content: center; background: var(--surface-2); }
 .ed-guide-box { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
 .ed-guide-box textarea { width: 100%; min-height: 72px; border: 0; background: transparent; outline: none; resize: none; font-size: 15px; line-height: 1.5; color: var(--text); }
 .ed-guide-box textarea::placeholder { color: var(--ph); opacity: 1; }
@@ -617,7 +618,10 @@ a.pill-btn { text-decoration: none; }
 
 /* Points gratuits dans l'Assistant */
 .as-title-wrap { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.pts-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: var(--surface-2); color: var(--link); font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+.pts-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 13px; background: #3a2e0a; color: #f5c518; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+[data-theme='light'] .pts-chip { background: #fdf1c7; color: #8a6400; }
+.pts-chip svg path { stroke: #f5c518; fill: #f5c518; }
+[data-theme='light'] .pts-chip svg path { stroke: #d9a400; fill: #e8b400; }
 .pts-chip.zero { background: #3a2a0e; color: #f7c777; }
 [data-theme='light'] .pts-chip.zero { background: #fcebd0; color: #8a4b00; }
 
