@@ -72,6 +72,7 @@ const DAY_MS = 86_400_000
 /** Début (en ms UTC) du jour de Kinshasa qui contient « t » : 00h00 Kinshasa = 23h00 UTC la veille. */
 const kinDayStart = (t: number) => Math.floor((t + KIN_OFFSET_MS) / DAY_MS) * DAY_MS - KIN_OFFSET_MS
 // Coût fixe par tâche. Les tâches sur des notes (LENGTH_TASKS) coûtent selon la longueur du texte envoyé.
+const CHAT_PAID = 1 // chat : 1 point tous les 2 messages (voir plus bas)
 const COURSE_POINTS = 15 // génération complète d'un cours, quelle que soit la méthode (notes, consignes seules…)
 const TP_POINTS = 10 // un TP complet (plan + ajustements + rédaction) : payé UNE seule fois, à l'ouverture de la « session de TP »
 const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
@@ -290,7 +291,7 @@ Barre du bas : Accueil, Cours, Librairie, Assistant, Moi.
 - Assistant (ce chat) : en bas, le champ de message ; icône + (joindre photo ou document), icône livre (choisir un cours comme contexte), icône globe (recherche web), micro (dicter), flèche (envoyer), carré (arrêter), haut-parleur sous une réponse (écouter). L'historique des conversations est dans le menu du haut ; on peut chercher dans ses notes.
 - Moi : photo et nom, séries et chiffres, carte Premium, « Mon profil » (modifier université, faculté, promotion…), « Mon Memo » (changer d'animal et de nom), « Réglages » (notifications, thème clair/sombre, langue, déconnexion), aide, signaler un problème, donner son avis, confidentialité, conditions, à propos.
 - Premium (Moi, puis la carte Premium) : 4,99 USD ou 11 000 FC pour 30 jours, payé par Orange Money, Airtel Money ou M-Pesa. Après paiement, l'abonnement s'active ; on voit sa date de fin. Memoa prévient 7 jours, 2 jours avant et le jour de la fin.
-- Essai et points : 5 jours d'IA complète offerts à l'inscription (un essai par numéro). Ensuite 20 points gratuits PAR JOUR : ils reviennent à 20 chaque jour à minuit (heure de Kinshasa), les points non utilisés ne se cumulent pas. Créer un cours avec l'IA coûte 15 points (quelle que soit la méthode) ; un TP complet 10 points au total (plan, ajustements et rédaction compris) ; une question au chat 1 ; une révision (un quiz) 1 ; un résumé ou une mise en forme de note 4 à 20 selon la longueur. Le solde est affiché dans l'Assistant et sur l'Accueil. Premium enlève cette limite.
+- Essai et points : 5 jours d'IA complète offerts à l'inscription (un essai par numéro). Ensuite 20 points gratuits PAR JOUR : ils reviennent à 20 chaque jour à minuit (heure de Kinshasa), les points non utilisés ne se cumulent pas. Créer un cours avec l'IA coûte 15 points (quelle que soit la méthode) ; un TP complet 10 points au total (plan, ajustements et rédaction compris) ; deux questions au chat 1 point ; une révision (un quiz) 1 ; un résumé ou une mise en forme de note 4 à 20 selon la longueur. Le solde est affiché dans l'Assistant et sur l'Accueil. Premium enlève cette limite.
 - Brouillons : dans l'écran d'écriture, le bouton « Brouillon » garde ta note 72 h sur le téléphone, même sans connexion. Les brouillons apparaissent dans l'onglet Cours, section « Brouillons en attente », avec un compte à rebours ; quand le réseau revient, on ouvre le brouillon et on touche « Générer le PDF ». Sans PDF au bout de 72 h, le brouillon est supprimé.
 - Compte : inscription par e-mail ou Google ; avec Google il faut créer un mot de passe et ajouter son numéro de téléphone, car c'est ce qui sert à se reconnecter. Installer l'app : page « Installer » (ajouter à l'écran d'accueil).
 Réponses types : « C'est quoi Memoa ? » → compagnon d'étude (ci-dessus). « Où je change mon Memo ? » → Moi, puis Mon Memo. « Comment télécharger mon cours ? » → ouvre le cours, bouton Télécharger.
@@ -560,7 +561,13 @@ Deno.serve(async (req) => {
     const { data: ok } = await admin.rpc('use_tp_session', { p_user: user.id, p_session: body.tpSession, p_kind: task })
     if (ok === true) tpSession = body.tpSession
   }
-  const cost = isTp ? (tpSession ? 0 : TP_POINTS) : costOf(task, prompt.length, purpose)
+  let cost = isTp ? (tpSession ? 0 : TP_POINTS) : costOf(task, prompt.length, purpose)
+  // Chat : 2 messages = 1 point. Dans la journée, le 1er message paie 1 point, le 2e est gratuit, le 3e paie, etc.
+  // (on compte toutes les lignes « chat » du jour, y compris les gratuites à 0 point, donc impossible de tricher en alternant).
+  if (task === 'chat' && st.mode === 'points') {
+    const { count: chatsToday } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('task', 'chat').gte('created_at', new Date(st.from).toISOString())
+    cost = (chatsToday ?? 0) % 2 === 0 ? CHAT_PAID : 0
+  }
 
   const denied = await checkAccess(admin, user.id, task, st, cost)
   if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
