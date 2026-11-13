@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth'
 import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
-import { OfflineSaveSheet, PendingAudioChip } from '../components/OfflineSave'
+import { OfflineSaveSheet } from '../components/OfflineSave'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdf, stripAiNoise, splitTpTitle } from '../lib/pdf'
 import { readPhotoText } from '../lib/ocr'
@@ -87,12 +87,10 @@ export function NewCourse() {
   function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
 
   /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (72 h), puis retourne à la liste. */
-  async function keepDraft(force = false) {
+  async function keepDraft() {
     if (!user) return
     if (!title.trim() && !content.trim() && !consignes.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
     dict.current?.stop()
-    // Sans réseau, « Brouillon » propose : nouveau cours ou ajout à un cours existant (envoi automatique au retour du réseau).
-    if (!force && !isOnline() && (content.trim() || pendingAudio)) { if (!title.trim()) return setError('Donne un nom à ta note.'); return setOfflineSheet(true) }
     const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: 'course', title, body: content, guide: consignes, source, audio: pendingAudio }))
     if (d) nav('/sac')
   }
@@ -100,8 +98,6 @@ export function NewCourse() {
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
     setError(null)
-    // Sans réseau, la dictée du téléphone ne marche pas : on enregistre la voix, elle sera transcrite au retour du réseau.
-    if (!isOnline()) { if (pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start(); return }
     const d = startDictation(
       (t) => setContent((c) => (c ? c + ' ' : '') + t),
       (err) => {
@@ -143,7 +139,7 @@ export function NewCourse() {
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
     // Sans réseau : l'enregistrement (ou le fichier) est gardé et sera transcrit tout seul au retour du réseau.
-    if (!isOnline()) { if (pendingAudio) { setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); return } setPendingAudio(f); setError(null); return }
+    if (!isOnline()) { setPendingAudio(f); setError(null); return }
     setPendingAudio(null)
     setStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
@@ -166,7 +162,8 @@ export function NewCourse() {
     if (!title.trim()) return setError('Donne un nom à ton cours.')
     if (!isOnline()) {
       // Sans réseau : l'IA n'est pas joignable, mais la note peut être gardée (nouveau cours OU ajout à un cours existant) et envoyée plus tard.
-      if (!content.trim() && !pendingAudio) return setError(consignes.trim() ? 'Sans réseau, Memo ne peut pas rédiger ton cours. Écris ta note toi-même, ou garde-la en brouillon.' : 'Écris ta note pour pouvoir la garder.')
+      if (!content.trim()) return setError(consignes.trim() ? 'Sans réseau, Memo ne peut pas rédiger ton cours. Écris ta note toi-même, ou garde-la en brouillon.' : 'Écris ta note pour pouvoir la garder.')
+      if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Garde-le en brouillon : il sera transcrit au retour du réseau.")
       return setOfflineSheet(true)
     }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
@@ -227,7 +224,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
+        banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire. Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
         guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place. Créer un cours avec Memo coûte 15 points. Il s’en sert quand tu touches « Créer »."
@@ -237,7 +234,7 @@ export function NewCourse() {
             {WEB_SEARCH_ENABLED && <WebToggle on={web} set={setWeb} />}
           </div>
         }
-        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { if (!isOnline() && pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
+        bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
 
       <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
@@ -245,8 +242,7 @@ export function NewCourse() {
       {user && (
         <OfflineSaveSheet
           open={offlineSheet} onClose={() => setOfflineSheet(false)} userId={user.id}
-          title={title} content={content} audio={pendingAudio} source={source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte'}
-          onDraftOnly={() => { setOfflineSheet(false); void keepDraft(true) }}
+          title={title} content={content} source={source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte'}
           onQueued={() => { if (draftId) void deleteDraft(draftId).catch(() => {}); setOfflineSheet(false); nav('/') }}
         />
       )}
@@ -553,7 +549,6 @@ export function CourseDetail() {
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
     setError(null)
-    if (!isOnline()) { if (pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start(); return }
     const d = startDictation(
       (t) => setNoteText((x) => (x ? x + ' ' : '') + t),
       (err) => {
@@ -570,7 +565,7 @@ export function CourseDetail() {
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
     if (f.size > MAX_MEDIA_MB * 1024 * 1024) return setError(`Ce fichier est trop lourd (${MAX_MEDIA_MB} Mo maximum). ${kind === 'video' ? 'Essaie une vidéo plus courte.' : 'Coupe-le en plusieurs parties.'}`)
     // Sans réseau : l'enregistrement (ou le fichier) est gardé et sera transcrit tout seul au retour du réseau.
-    if (!isOnline()) { if (pendingAudio) { setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); return } setPendingAudio(f); setError(null); return }
+    if (!isOnline()) { setPendingAudio(f); setError(null); return }
     setPendingAudio(null)
     setNoteStep('Transcription en cours… cela peut prendre une minute.')
     const text = await run(() => transcribeAudio(f))
@@ -617,7 +612,7 @@ export function CourseDetail() {
     else if (noteSource === 'audio') audioRef.current?.click()
     else if (noteSource === 'video') videoRef.current?.click()
     else if (noteSource === 'voix') toggleDictation()
-    else if (noteSource === 'enreg') { if (!isOnline() && pendingAudio) { setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); return } setRecOpen(true); void rec.start() }
+    else if (noteSource === 'enreg') { setRecOpen(true); void rec.start() }
   }
   function resetNote() {
     dict.current?.stop()
@@ -631,11 +626,10 @@ export function CourseDetail() {
   }
 
   /** « Brouillon » : garde la note (ou la modification du cours) sur le téléphone pendant 72 h. Le cours n'est pas touché. */
-  async function keepDraft(force = false) {
+  async function keepDraft() {
     if (!user) return
     if (!noteTitle.trim() && !noteText.trim() && !noteGuide.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
     dict.current?.stop()
-    if (!force && !modify && !isOnline() && (noteText.trim() || pendingAudio)) return setOfflineSheet(true)
     const d = await run(() => saveDraft({ id: draftId, userId: user.id, kind: modify ? 'edit' : 'note', courseId: id, noteId: modify ? mainId : null, title: noteTitle, body: noteText, guide: noteGuide, source: noteSource, audio: pendingAudio }))
     if (d) resetNote()
   }
@@ -692,10 +686,11 @@ export function CourseDetail() {
     const src = noteSource === 'enreg' ? 'audio' : noteSource === 'video' ? 'audio' : noteSource === 'voix' ? 'voix' : noteSource
     const base = noteText.trim()
     const guide = noteGuide.trim()
-    if (!base && !guide && !pendingAudio) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
+    if (!base && !guide) return setError("Écris ta note, ou donne des consignes à l'IA pour qu'elle la rédige.")
     if (!isOnline()) {
       // Sans réseau : ajout à ce cours, ou à un autre, ou nouveau cours ; envoyé automatiquement plus tard. Les modifications d'un cours existant restent réservées au réseau.
-      if (modify || (!base && !pendingAudio)) return setError(OFFLINE_MSG)
+      if (modify || !base) return setError(OFFLINE_MSG)
+      if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Garde-le en brouillon : il sera transcrit au retour du réseau.")
       return setOfflineSheet(true)
     }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
@@ -807,9 +802,8 @@ export function CourseDetail() {
       {user && course.data && (
         <OfflineSaveSheet
           open={offlineSheet} onClose={() => setOfflineSheet(false)} userId={user.id}
-          title={noteTitle} content={noteText} audio={pendingAudio} currentCourse={{ id, title: course.data.title }}
+          title={noteTitle} content={noteText} currentCourse={{ id, title: course.data.title }}
           source={noteSource === 'enreg' || noteSource === 'video' ? 'audio' : noteSource}
-          onDraftOnly={() => { setOfflineSheet(false); void keepDraft(true) }}
           onQueued={() => { if (draftId) void deleteDraft(draftId).catch(() => {}); setOfflineSheet(false); resetNote() }}
         />
       )}
@@ -852,7 +846,7 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Brouillon » pour le ranger dans un cours ou le garder 72 h.</span>}{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
+          banner={<>{!online && <span className="muted" role="status">Sans connexion : tu peux écrire et enregistrer. Touche « Brouillon » pour tout garder 72 h.</span>}{pendingAudio && <span className="muted" role="status">Enregistrement gardé : il sera transcrit dès que le réseau revient.</span>}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
           guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (4 à 20 points selon la longueur). Elle s’en sert quand tu touches « Terminé »."
@@ -862,7 +856,7 @@ export function CourseDetail() {
               {WEB_SEARCH_ENABLED && <WebToggle on={noteWeb} set={setNoteWeb} />}
             </div>
           }
-          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { if (!isOnline() && pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
+          bar={<EditorBar onPhoto={() => photoRef.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { setRecOpen(true); void rec.start() }} recordDisabled={!!noteStep} onPlus={() => setDocSheet(true)} />}
         />
       )}
 
