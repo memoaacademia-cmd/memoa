@@ -24,6 +24,8 @@ export interface OutboxItem {
   lastError?: string
   /** Cours de remplacement (cours supprimé avant l'envoi), créé une seule fois même après une coupure. */
   recoverId?: string
+  /** Enregistrement vocal fait sans réseau : transcrit au retour du réseau (une seule fois), puis le texte remplace l'audio. */
+  audio?: File | null
 }
 export interface CachedCourse { id: string; title: string }
 
@@ -96,7 +98,7 @@ export async function offlineCourses(userId: string, store: Store = idbStore): P
 }
 
 /* ------------------------------ mise en file ------------------------------ */
-export interface EnqueueInput { userId: string; kind: OutboxKind; courseId?: string; courseTitle: string; title: string; content: string; source?: string }
+export interface EnqueueInput { audio?: File | null; userId: string; kind: OutboxKind; courseId?: string; courseTitle: string; title: string; content: string; source?: string }
 const SOURCES = ['texte', 'voix', 'audio', 'video', 'pdf', 'photo']
 
 /** Garde la note sur le téléphone. Renvoie seulement quand elle est bien écrite ET relue. Refuse un doublon identique encore en attente. */
@@ -109,25 +111,26 @@ export function enqueueNote(inp: EnqueueInput, store: Store = idbStore): Promise
 }
 async function enqueueNow(inp: EnqueueInput, store: Store): Promise<OutboxItem> {
   const content = inp.content.trim()
-  if (!content) throw new Error('Ta note est vide.')
+  const audio = inp.audio ?? null
+  if (!content && !audio) throw new Error('Ta note est vide.')
   if (content.length > 60000) throw new Error('Cette note est trop longue. Découpe-la en plusieurs notes.')
   const courseTitle = inp.courseTitle.trim().slice(0, 80)
   if (!courseTitle) throw new Error('Donne un nom à ton cours.')
   const target = inp.kind === 'new_course' ? '' : inp.courseId ?? ''
   if (inp.kind === 'add_note' && !target) throw new Error('Choisis un cours.')
-  const key = hashKey([inp.userId, inp.kind, target, courseTitle, inp.title.trim(), content].join('\u0001'))
+  const key = hashKey([inp.userId, inp.kind, target, courseTitle, inp.title.trim(), content, audio ? `${audio.size}:${audio.type}:${audio.name}` : ''].join('\u0001'))
   const same = (await store.list(inp.userId)).find((i) => i.key === key)
   if (same) return same // double appui : on ne crée rien de plus
   const item: OutboxItem = {
     id: newUuid(), userId: inp.userId, kind: inp.kind,
     courseId: inp.kind === 'new_course' ? newUuid() : target,
-    courseTitle, title: (inp.title.trim() || courseTitle).slice(0, 80), content,
-    source: SOURCES.includes(inp.source ?? '') ? (inp.source as string) : 'texte',
+    courseTitle, title: (inp.title.trim() || courseTitle).slice(0, 80), content, audio,
+    source: audio ? 'audio' : SOURCES.includes(inp.source ?? '') ? (inp.source as string) : 'texte',
     key, createdAt: Date.now(), attempts: 0, state: 'pending'
   }
   await store.put(item)
   const back = await store.get(item.id)
-  if (!back || back.content !== content) throw new Error("La note n'a pas pu être gardée sur ton téléphone. Garde-la en brouillon.")
+  if (!back || back.content !== content || (audio && !back.audio)) throw new Error("La note n'a pas pu être gardée sur ton téléphone. Garde-la en brouillon.")
   changed()
   return item
 }
@@ -151,14 +154,15 @@ const supa = (): Client => ({
 type Err = { code?: string; message?: string }
 const isDup = (e: Err | null) => !!e && (e.code === '23505' || /duplicate key/i.test(e.message ?? ''))
 /** Réseau coupé, session à renouveler, serveur occupé : on réessaiera plus tard, sans compter d'échec. */
-const isTransient = (e: Err | null) => !!e && ((typeof navigator !== 'undefined' && navigator.onLine === false) || /failed to fetch|networkerror|network request|load failed|fetch|timeout|jwt|\b50\d\b/i.test(`${e.code ?? ''} ${e.message ?? ''}`))
+const isTransient = (e: Err | null) => !!e && ((typeof navigator !== 'undefined' && navigator.onLine === false) || /failed to fetch|networkerror|network request|load failed|fetch|timeout|jwt|points|premium|minuit|\b50\d\b/i.test(`${e.code ?? ''} ${e.message ?? ''}`))
 const MAX_ATTEMPTS = 5
 
+export type Transcribe = (f: File) => Promise<string>
 export interface SyncResult { sent: number; left: number; notices: string[] }
 let running = false
 
 /** Envoie les notes en attente, dans l'ordre. S'arrête au premier problème de réseau. Peut être appelée n'importe quand, plusieurs fois : sans risque de doublon. */
-export async function syncOutbox(userId: string, deps: { store?: Store; client?: Client; online?: () => boolean } = {}): Promise<SyncResult> {
+export async function syncOutbox(userId: string, deps: { store?: Store; client?: Client; online?: () => boolean; transcribe?: Transcribe } = {}): Promise<SyncResult> {
   const store = deps.store ?? idbStore
   const online = deps.online ?? (() => typeof navigator === 'undefined' || navigator.onLine !== false)
   const res: SyncResult = { sent: 0, left: 0, notices: [] }
@@ -194,6 +198,15 @@ export async function syncOutbox(userId: string, deps: { store?: Store; client?:
             if (c.error) throw c.error
             if (c.data?.deleted_at) { await store.del(it.id); continue } // supprimé volontairement : on n'y remet rien
           }
+        }
+        // Enregistrement vocal : transcrit UNE fois (3 points), le texte est gardé tout de suite, puis l'audio est retiré : une coupure ensuite ne refait pas la transcription.
+        if (it.audio) {
+          const tr = deps.transcribe ?? (async (f: File) => (await import('./api')).transcribeAudio(f))
+          const text = (await tr(it.audio)).trim()
+          if (!text) throw { message: "Aucun texte n'a été reconnu dans l'enregistrement." }
+          it.content = it.content ? `${it.content}\n\n${text}` : text
+          it.audio = null
+          await store.put(it)
         }
         const n = await client.insertNote({ id: it.id, user_id: userId, course_id: courseId, title: it.title, content: it.content, source: it.source })
         if (n.error && !isDup(n.error)) throw n.error
