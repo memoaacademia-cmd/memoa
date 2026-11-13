@@ -662,3 +662,18 @@ a.pill-btn { text-decoration: none; }
 
 .pages-input { width: 100%; box-sizing: border-box; border-radius: 16px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--text); padding: 12px 14px; font-size: 16px; margin: 6px 0 4px; outline: none; }
 .pages-input:focus { border-color: var(--btn); }
+
+/* Aperçu de la page de garde : cadre selon le modèle, bandeau plein (Premium, Classique, Émeraude) */
+.cover { border: 2px solid transparent; }
+.cover.cv-double { border: 4px double var(--cv-main); }
+.cover.cv-single { border: 2px solid var(--cv-main); box-shadow: inset 0 0 0 4px #fff, inset 0 0 0 5px var(--cv-acc); }
+.cover.cv-corners { border: 1px solid var(--cv-main); box-shadow: inset 4px 4px 0 -2px var(--cv-acc), inset -4px -4px 0 -2px var(--cv-acc); }
+.cover.cv-sidebar { border-left: 14px solid var(--cv-main); }
+.cover.cv-gold { border: 2px solid var(--cv-acc); box-shadow: inset 0 0 0 4px #fff, inset 0 0 0 5px var(--cv-acc); border-top: 8px solid var(--cv-main); }
+.cover.cv-filled .band { background: var(--cv-main); }
+.cover.cv-filled .band .t { color: #fff; }
+.cover.cv-gold .band small { color: var(--cv-acc); }
+.cover.cv-filled:not(.cv-gold) .band small { color: #fff; }
+.cover .made { margin-top: 10px; font-size: 10.5px; color: #8a8f8d; }
+.tpl-chip { flex: 1 1 auto; justify-content: center; }
+.cover, .cover .t, .cover .s { max-width: 100%; overflow-wrap: anywhere; }
