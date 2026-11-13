@@ -83,11 +83,11 @@ function drawPages(doc: Doc, pages: Page[]) {
 }
 
 /** Pieds de page discrets : filet fin, titre à gauche, numéro à droite. La page de garde n'est pas numérotée ; le contenu commence à 1. */
-function footers(doc: Doc, label: string, p: Params) {
+function footers(doc: Doc, label: string, p: Params, rule: RGB | number = 215) {
   const total = doc.getNumberOfPages()
   for (let pg = 2; pg <= total; pg++) {
     doc.setPage(pg)
-    doc.setDrawColor(215)
+    if (typeof rule === 'number') doc.setDrawColor(rule); else doc.setDrawColor(rule[0], rule[1], rule[2])
     doc.setLineWidth(0.2)
     doc.line(p.ml, PAGE_H - 15, PAGE_W - p.mr, PAGE_H - 15)
     doc.setFont('helvetica', 'normal')
@@ -139,22 +139,22 @@ function buildBody(doc: Doc, blocks: Block[], target: number | null): { params: 
   }
 }
 
-export async function buildCoursePdf(title: string, author: string, notes: Note[], kind = 'NOTES DE COURS'): Promise<Blob> {
+export interface CoursePdfOptions {
+  /** Étudiant Premium : présentation dorée, aucune mention « Créé avec Memoa ». */
+  premium?: boolean
+  university?: string
+  faculty?: string
+  department?: string
+  promotion?: string
+  /** Modèle choisi (défaut : Émeraude, l'identité Memoa ; Premium : doré). */
+  template?: CoverTemplate
+}
+
+export async function buildCoursePdf(title: string, author: string, notes: Note[], kind = 'NOTES DE COURS', opts: CoursePdfOptions = {}): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const w = writer(doc)
-
-  doc.setFillColor(11, 93, 84)
-  doc.rect(0, 0, W, 8, 'F')
-  w.y = 60
-  w.write(`MEMOA · ${clean(kind)}`, 10, 'bold', 0, 6, 11)
-  w.write(clean(title), 26, 'bold', 0, 6, 20)
-  doc.setDrawColor(11, 93, 84)
-  doc.setLineWidth(0.8)
-  doc.line(M, w.y, M + 24, w.y)
-  w.y += 8
-  if (author) w.write(clean(author), BODY_PT + 1, 'normal', 0, 2, 70)
-  w.write(new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }), BODY_PT, 'normal', 0, 2, 110)
+  const look = lookFor(opts.template, !!opts.premium)
+  drawCourseCover(doc, look, { title, author, kind, ...opts })
 
   // Les notes s'enchaînent sans pages à moitié vides : chaque note commence par son titre, avec un espace au-dessus.
   const blocks: Block[] = []
@@ -163,7 +163,7 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
     blocks.push(...parseBlocks(cleanDocText(n.content), 1))
   })
   const { params } = buildBody(doc, blocks, null)
-  footers(doc, title, params)
+  footers(doc, title, params, opts.premium ? look.accent : 215)
   return doc.output('blob')
 }
 
@@ -183,6 +183,10 @@ export interface TpCover {
   kind?: string
   /** Modèle de page de garde (« classique » par défaut). */
   template?: CoverTemplate
+  /** Encadrant / professeur (facultatif). */
+  supervisor?: string
+  /** Étudiant Premium : aucune mention « Créé avec Memoa ». Le modèle doré lui est réservé. */
+  premium?: boolean
 }
 
 interface LoadedLogo { data: string; w: number; h: number }
@@ -238,79 +242,57 @@ export function splitTpTitle(raw: string, defaultKind = 'TRAVAIL PRATIQUE'): { k
 
 type RGB = [number, number, number]
 
-export type CoverTemplate = 'classique' | 'emeraude' | 'bordeaux' | 'ardoise'
+export type CoverTemplate = 'classique' | 'emeraude' | 'bordeaux' | 'ardoise' | 'premium'
 
 interface CoverLook {
   label: string
   main: RGB
   accent: RGB
   /** Forme du cadre autour de la page. */
-  frame: 'double' | 'single' | 'corners' | 'sidebar'
+  frame: 'double' | 'single' | 'corners' | 'sidebar' | 'gold'
   /** Bandeau du titre : plein (texte blanc) ou seulement entre deux filets. */
   band: 'filled' | 'outlined'
 }
 
-/** Les modèles de page de garde proposés à l'étudiant. */
+/** Les modèles de page de garde proposés à l'étudiant. « premium » : charbon et or, réservé aux abonnés. */
 export const COVER_TEMPLATES: Record<CoverTemplate, CoverLook> = {
   classique: { label: 'Classique', main: [27, 42, 107], accent: [184, 137, 43], frame: 'double', band: 'filled' },
   emeraude: { label: 'Émeraude', main: [11, 93, 84], accent: [242, 163, 58], frame: 'single', band: 'filled' },
   bordeaux: { label: 'Bordeaux', main: [110, 24, 48], accent: [160, 124, 60], frame: 'corners', band: 'outlined' },
-  ardoise: { label: 'Ardoise', main: [30, 41, 59], accent: [13, 148, 136], frame: 'sidebar', band: 'outlined' }
+  ardoise: { label: 'Ardoise', main: [30, 41, 59], accent: [13, 148, 136], frame: 'sidebar', band: 'outlined' },
+  premium: { label: 'Premium', main: [28, 27, 33], accent: [176, 138, 46], frame: 'gold', band: 'filled' }
 }
-export const COVER_ORDER: CoverTemplate[] = ['classique', 'emeraude', 'bordeaux', 'ardoise']
+export const COVER_ORDER: CoverTemplate[] = ['classique', 'emeraude', 'bordeaux', 'ardoise', 'premium']
 
-/** TP : page de garde (4 modèles : double cadre, cadre simple, coins, bandeau latéral), puis le travail. */
-export async function buildTpPdf(c: TpCover, content: string, targetPages: number | null = null): Promise<Blob> {
-  return (await buildTpPdfDetailed(c, content, targetPages)).blob
+/** Le modèle doré est réservé à Premium : sans abonnement, on retombe sur « classique » (jamais d'erreur). */
+export function effectiveTemplate(t: CoverTemplate | undefined, premium: boolean, fallback: CoverTemplate = 'classique'): CoverTemplate {
+  const k = t && COVER_TEMPLATES[t] ? t : fallback
+  return k === 'premium' && !premium ? fallback : k
+}
+/** Cours : Émeraude (identité Memoa) en Free, doré en Premium, sauf autre modèle demandé. */
+function lookFor(t: CoverTemplate | undefined, premium: boolean): CoverLook {
+  return COVER_TEMPLATES[effectiveTemplate(t ?? (premium ? 'premium' : 'emeraude'), premium, 'emeraude')]
 }
 
-/** Comme buildTpPdf, mais renvoie aussi le contrôle réel du PDF produit (nombre de pages de contenu, défauts). */
-export async function buildTpPdfDetailed(c: TpCover, content: string, targetPages: number | null = null): Promise<{ blob: Blob; report: PdfReport }> {
-  const { jsPDF } = await import('jspdf')
-  const logo = await loadLogo(c.logoUrl)
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const look = COVER_TEMPLATES[c.template ?? 'classique'] ?? COVER_TEMPLATES.classique
+/** Aucun crochet ni champ vide sur la page de garde : « [Nom] », « [ ] » et espaces en trop disparaissent. */
+export function cleanField(v: string | null | undefined): string {
+  return (v ?? '').replace(/\[[^\]]*\]/g, '').replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+const MENTION = 'Créé avec Memoa'
+
+/** Petite mention discrète en bas de la page de garde (Free seulement). */
+function mention(doc: Doc, cx: number) {
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(150)
+  doc.text(clean(MENTION), cx, H - 17.5, { align: 'center' })
+}
+
+/** Cadre de la page de garde selon le modèle. */
+function drawFrame(doc: Doc, look: CoverLook, sideW: number) {
   const MAIN = look.main
   const ACC = look.accent
-  const sideW = look.frame === 'sidebar' ? 12 : 0
-  const cx = (W + sideW) / 2
-  const head = splitTpTitle(c.title, c.kind ?? 'TRAVAIL PRATIQUE')
-
-  /** Largeur exacte d'une ligne, lettres espacées de `gap` mm. */
-  const widthOf = (l: string, sz: number, gap: number) => {
-    doc.setFontSize(sz)
-    return Array.from(l).reduce((n, ch) => n + doc.getTextWidth(ch), 0) + gap * Math.max(0, Array.from(l).length - 1)
-  }
-  /** Texte centré sur la page, lettre par lettre quand il est espacé : le centrage est exact. Renvoie le y après la dernière ligne. */
-  const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: RGB, gap = 0, maxW = 140, up = false) => {
-    const t = clean(up ? text.toUpperCase() : text)
-    doc.setFont('helvetica', style)
-    doc.setTextColor(color[0], color[1], color[2])
-    const lines: string[] = []
-    let cur = ''
-    for (const wd of t.split(/\s+/)) {
-      const test = cur ? `${cur} ${wd}` : wd
-      if (cur && widthOf(test, size, gap) > maxW) { lines.push(cur); cur = wd } else cur = test
-    }
-    if (cur) lines.push(cur)
-    let sz = size
-    while (sz > 7 && lines.some((l) => widthOf(l, sz, gap) > maxW)) sz -= 0.5
-    doc.setFontSize(sz)
-    const lh = sz * 0.5
-    lines.forEach((l, i) => {
-      let x = cx - widthOf(l, sz, gap) / 2
-      if (!gap) { doc.text(l, x, y + i * lh); return }
-      for (const ch of Array.from(l)) { doc.text(ch, x, y + i * lh); x += doc.getTextWidth(ch) + gap }
-    })
-    return y + lines.length * lh
-  }
-  const rule = (y: number, half: number, thick = 0.5) => {
-    doc.setDrawColor(ACC[0], ACC[1], ACC[2])
-    doc.setLineWidth(thick)
-    doc.line(cx - half, y, cx + half, y)
-  }
-
-  // Cadre selon le modèle
   if (look.frame === 'double') {
     doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
     doc.setLineWidth(0.9)
@@ -335,20 +317,182 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
       doc.line(x, y, x + dx * L, y)
       doc.line(x, y, x, y + dy * L)
     }
+  } else if (look.frame === 'gold') {
+    // Premium : barre charbon et filet or en haut, double filet or, petit carré d'or aux quatre coins.
+    doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.rect(0, 0, W, 6, 'F')
+    doc.setFillColor(ACC[0], ACC[1], ACC[2])
+    doc.rect(0, 6, W, 1, 'F')
+    doc.setDrawColor(ACC[0], ACC[1], ACC[2])
+    doc.setLineWidth(1)
+    doc.rect(11, 14, W - 22, H - 25)
+    doc.setLineWidth(0.3)
+    doc.rect(13.5, 16.5, W - 27, H - 30)
+    doc.setFillColor(ACC[0], ACC[1], ACC[2])
+    for (const [x, y] of [[11, 14], [W - 11, 14], [11, H - 11], [W - 11, H - 11]] as const) doc.rect(x - 1.6, y - 1.6, 3.2, 3.2, 'F')
   } else {
     doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
     doc.rect(0, 0, sideW, H, 'F')
     doc.setFillColor(ACC[0], ACC[1], ACC[2])
     doc.rect(sideW, 0, 1.6, H, 'F')
   }
+}
+
+/** Bandeau (plein ou entre deux filets) : dessine le fond et les filets. */
+function drawBand(doc: Doc, look: CoverLook, cx: number, top: number, bw: number, bh: number) {
+  const MAIN = look.main
+  const ACC = look.accent
+  const filled = look.band === 'filled'
+  if (filled) {
+    doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.rect(cx - bw / 2, top, bw, bh, 'F')
+  }
+  doc.setDrawColor(ACC[0], ACC[1], ACC[2])
+  doc.setLineWidth(filled ? 0.8 : 1.2)
+  doc.line(cx - bw / 2, top, cx + bw / 2, top)
+  doc.line(cx - bw / 2, top + bh, cx + bw / 2, top + bh)
+  if (!filled) {
+    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
+    doc.setLineWidth(0.3)
+    doc.line(cx - bw / 2, top + 1.8, cx + bw / 2, top + 1.8)
+    doc.line(cx - bw / 2, top + bh - 1.8, cx + bw / 2, top + bh - 1.8)
+  }
+}
+
+/** Texte centré (lettres espacées au besoin) : le centrage est exact. `center` renvoie le y après la dernière ligne. */
+function makeCenter(doc: Doc, cx: number) {
+  const widthOf = (l: string, sz: number, gap: number) => {
+    doc.setFontSize(sz)
+    return Array.from(l).reduce((n, ch) => n + doc.getTextWidth(ch), 0) + gap * Math.max(0, Array.from(l).length - 1)
+  }
+  const center = (text: string, size: number, style: 'normal' | 'bold', y: number, color: RGB, gap = 0, maxW = 140, up = false) => {
+    const t = clean(up ? text.toUpperCase() : text)
+    doc.setFont('helvetica', style)
+    doc.setTextColor(color[0], color[1], color[2])
+    const lines: string[] = []
+    let cur = ''
+    for (const wd of t.split(/\s+/)) {
+      const test = cur ? `${cur} ${wd}` : wd
+      if (cur && widthOf(test, size, gap) > maxW) { lines.push(cur); cur = wd } else cur = test
+    }
+    if (cur) lines.push(cur)
+    let sz = size
+    while (sz > 7 && lines.some((l) => widthOf(l, sz, gap) > maxW)) sz -= 0.5
+    doc.setFontSize(sz)
+    const lh = sz * 0.5
+    lines.forEach((l, i) => {
+      let x = cx - widthOf(l, sz, gap) / 2
+      if (!gap) { doc.text(l, x, y + i * lh); return }
+      for (const ch of Array.from(l)) { doc.text(ch, x, y + i * lh); x += doc.getTextWidth(ch) + gap }
+    })
+    return y + lines.length * lh
+  }
+  const rule = (y: number, half: number, thick: number, color: RGB) => {
+    doc.setDrawColor(color[0], color[1], color[2])
+    doc.setLineWidth(thick)
+    doc.line(cx - half, y, cx + half, y)
+  }
+  return { widthOf, center, rule }
+}
+
+/** Page de garde des cours et résumés : identité Memoa (doré en Premium), champs du profil, jamais de crochets vides. */
+function drawCourseCover(doc: Doc, look: CoverLook, o: { title: string; author: string; kind: string } & CoursePdfOptions) {
+  const MAIN = look.main
+  const ACC = look.accent
+  const sideW = look.frame === 'sidebar' ? 12 : 0
+  const cx = (W + sideW) / 2
+  const { center, rule } = makeCenter(doc, cx)
+  drawFrame(doc, look, sideW)
+
+  let y = 44
+  y = center('MEMOA', 15, 'bold', y, MAIN, 3.2, 120)
+  rule(y + 4, 14, 0.8, ACC)
+  y += 14
+  const uni = cleanField(o.university)
+  if (uni) y = center(universityOnly(uni), 12, 'bold', y, MAIN, 0.3, 150, true) + 2
+  const fac = cleanField(o.faculty)
+  if (fac) y = center(fac, 10.5, 'bold', y + 1, ACC, 0.4, 140, true)
+  const dep = cleanField(o.department)
+  if (dep) y = center(`Département : ${dep}`, 11, 'normal', y + 3, MAIN, 0, 150)
+
+  // Bandeau : type de document + titre
+  const filled = look.band === 'filled'
+  const bw = 150
+  const bandTop = Math.max(y + 22, 112)
+  const kind = cleanField(o.kind)
+  const pad = 10
+  const titleText = clean(cleanField(o.title) || 'Sans titre')
+  doc.setFont('helvetica', 'bold')
+  let tSize = 22
+  let titleLines: string[] = []
+  for (; tSize >= 14; tSize -= 2) {
+    doc.setFontSize(tSize)
+    titleLines = doc.splitTextToSize(titleText.toUpperCase(), bw - 18) as string[]
+    if (titleLines.length <= 4) break
+  }
+  const LH = tSize * 0.46
+  const labelBase = bandTop + pad + 2.6
+  const firstBase = kind ? labelBase + 5.5 + tSize * 0.26 : bandTop + pad + tSize * 0.26
+  const lastBase = firstBase + (titleLines.length - 1) * LH
+  const bandH = lastBase - bandTop + pad
+  drawBand(doc, look, cx, bandTop, bw, bandH)
+  const labelColor: RGB = filled ? (look.frame === 'gold' ? ACC : [255, 255, 255]) : ACC
+  if (kind) center(kind, 10, 'normal', labelBase, labelColor, 2.4, bw - 12, true)
+  const titleColor: RGB = filled ? [255, 255, 255] : MAIN
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(tSize)
+  doc.setTextColor(titleColor[0], titleColor[1], titleColor[2])
+  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, firstBase + i * LH))
+
+  // Auteur, promotion, date
+  let ry = bandTop + bandH + 20
+  const author = cleanField(o.author)
+  if (author) {
+    ry = center('PRÉSENTÉ PAR', 8.5, 'bold', ry, ACC, 1.6, 120) + 2
+    ry = center(author, 14, 'bold', ry, MAIN, 0, 140) + 3
+  }
+  const promo = cleanField(o.promotion)
+  if (promo) center(promo, 11, 'normal', ry + 1, MAIN, 0, 140)
+  const dateTxt = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  rule(H - 54, 24, 0.5, ACC)
+  center(dateTxt, 10.5, 'normal', H - 46, MAIN, 0, 110)
+  if (!o.premium) mention(doc, cx)
+}
+
+/** TP : page de garde (4 modèles : double cadre, cadre simple, coins, bandeau latéral), puis le travail. */
+export async function buildTpPdf(c: TpCover, content: string, targetPages: number | null = null): Promise<Blob> {
+  return (await buildTpPdfDetailed(c, content, targetPages)).blob
+}
+
+/** Comme buildTpPdf, mais renvoie aussi le contrôle réel du PDF produit (nombre de pages de contenu, défauts). */
+export async function buildTpPdfDetailed(c: TpCover, content: string, targetPages: number | null = null): Promise<{ blob: Blob; report: PdfReport }> {
+  const { jsPDF } = await import('jspdf')
+  const logo = await loadLogo(c.logoUrl)
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const premium = !!c.premium
+  const look = COVER_TEMPLATES[effectiveTemplate(c.template, premium)]
+  const MAIN = look.main
+  const ACC = look.accent
+  const sideW = look.frame === 'sidebar' ? 12 : 0
+  const cx = (W + sideW) / 2
+  const head = splitTpTitle(cleanField(c.title), c.kind ?? 'TRAVAIL PRATIQUE')
+  const f = {
+    university: cleanField(c.university), faculty: cleanField(c.faculty), department: cleanField(c.department),
+    promotion: cleanField(c.promotion), vacation: cleanField(c.vacation), course: cleanField(c.course),
+    student: cleanField(c.student), year: cleanField(c.year), supervisor: cleanField(c.supervisor)
+  }
+  const { center, rule: ruleAt } = makeCenter(doc, cx)
+  const rule = (y: number, half: number, thick = 0.5) => ruleAt(y, half, thick, ACC)
+
+  drawFrame(doc, look, sideW)
 
   // En-tête : pays, université, faculté, département (bien visible)
   let y = 36
   y = center('RÉPUBLIQUE DÉMOCRATIQUE DU CONGO', 10, 'bold', y, [60, 60, 70], 1.2, 150)
   rule(y + 5, 30, 0.7)
-  y = center(universityOnly(c.university), 15, 'bold', y + 16, MAIN, 0.3, 150, true)
-  y = center(`${c.faculty}`, 11.5, 'bold', y + 3, ACC, 0.5, 140, true)
-  if (c.department) y = center(`Département : ${c.department}`, 12.5, 'bold', y + 4, MAIN, 0, 150)
+  y = center(universityOnly(f.university), 15, 'bold', y + 16, MAIN, 0.3, 150, true)
+  if (f.faculty) y = center(f.faculty, 11.5, 'bold', y + 3, ACC, 0.5, 140, true)
+  if (f.department) y = center(`Département : ${f.department}`, 12.5, 'bold', y + 4, MAIN, 0, 150)
 
   // Logo (hauteur max 48 mm, largeur max 70 mm)
   let logoBottom = y + 8
@@ -376,21 +520,8 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   const lastBase = firstBase + (titleLines.length - 1) * LH
   const bandH = lastBase - bandTop + pad
   const filled = look.band === 'filled'
-  if (filled) {
-    doc.setFillColor(MAIN[0], MAIN[1], MAIN[2])
-    doc.rect(cx - bw / 2, bandTop, bw, bandH, 'F')
-  }
-  doc.setDrawColor(ACC[0], ACC[1], ACC[2])
-  doc.setLineWidth(filled ? 0.8 : 1.2)
-  doc.line(cx - bw / 2, bandTop, cx + bw / 2, bandTop)
-  doc.line(cx - bw / 2, bandTop + bandH, cx + bw / 2, bandTop + bandH)
-  if (!filled) {
-    doc.setDrawColor(MAIN[0], MAIN[1], MAIN[2])
-    doc.setLineWidth(0.3)
-    doc.line(cx - bw / 2, bandTop + 1.8, cx + bw / 2, bandTop + 1.8)
-    doc.line(cx - bw / 2, bandTop + bandH - 1.8, cx + bw / 2, bandTop + bandH - 1.8)
-  }
-  if (head.kind) center(head.kind, 10, 'normal', labelBase, filled ? [255, 255, 255] : ACC, 2.4, bw - 12, true)
+  drawBand(doc, look, cx, bandTop, bw, bandH)
+  if (head.kind) center(head.kind, 10, 'normal', labelBase, filled && look.frame !== 'gold' ? [255, 255, 255] : ACC, 2.4, bw - 12, true)
   const titleColor: RGB = filled ? [255, 255, 255] : MAIN
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(TITLE_PT)
@@ -398,10 +529,13 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, firstBase + i * LH))
 
   // Bloc « présenté par » : étiquettes à gauche, trait vertical, valeurs à droite
-  const rows: Array<[string, string]> = [['PRÉSENTÉ PAR', c.student]]
-  if (c.course) rows.push(['COURS', c.course])
-  rows.push(['PROMOTION', [c.promotion, c.department].filter(Boolean).join(' / ')])
-  if (c.vacation) rows.push(['VACATION', c.vacation.replace(/^Vacation\s+/i, '')])
+  const rows: Array<[string, string]> = []
+  if (f.student) rows.push(['PRÉSENTÉ PAR', f.student])
+  if (f.course) rows.push(['COURS', f.course])
+  const promo = [f.promotion, f.department].filter(Boolean).join(' / ')
+  if (promo) rows.push(['PROMOTION', promo])
+  if (f.vacation) rows.push(['VACATION', f.vacation.replace(/^Vacation\s+/i, '')])
+  if (f.supervisor) rows.push(['ENCADRANT', f.supervisor])
   const lineX = 74 + sideW / 2
   const valueW = W - lineX - 28
   const yearY = H - 46
@@ -423,7 +557,7 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
 
   // Année académique entre deux filets. Les lettres sont espacées à la main (mesure exacte) : le texte ne dépasse jamais.
-  const yearText = clean(`ANNÉE ACADÉMIQUE ${c.year.replace('-', ' – ')}`)
+  const yearText = clean(f.year ? `ANNÉE ACADÉMIQUE ${f.year.replace('-', ' – ')}` : '')
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   const gap = 0.6
@@ -437,10 +571,12 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   chars.forEach((ch, i) => { doc.text(ch, yx, yearY); yx += widths[i] + gap })
   rule(yearY + 6, yearHalf, 0.5)
 
+  if (!premium) mention(doc, cx)
+
   // Contenu : texte nettoyé (balises, champs vides, consignes), puis mise en page ajustée au nombre de pages demandé.
   const blocks = parseBlocks(cleanTpText(content))
   const { params, report } = buildBody(doc, blocks, targetPages && targetPages > 0 ? Math.round(targetPages) : null)
-  footers(doc, c.title, params)
+  footers(doc, c.title, params, premium ? ACC : 215)
   return { blob: doc.output('blob'), report }
 }
 
