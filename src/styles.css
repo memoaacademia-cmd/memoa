@@ -691,3 +691,12 @@ a.pill-btn { text-decoration: none; }
 
 /* Mini-lecteur : bouton pause / reprise à côté de « Arrêter ». */
 .mini-pause { flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; }
+
+/* Assistant TP : Attendre (carré) et Abandonner (croix) pendant la rédaction, petits boutons ronds */
+.tp-ctrl { display: flex; justify-content: center; gap: 16px; }
+.tp-ctrl-btn { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: transparent; color: var(--text); display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.tp-ctrl-btn.wait { border-color: var(--braise); color: var(--braise); }
+.tp-ctrl-btn.wait svg { fill: currentColor; }
+.tp-ctrl-btn.drop { border-color: var(--danger); color: var(--danger); }
+.tp-ctrl-btn[disabled] { opacity: .55; }
+.tp-ctrl-btn::after { content: ''; position: absolute; inset: -4px; }
