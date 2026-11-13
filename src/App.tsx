@@ -5,7 +5,7 @@ import MiniPlayer from './components/MiniPlayer'
 import { DraftWatcher } from './components/Drafts'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
-import { NotifStep, TrialStep, Welcome } from './pages/Welcome'
+import { NotifStep, Presentation, TrialStep } from './pages/Welcome'
 import Home from './pages/Home'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
@@ -14,6 +14,7 @@ import Assistant from './pages/Assistant'
 import { Me, Premium, Settings } from './pages/Me'
 import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
 import { AuthProvider, useAuth } from './lib/auth'
+import { OutboxSync } from './components/OfflineSave'
 import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
@@ -53,7 +54,7 @@ function ConnectionBanner() {
 function ConnectionScreen({ onRetry }: { onRetry: () => void }) {
   return (
     <main className="page" style={{ justifyContent: 'center', textAlign: 'center', alignItems: 'center' }}>
-      <Brand size={56} center />
+      <Brand size={44} />
       <h1 className="h1">Pas de connexion</h1>
       <p className="lead">Memoa n’arrive pas à joindre le serveur. Tu restes connecté : réessaie dès que le réseau revient.</p>
       <button type="button" className="btn" onClick={onRetry}>Réessayer</button>
@@ -84,6 +85,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
+      <OutboxSync />
       <Outlet />
       <MiniPlayer />
       <NavBar />
@@ -124,7 +126,8 @@ export default function App() {
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
             <Route path="/photo" element={<PhotoStep />} />
-            <Route path="/bienvenue" element={<Welcome />} />
+            <Route path="/bienvenue" element={<Navigate to="/inscription" replace />} />
+            <Route path="/presentation" element={<Presentation />} />
             <Route path="/essai" element={<TrialStep />} />
             <Route path="/notifications-etape" element={<NotifStep />} />
           </Route>
