@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { BottomSheet, Icon, PillButton, Row, RowGroup } from './ui'
+import { BottomSheet, Icon, MemoAvatar, PillButton, Row, RowGroup } from './ui'
+import { useAuth } from '../lib/auth'
 
 /* Écran d'écriture plein écran, style Notes : sans cadre, titre grand, texte qui occupe la page.
    Utilisé par « Ajouter une note » (CourseDetail) et, au bloc 2, par « Nouveau cours » (NewCourse). */
@@ -31,6 +32,8 @@ export function EditorScreen(p: {
   guideExtra?: ReactNode
   bar: ReactNode
 }) {
+  const { profile } = useAuth()
+  const memoName = profile?.memo_name?.trim() || 'Memo'
   const [guideOpen, setGuideOpen] = useState(false)
   const [hintOpen, setHintOpen] = useState(false)
   // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
@@ -101,13 +104,13 @@ export function EditorScreen(p: {
         )}
         {p.banner}
         <button type="button" className="ed-guide-btn" onClick={() => setGuideOpen((v) => !v)} aria-expanded={guideOpen}>
-          <Icon name="sparkle" size={18} color="var(--link)" />
-          <span className="grow">Guider l’IA · facultatif</span>
+          <span className="grow">Guider {memoName} · facultatif</span>
+          <span className="ed-guide-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={26} /></span>
           <Icon name={guideOpen ? 'chevdown' : 'chevup'} size={18} color="var(--text-3)" />
         </button>
         {guideOpen && (
           <div className="ed-guide-box">
-            <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label="Consignes pour l’IA" />
+            <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label={`Consignes pour ${memoName}`} />
             {p.guideExtra}
             <span className="muted">{p.guideHelp}</span>
           </div>
