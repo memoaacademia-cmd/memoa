@@ -11,6 +11,7 @@ import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { OfflineSaveSheet, PendingAudioChip } from '../components/OfflineSave'
+import { enqueueNote } from '../lib/outbox'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle, COVER_ORDER, COVER_TEMPLATES, effectiveTemplate, type CoverTemplate } from '../lib/pdf'
 import { isPremiumNow, usePremium } from '../lib/premium'
@@ -171,7 +172,13 @@ export function NewCourse() {
     if (!isOnline()) {
       // Sans réseau : l'IA n'est pas joignable, mais la note peut être gardée (nouveau cours OU ajout à un cours existant) et envoyée plus tard.
       if (!content.trim() && !pendingAudio) return setError(consignes.trim() ? 'Sans réseau, Memo ne peut pas rédiger ton cours. Écris ta note toi-même, ou garde-la en brouillon.' : 'Écris ta note pour pouvoir la garder.')
-      return setOfflineSheet(true)
+      // Plus de choix à faire : « Créer » garde directement le cours sur le téléphone, il sera créé dès que le réseau revient.
+      const queued = await run(
+        () => enqueueNote({ userId: user.id, kind: 'new_course', courseTitle: title, title, content, source: source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte', audio: pendingAudio }),
+        (e) => (e instanceof Error ? e.message : 'Impossible de garder la note.')
+      )
+      if (queued) { if (draftId) await deleteDraft(draftId).catch(() => {}); nav('/') }
+      return
     }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     const id = await run(async () => {
@@ -231,7 +238,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » pour garder ta note (nouveau cours ou cours existant) : elle sera envoyée toute seule au retour du réseau. Ou touche « Brouillon » pour tout garder 72 h.' : undefined}
+        hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » : ton cours est gardé sur ton téléphone en attente et sera créé tout seul dès que le réseau revient. Ou touche « Brouillon » pour tout garder 72 h.' : undefined}
         banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
@@ -701,7 +708,14 @@ export function CourseDetail() {
     if (!isOnline()) {
       // Sans réseau : ajout à ce cours, ou à un autre, ou nouveau cours ; envoyé automatiquement plus tard. Les modifications d'un cours existant restent réservées au réseau.
       if (modify || (!base && !pendingAudio)) return setError(OFFLINE_MSG)
-      return setOfflineSheet(true)
+      // Plus de choix à faire : « Terminé » garde directement la note dans CE cours, elle sera envoyée dès que le réseau revient.
+      if (!course.data) return setError(OFFLINE_MSG)
+      const queued = await run(
+        () => enqueueNote({ userId: user.id, kind: 'add_note', courseId: id, courseTitle: course.data!.title, title: noteTitle, content: noteText, source: src, audio: pendingAudio }),
+        (e) => (e instanceof Error ? e.message : 'Impossible de garder la note.')
+      )
+      if (queued) { if (draftId) await deleteDraft(draftId).catch(() => {}); resetNote() }
+      return
     }
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     let content = base
@@ -869,7 +883,7 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Brouillon » pour le ranger dans un cours ou le garder 72 h.' : undefined}
+          hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Terminé » : ta note est gardée sur ton téléphone et ajoutée à ce cours dès que le réseau revient. Ou touche « Brouillon » pour la ranger dans un cours ou la garder 72 h.' : undefined}
           banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
