@@ -20,7 +20,7 @@ import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
 import { adjustLength, assemble, loadProgress, parsePlan, partIsComplete, saveProgress } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
-import { startTpJob, takeTpResult, dismissTpError, useTpJob } from '../lib/tpjob'
+import { startTpJob, takeTpResult, dismissTpError, pauseTpJob, abandonTpJob, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
@@ -1052,7 +1052,7 @@ export function TpAssistant() {
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); abandonTpJob(id); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -1060,7 +1060,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); abandonTpJob(id); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -1140,6 +1140,18 @@ export function TpAssistant() {
       courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts,
       onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now() }) }
     })
+  }
+
+  // « Attendre » : la partie en cours se termine, puis la rédaction s'arrête. Rien n'est perdu : on corrige, puis « Reprendre ».
+  function waitWriting() { pauseTpJob(id) }
+  // « Abandonner » : on arrête tout, on efface le travail enregistré et on remet l'écran à zéro.
+  function abandonAll() {
+    if (!window.confirm('Abandonner ce TP ? Tout sera effacé (énoncé, plan, texte déjà rédigé) et tu devras recommencer depuis le début.')) return
+    abandonTpJob(id)
+    setTitle(''); setBrief(''); setAtts([]); setPlan(null); setRemarks(''); setRemAtts([])
+    setDoc(null); setTexts({}); setStep(''); setPagesWanted(''); setNotice(''); setError(null)
+    setSupervisor(''); setMyLogo(null); setSheetFor(null)
+    tpSession.current = null; lastTexts.current = {}; docTexts.current = {}
   }
 
   const LogoCheck = () => (
@@ -1226,6 +1238,17 @@ export function TpAssistant() {
           </div>
           <LogoCheck />
           <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
+          {job?.paused && !writing && <span className="muted" role="status">Rédaction en pause : ton travail est gardé. Corrige ce que tu veux, puis reprends.</span>}
+          <div className="tp-ctrl">
+            {writing && (
+              <button type="button" className="tp-ctrl-btn wait" onClick={waitWriting} disabled={!!job?.stopping} aria-label="Attendre : mettre la rédaction en pause" title="Attendre">
+                <Icon name="stop" size={20} stroke={2.4} />
+              </button>
+            )}
+            <button type="button" className="tp-ctrl-btn drop" onClick={abandonAll} disabled={actionBusy && !writing} aria-label="Abandonner et tout remettre à zéro" title="Abandonner">
+              <Icon name="close" size={22} stroke={2.6} />
+            </button>
+          </div>
           <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : doneCount > 0 ? `Reprendre la rédaction (${doneCount}/${planParts.length})` : 'Valider et rédiger le TP'}</PillButton>
         </div>
       )}
