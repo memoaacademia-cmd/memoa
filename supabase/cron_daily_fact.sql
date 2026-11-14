@@ -2,6 +2,7 @@
 -- À exécuter UNE fois dans Supabase > SQL Editor, après avoir remplacé les deux valeurs entre << >> :
 --   <<ADRESSE_DU_PROJET>> : par exemple https://abcdefgh.supabase.co  (la même adresse que dans tes secrets GitHub)
 --   <<CODE_SECRET_CRON>>  : le même texte que le secret CRON_SECRET enregistré dans Supabase
+-- ATTENTION : dans l'URL, le nom est l'ADRESSE réelle de la fonction dans le tableau de bord (ici « smooth-action »), pas son nom affiché.
 -- Ne publie jamais ce fichier une fois rempli.
 -- SI TU AVAIS DÉJÀ PROGRAMMÉ L'ANCIENNE HEURE (17 h) : la ligne ci-dessous la supprime d'abord, puis la nouvelle est créée (8 h).
 select cron.unschedule(jobid) from cron.job where jobname = 'memoa-daily-fact-push';
@@ -13,7 +14,7 @@ select cron.schedule(
   '0 7 * * *',
   $$
   select net.http_post(
-    url := '<<ADRESSE_DU_PROJET>>/functions/v1/daily-fact-push',
+    url := '<<ADRESSE_DU_PROJET>>/functions/v1/smooth-action',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '<<CODE_SECRET_CRON>>'),
     body := '{}'::jsonb
   );

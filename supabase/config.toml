@@ -7,3 +7,11 @@ verify_jwt = false
 # elle est protégée par le secret CRON_SECRET vérifié dans le code.
 [functions.daily-fact-push]
 verify_jwt = false
+
+# Le rappel des brouillons est lancé par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.draft-reminder-push]
+verify_jwt = false
+
+# Le rappel d'expiration d'abonnement est lancé par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.subscription-expiry-push]
+verify_jwt = false
