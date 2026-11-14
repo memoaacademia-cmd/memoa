@@ -849,3 +849,24 @@ export async function deletePushSubscription(endpoint: string): Promise<void> {
   const { error } = await sb().from('push_subscriptions').delete().eq('endpoint', endpoint)
   if (error) throw error
 }
+
+/* ------------------------ VISITES GUIDÉES (progression) ------------------------ */
+// La progression des visites est gardée dans les métadonnées du compte (user_metadata.tours) :
+// pas de migration SQL, et elle suit l'étudiant d'un téléphone à l'autre. En mode démo, la copie
+// locale (lib/tours.ts) suffit : ces deux fonctions ne font alors rien.
+
+/** Lit la progression enregistrée sur le compte, ou null si rien n'est enregistré / pas de réseau. */
+export async function readAccountTours(userId: string): Promise<unknown> {
+  if (!isConfigured) return null
+  void userId
+  const { data } = await withTimeout(sb().auth.getSession(), 3000)
+  return (data.session?.user?.user_metadata as { tours?: unknown } | undefined)?.tours ?? null
+}
+
+/** Enregistre la progression sur le compte (fusionnée aux autres métadonnées : téléphone, mot de passe…). */
+export async function writeAccountTours(userId: string, tours: Record<string, string>): Promise<void> {
+  if (!isConfigured) return
+  void userId
+  const { error } = await withTimeout(sb().auth.updateUser({ data: { tours } }), 8000)
+  if (error) throw error
+}

@@ -113,15 +113,13 @@ export interface PdfReport {
 }
 
 /** Calcule la mise en page ; si le vrai PDF n'a pas le bon nombre de pages, essaie des réglages voisins (contrôle réel, pas une estimation). */
-async function buildBody(doc: Doc, blocks: Block[], target: number | null): Promise<{ params: Params; report: PdfReport }> {
-  // On utilise la vraie classe jsPDF (doc.constructor n'est pas fiable une fois l'application compilée).
-  const { jsPDF } = await import('jspdf')
+function buildBody(doc: Doc, blocks: Block[], target: number | null): { params: Params; report: PdfReport } {
   const startPages = doc.getNumberOfPages()
   let best: { fit: ReturnType<typeof layoutDocument>; real: number } | null = null
   for (let attempt = 0; attempt < 4; attempt++) {
     const fit = layoutDocument(blocks, measurer(doc, 1 + attempt * 0.004), target)
     // épreuve : on dessine pour de vrai sur un PDF jetable et on compte les pages
-    const probe = new jsPDF({ unit: 'mm', format: 'a4' })
+    const probe = new (doc.constructor as new (o: object) => Doc)({ unit: 'mm', format: 'a4' })
     drawPages(probe, fit.pages)
     const real = probe.getNumberOfPages() - 1
     if (!best || Math.abs(real - (target ?? real)) < Math.abs(best.real - (target ?? best.real))) best = { fit, real }
@@ -164,7 +162,7 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
     blocks.push({ t: 'title', text: clean(n.title || `Note ${i + 1}`) })
     blocks.push(...parseBlocks(cleanDocText(n.content), 1))
   })
-  const { params } = await buildBody(doc, blocks, null)
+  const { params } = buildBody(doc, blocks, null)
   footers(doc, title, params, opts.premium ? look.accent : 215)
   return doc.output('blob')
 }
@@ -577,7 +575,7 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
 
   // Contenu : texte nettoyé (balises, champs vides, consignes), puis mise en page ajustée au nombre de pages demandé.
   const blocks = parseBlocks(cleanTpText(content))
-  const { params, report } = await buildBody(doc, blocks, targetPages && targetPages > 0 ? Math.round(targetPages) : null)
+  const { params, report } = buildBody(doc, blocks, targetPages && targetPages > 0 ? Math.round(targetPages) : null)
   footers(doc, c.title, params, premium ? ACC : 215)
   return { blob: doc.output('blob'), report }
 }
