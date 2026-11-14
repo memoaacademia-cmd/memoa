@@ -102,8 +102,11 @@ self.addEventListener('notificationclick', (e) => {
   const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if ('focus' in c) return c.focus()
+      // Si Memoa est déjà ouverte, on la déplace vers l'adresse envoyée (ex. #/premium) puis on la met au premier plan.
+      const own = list.find((c) => { try { return new URL(c.url).origin === new URL(target).origin } catch (_) { return false } })
+      if (own) {
+        const go = 'navigate' in own ? own.navigate(target) : Promise.resolve(own)
+        return go.then((w) => (w || own).focus()).catch(() => own.focus())
       }
       return self.clients.openWindow(target)
     })
