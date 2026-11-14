@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
   if (!/^[0-9]{9}$/.test(phone)) return json(req, 400, { error: 'Numéro Mobile Money invalide (9 chiffres).' })
 
   // Anti-abus : au plus 3 paiements « en attente » à la fois.
-  const { count } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending')
+  const { count } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending').gte('created_at', new Date(Date.now() - 30 * 60_000).toISOString())
   if ((count ?? 0) >= 3) return json(req, 429, { error: 'Tu as déjà des paiements en attente. Valide-les sur ton téléphone ou patiente.' })
 
   const reference = 'MEMOA-' + crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()

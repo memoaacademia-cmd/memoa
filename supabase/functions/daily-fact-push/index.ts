@@ -6,7 +6,25 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 
 // Clé PUBLIQUE (la même que dans src/lib/features.ts).
-const VAPID_PUBLIC_KEY = 'BKEwywdGG-Xrulany_C1IdB4BG6TZJ7eKZGy3qH6wwZ1KCY98FpDU2B6y5LASnPFAX9ynEmWRca5S0WFNzTijzo'
+const VAPID_PUBLIC_KEY = 'BFSlSc6xPsaWeTvtbl7chIzW2mlhTSyEa1Z1XCkoC3Zx-QveBK_ygbfEZGWQKDgSt01GYbQ5Tbp2zah7E-eaZhs'
+
+// Carte du jour : même règle que dans l'application (jour de Kinshasa, pas de 97).
+const FACTS_URL = 'https://memoaacademia-cmd.github.io/memoa/facts-titles.json'
+function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a }
+async function todayCard(): Promise<{ t: string } | null> {
+  try {
+    const res = await fetch(FACTS_URL, { cache: 'no-store' })
+    if (!res.ok) return null
+    const list = (await res.json()) as Array<{ t: string }>
+    if (!Array.isArray(list) || list.length === 0) return null
+    const day = Math.floor((Date.now() + 3_600_000) / 86_400_000)
+    let step = 97
+    while (gcd(step, list.length) !== 1) step++
+    return list[(day * step) % list.length]
+  } catch {
+    return null
+  }
+}
 
 const MESSAGES = (name: string): Array<{ title: string; body: string }> => [
   { title: `${name} a une surprise pour toi`, body: 'Ton « Savais-tu ? » du jour est prêt.' },
@@ -25,8 +43,8 @@ Deno.serve(async (req) => {
   webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'mailto:contact@memoa.app', VAPID_PUBLIC_KEY, priv)
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-  // Pas deux fois dans la même journée, même si la planification se déclenche en double (12 h : l'envoi de 8 h suit bien celui de la veille, y compris après le passage de 17 h à 8 h).
-  const since = new Date(Date.now() - 12 * 3_600_000).toISOString()
+  // Pas deux fois dans la même journée, même si la planification se déclenche en double.
+  const since = new Date(Date.now() - 20 * 3_600_000).toISOString()
   const { data: subs, error } = await admin.from('push_subscriptions').select('id,user_id,endpoint,p256dh,auth,last_sent_at').or(`last_sent_at.is.null,last_sent_at.lt.${since}`).limit(5000)
   if (error) { console.error('daily-fact-push lecture :', error.message); return new Response('Erreur de lecture', { status: 500 }) }
 
@@ -38,6 +56,7 @@ Deno.serve(async (req) => {
   }
 
   let sent = 0
+  const card = await todayCard()
   let removed = 0
   let failed = 0
   const list = subs ?? []
@@ -45,7 +64,7 @@ Deno.serve(async (req) => {
     await Promise.all(list.slice(i, i + 20).map(async (s) => {
       const name = names.get(s.user_id) ?? 'Memo'
       const pool = MESSAGES(name)
-      const msg = pool[Math.floor(Math.random() * pool.length)]
+      const msg = card ? { title: 'Le savais-tu ?', body: card.t } : pool[Math.floor(Math.random() * pool.length)]
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },

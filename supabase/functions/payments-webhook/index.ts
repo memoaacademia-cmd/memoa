@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
   const admin = adminClient()
   const { data: payment } = await admin.from('payments').select('id,user_id,status,amount,currency').eq('provider_ref', event.reference).maybeSingle()
   if (!payment) return new Response('Unknown reference', { status: 200 }) // pas à nous : inutile de faire réessayer
-  if (payment.status !== 'pending') return new Response('Already processed', { status: 200 }) // idempotent : un rejeu ne prolonge pas deux fois
+  if (payment.status === 'paid' || (payment.status === 'failed' && !success)) return new Response('Already processed', { status: 200 }) // idempotent : un rejeu ne prolonge pas deux fois
 
   if (!success) {
     await admin.from('payments').update({ status: 'failed' }).eq('id', payment.id).eq('status', 'pending')
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
   }
 
   // Marque payé seulement si encore « pending » (protège contre deux appels simultanés).
-  const { data: updated } = await admin.from('payments').update({ status: 'paid' }).eq('id', payment.id).eq('status', 'pending').select('id')
+  const { data: updated } = await admin.from('payments').update({ status: 'paid' }).eq('id', payment.id).in('status', ['pending', 'failed']).select('id')
   if (!updated?.length) return new Response('Already processed', { status: 200 })
 
   const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', payment.user_id).maybeSingle()

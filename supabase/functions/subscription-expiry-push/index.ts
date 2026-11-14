@@ -6,7 +6,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 
 // Clé PUBLIQUE (la même que dans src/lib/features.ts).
-const VAPID_PUBLIC_KEY = 'BKEwywdGG-Xrulany_C1IdB4BG6TZJ7eKZGy3qH6wwZ1KCY98FpDU2B6y5LASnPFAX9ynEmWRca5S0WFNzTijzo'
+const VAPID_PUBLIC_KEY = 'BFSlSc6xPsaWeTvtbl7chIzW2mlhTSyEa1Z1XCkoC3Zx-QveBK_ygbfEZGWQKDgSt01GYbQ5Tbp2zah7E-eaZhs'
 
 const DAY = 86_400_000
 type Tier = '7d' | '2d' | '0d'
@@ -29,8 +29,11 @@ function tierFor(expiresAt: number, now: number): Tier | null {
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Méthode non autorisée', { status: 405 })
   const secret = Deno.env.get('CRON_SECRET')
-  if (!secret || req.headers.get('x-cron-secret') !== secret) return new Response('Non autorisé', { status: 401 })
-
+ const recu = (req.headers.get('x-cron-secret') ?? '').trim()
+  if (!secret || recu !== secret.trim()) {
+    console.error('401 cron', { secretDefini: !!secret, enteteRecu: !!recu, longueurAttendue: secret?.length ?? 0, longueurRecue: recu.length })
+    return new Response('Non autorisé', { status: 401 })
+  }
   // Heures calmes : pas de notification la nuit (heure de Kinshasa = UTC+1).
   const kinHour = (new Date().getUTCHours() + 1) % 24
   if (kinHour < 8 || kinHour >= 20) return new Response(JSON.stringify({ skipped: 'nuit' }), { headers: { 'Content-Type': 'application/json' } })
