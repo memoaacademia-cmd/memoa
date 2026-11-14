@@ -125,6 +125,8 @@ export default function App() {
             <Route path="/confirmation" element={<ConfirmationRoute />} />
           </Route>
           <Route path="/installer" element={<div className="shell"><Install /></div>} />
+          <Route path="/legal/confidentialite" element={<div className="shell"><Privacy /></div>} />
+          <Route path="/legal/conditions" element={<div className="shell"><Terms /></div>} />
           <Route path="/nouveau-mot-de-passe" element={<div className="shell"><NewPassword /></div>} />
           <Route element={<Guard need="auth" />}>
             <Route path="/inscription" element={<Onboarding />} />
