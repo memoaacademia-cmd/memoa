@@ -15,6 +15,10 @@ import { currentStreak } from '../lib/streak'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
 
+// Paiement dans une fenêtre intégrée (iframe) : DÉSACTIVÉ tant que Chariow n'a pas confirmé que sa page de paiement l'autorise
+// (la page checkout.orqex.com reste bloquée dans l'iframe). Passer à true pour réactiver la fenêtre, rien d'autre à changer.
+const EMBED_PAYMENT = false
+
 /* Carte Premium du profil : une seule carte, dont le contenu suit l'état réel du compte. */
 function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
   const { state, expiresAt, points } = plan
@@ -280,9 +284,9 @@ export function Premium() {
 
   async function go() {
     setInfo(null)
-    const r = await run(() => startPayment(true))
+    const r = await run(() => startPayment(EMBED_PAYMENT))
     if (!r) return
-    if (r.url) setFrame(r.url) // le paiement s'ouvre dans une fenêtre, l'étudiant reste dans Memoa
+    if (r.url) { if (EMBED_PAYMENT) setFrame(r.url); else openPayment(r.url) } // fenêtre intégrée, ou page de paiement dans un nouvel onglet
     else { setInfo(r.message ?? null); pay.reload() }
   }
 
@@ -318,10 +322,9 @@ export function Premium() {
   }
 
   // Repli : certains moyens de paiement n'aiment pas les fenêtres intégrées → on ouvre la page complète dans un nouvel onglet.
-  function openFull() {
-    if (!frame) return
-    const w = window.open(frame, '_blank', 'noopener')
-    if (!w) { window.location.assign(frame); return }
+  function openPayment(url: string) {
+    const w = window.open(url, '_blank', 'noopener')
+    if (!w) { window.location.assign(url); return } // nouvel onglet bloqué par le navigateur : on ouvre dans cet onglet, le retour dans l'app marche pareil
     setFrame(null)
     setInfo("Le paiement s'est ouvert dans un nouvel onglet. Une fois payé, reviens ici : ton Premium s'active tout seul, ou appuie sur « Vérifier mon paiement ».")
     pay.reload()
@@ -406,7 +409,7 @@ export function Premium() {
             <iframe src={frame} title="Paiement sécurisé Chariow" allow="payment" style={{ flex: 1, width: '100%', border: 0, background: '#fff' }} />
             <div style={{ padding: '10px 16px calc(10px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
               <span className="muted" style={{ textAlign: 'center' }}>Ton Premium s'active tout seul dès que le paiement est confirmé.</span>
-              <button type="button" className="pill-btn sm" onClick={openFull}>La page ne s'affiche pas ? Ouvrir dans un nouvel onglet</button>
+              <button type="button" className="pill-btn sm" onClick={() => frame && openPayment(frame)}>La page ne s'affiche pas ? Ouvrir dans un nouvel onglet</button>
             </div>
           </div>
         </div>
