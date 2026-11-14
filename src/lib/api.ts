@@ -565,8 +565,8 @@ export async function publishDoc(
     const { error } = await sb().storage.from('library').upload(file_path, file, { contentType: 'application/pdf' })
     if (error) throw error
   }
-  // Publié tout de suite ; retiré ensuite si la vérification automatique le refuse ou si plusieurs étudiants le signalent.
-  const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'published' }).select('id').single()
+  // Déposé « en vérification » : c'est le SERVEUR (tâche review_doc) qui le publie s'il est correct, ou le refuse. Sans cette vérification, il reste invisible des autres.
+  const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'pending' }).select('id').single()
   if (error) throw error
   return (data as { id: string }).id
 }
