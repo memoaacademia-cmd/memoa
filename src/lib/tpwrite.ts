@@ -130,6 +130,8 @@ export interface WriteArgs {
   onProgress: (done: number, total: number, current: string) => void
   onSave: (texts: Record<number, string>) => void
   /** Pause / annulation demandée par l'étudiant. */
+  /** Nombre de pages voulu (sans la page de garde) : sert à fixer la longueur visée de chaque partie. */
+  pages?: number
   signal?: AbortSignal
   /** Petit message d'état (ex. nouvelle tentative). */
   onNote?: (msg: string) => void
@@ -140,6 +142,10 @@ export async function writeTp(a: WriteArgs): Promise<string> {
   const parts = parsePlan(a.plan)
   const texts: Record<number, string> = { ...a.texts }
   const titles = parts.map((p) => p.title).join('\n')
+  // Longueur visée par partie : répartit les pages voulues (≈ 2000 caractères par page, titres et espaces compris) ; introduction et conclusion plus courtes.
+  const weight = (p: TpPart) => (/biblio/i.test(p.title) ? 0.25 : /introduction|conclusion/i.test(p.title) ? 0.7 : 1)
+  const totalW = parts.reduce((t, p) => t + weight(p), 0) || 1
+  const target = (p: TpPart) => (a.pages ? Math.max(300, Math.round((a.pages * 2000 * weight(p)) / totalW / 50) * 50) : 0)
   for (let round = 0; round < 3; round++) {
     const todo = parts.filter((p) => !partIsComplete(p, texts[p.n], round === 2))
     if (!todo.length) break
@@ -148,6 +154,7 @@ export async function writeTp(a: WriteArgs): Promise<string> {
       a.onProgress(parts.length - todo.length + todo.indexOf(p), parts.length, p.title)
       const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
       const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
+        + (target(p) ? `\nLONGUEUR VISÉE POUR CETTE PARTIE : environ ${target(p)} caractères (${Math.round(target(p) / 6)} mots). Ne dépasse pas ce volume de plus de 15 % : le travail entier doit tenir en ${a.pages} pages.\n` : '')
       const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }), a.signal, a.onNote)
       const txt = cleanTpText(r.reply).trim()
       if (txt) texts[p.n] = txt
