@@ -1,8 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ErrorBox, Icon, PillButton, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
 import { askAI, deleteDocForever, docDownloadUrl, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
-import { extractPdfText } from '../lib/pdfimport'
 import { useAuth } from '../lib/auth'
 import type { LibDoc } from '../lib/types'
 
@@ -34,6 +33,29 @@ export default function Library() {
   const trashed = trash.data ?? []
   const daysLeft = (d?: string | null) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(d ?? Date.now()).getTime()) / 86400000))
   const faculties = useMemo(() => allFaculties(), [])
+
+  // Tant qu'un de tes documents est « en vérification », la liste se rafraîchit toute seule : le badge disparaît dès la publication.
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const waiting = !!user && !!data && data.some((d) => d.status === 'pending' && d.owner_id === user.id && Date.now() - new Date(d.created_at).getTime() < 5 * 60_000)
+  useEffect(() => {
+    if (!waiting) return
+    const t = setInterval(() => reloadRef.current(), 15_000)
+    return () => clearInterval(t)
+  }, [waiting])
+
+  // Un de tes documents est encore « en vérification » (coupure réseau au dépôt) : on relance la vérification, deux fois au maximum par document.
+  const retried = useRef(new Map<string, number>())
+  useEffect(() => {
+    if (!user || !data) return
+    const todo = data.filter((d) => d.status === 'pending' && d.owner_id === user.id && (retried.current.get(d.id) ?? 0) < 2 && Date.now() - new Date(d.created_at).getTime() < 24 * 3600_000)
+    if (!todo.length) return
+    todo.forEach((d) => retried.current.set(d.id, (retried.current.get(d.id) ?? 0) + 1))
+    void (async () => {
+      for (const d of todo) { try { await askAI({ task: 'review_doc', docId: d.id, prompt: 'verification' }) } catch { /* réessayé à la prochaine ouverture */ } }
+      reloadRef.current()
+    })()
+  }, [data, user])
 
   const shown = useMemo(() => {
     const words = norm(q).split(/\s+/).filter(Boolean)
@@ -130,7 +152,7 @@ export default function Library() {
 
       <ErrorBox message={error ?? act.error} />
       {thanks && <div className="notice" role="status">{thanks}</div>}
-      {loading ? <Spinner /> : !shown.length ? (
+      {loading && !data ? <Spinner /> : !shown.length ? (
         <Empty
           title={filtered ? 'Aucun document ne correspond' : "Aucun document pour l'instant"}
           text={filtered ? 'Essaie un autre mot, ou touche « Tout afficher ».' : 'Sois le premier à partager un document avec les étudiants.'}
@@ -147,6 +169,7 @@ export default function Library() {
                   {d.course_title && <span className="muted" style={{ fontSize: 12 }}>{d.course_title}</span>}
                   {d.university && <span className="muted" style={{ fontSize: 12 }}>{universityLabel(d.university)}</span>}
                   {d.status === 'rejected' && <span className="badge amber" style={{ alignSelf: 'flex-start' }}>Retiré après vérification</span>}
+                  {d.status === 'pending' && <span className="badge amber" style={{ alignSelf: 'flex-start' }}>En vérification… (1 à 2 minutes)</span>}
                 </div>
                 <button type="button" className="icon-btn" style={{ width: 40, height: 40, border: 0, flex: 'none' }} aria-pressed={!!d.is_favorite} aria-label={d.is_favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} onClick={() => fav(d)}>
                   <Icon name="star" size={22} color={d.is_favorite ? '#f2a33a' : '#9db0aa'} />
@@ -207,6 +230,7 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
   const [dep, setDep] = useState('')
   const [depTxt, setDepTxt] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [phase, setPhase] = useState<'send' | 'check'>('send')
   const deps = fac === 'autre' ? [] : departmentsOf(fac)
   const writeDep = fac === 'autre' || dep === 'autre'
 
@@ -216,16 +240,14 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
     const faculty = fac === 'autre' ? facTxt.trim() : fac
     if (!faculty) return setError('Indique la faculté concernée.')
     const department = writeDep ? depTxt.trim() : dep
+    setPhase('send')
     const ok = await run(async () => {
       const id = await publishDoc(user.id, { title, doc_type: type, university: profile.university, faculty, department, promotion: promo, course_title: course.trim() }, file)
-      // Vérification légère en arrière-plan : on ne retire le document que s'il est clairement n'importe quoi.
-      if (file && id) {
-        void (async () => {
-          try {
-            const text = await extractPdfText(file, 3)
-            if (text.length >= 40) await askAI({ task: 'review_doc', docId: id, prompt: text.slice(0, 3000) })
-          } catch { /* en cas de doute, le document reste en ligne */ }
-        })()
+      // Vérification par le serveur (il lit lui-même le fichier) : il publie le document, ou le refuse s'il est clairement n'importe quoi.
+      // Si cet appel échoue (réseau), le document reste « en vérification » et la vérification est relancée à la prochaine ouverture de la Librairie.
+      if (id) {
+        setPhase('check')
+        try { await Promise.race([askAI({ task: 'review_doc', docId: id, prompt: 'verification' }), new Promise((r) => setTimeout(r, 45_000))]) } catch { /* relancé plus tard */ }
       }
       return true
     })
@@ -263,7 +285,8 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
       <div className="field"><label htmlFor="pfile">Fichier PDF (20 Mo max)</label><input id="pfile" type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></div>
       <div className="notice">Ton document est publié tout de suite. Ne partage que ce que tu as le droit de partager : un document clairement hors sujet ou signalé par plusieurs étudiants est retiré.</div>
       <ErrorBox message={error} />
-      <PillButton type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Publier'}</PillButton>
+      {busy && <Spinner label={phase === 'check' ? 'Vérification de ton document en cours… quelques secondes, garde cette page ouverte.' : 'Envoi du fichier…'} />}
+      <PillButton type="submit" disabled={busy}>{busy ? (phase === 'check' ? 'Vérification…' : 'Envoi…') : 'Publier'}</PillButton>
     </form>
   )
 }
