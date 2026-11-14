@@ -475,25 +475,53 @@ async function transcribe(req: Request, userId: string) {
 
 // ---- Texte très long (cours de ~15 pages) : on résume par parties, puis on fusionne les résumés ----
 // ---- Vérification légère d'un document déposé dans la Librairie : on le retire seulement si c'est clairement n'importe quoi ----
-async function reviewDoc(req: Request, userId: string, body: Record<string, unknown>, text: string) {
+async function reviewDoc(req: Request, userId: string, body: Record<string, unknown>) {
   const docId = typeof body.docId === 'string' && UUID.test(body.docId) ? body.docId : null
   if (!docId) return json(req, 400, { error: 'Document inconnu.' })
   const admin = adminClient()
-  const { data: doc } = await admin.from('library_documents').select('id,title,status,owner_id,created_at').eq('id', docId).maybeSingle()
-  // Seul le déposant, juste après le dépôt, et une seule fois : sinon on répond « ok » sans rien faire.
-  if (!doc || doc.owner_id !== userId || doc.status !== 'published' || Date.now() - new Date(doc.created_at).getTime() > 15 * 60_000) return json(req, 200, { reply: 'ok' })
+  const { data: doc } = await admin.from('library_documents').select('id,title,status,owner_id,created_at,file_path').eq('id', docId).maybeSingle()
+  // Seul le déposant, pour un document encore « en vérification » déposé depuis moins de 24 h : sinon on répond « ok » sans rien faire.
+  if (!doc || doc.owner_id !== userId || doc.status !== 'pending' || Date.now() - new Date(doc.created_at).getTime() > 24 * 3_600_000) return json(req, 200, { reply: 'ok' })
   const hourAgo = new Date(Date.now() - 3_600_000).toISOString()
   const { count } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'review_doc').gte('created_at', hourAgo)
-  if ((count ?? 0) >= 10) return json(req, 200, { reply: 'ok' })
-  let verdict = 'ok'
-  try {
-    const r = await callModel(MODEL_FAST, SYSTEM.review_doc, [{ role: 'user', content: `Titre : ${doc.title}\n\nDébut du document :\n${text.slice(0, 3000)}` }], 20)
-    if (/^\W*refus/i.test(r.text)) verdict = 'refus'
-    await logUsage(admin, { user_id: userId, task: 'review_doc', model: MODEL_FAST, tokens_in: r.tokensIn, tokens_out: r.tokensOut, points: 0 })
-  } catch (e) {
-    console.error('review_doc', (e as Error).message)
+  if ((count ?? 0) >= 10) return json(req, 200, { reply: 'attente' }) // trop de dépôts d'un coup : le document reste en vérification
+  // Le texte est lu ICI, dans le fichier réellement déposé : on ne fait jamais confiance au texte envoyé par le téléphone.
+  // Tout ce travail est limité à 30 secondes : passé ce délai (ou à la moindre panne), le document est publié sans attendre.
+  const check = async (): Promise<string> => {
+    let text = ''
+    if (doc.file_path) {
+      try {
+        const { data: blob, error } = await admin.storage.from('library').download(doc.file_path)
+        if (error || !blob) throw new Error(error?.message ?? 'fichier introuvable')
+        if (blob.size > 20 * 1024 * 1024) throw new Error('fichier trop lourd')
+        const bytes = new Uint8Array(await blob.arrayBuffer())
+        if (String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return 'refus' // la Librairie n'accepte que des PDF
+        // On ne lit que les 3 premières pages : suffisant pour juger, et rapide.
+        const { getDocumentProxy } = await import('npm:unpdf@0.12.1')
+        const pdf = await getDocumentProxy(bytes)
+        const parts: string[] = []
+        for (let i = 1; i <= Math.min(3, pdf.numPages); i++) {
+          const content = await (await pdf.getPage(i)).getTextContent()
+          parts.push((content.items as { str?: string }[]).map((it) => it.str ?? '').join(' '))
+        }
+        text = parts.join(' ').replace(/\s+/g, ' ').trim()
+      } catch (e) {
+        console.error('review_doc lecture du fichier :', (e as Error).message) // en cas de doute, le document sera publié
+      }
+    }
+    // PDF sans texte lisible (scan, photos) : rien à vérifier automatiquement.
+    if (doc.file_path && text.length < 40) return 'ok'
+    try {
+      const r = await callModel(MODEL_FAST, SYSTEM.review_doc, [{ role: 'user', content: `Titre : ${doc.title}\n\nDébut du document :\n${text.slice(0, 3000)}` }], 20)
+      await logUsage(admin, { user_id: userId, task: 'review_doc', model: MODEL_FAST, tokens_in: r.tokensIn, tokens_out: r.tokensOut, points: 0 })
+      return /^\W*refus/i.test(r.text) ? 'refus' : 'ok'
+    } catch (e) {
+      console.error('review_doc', (e as Error).message)
+      return 'ok'
+    }
   }
-  if (verdict === 'refus') await admin.from('library_documents').update({ status: 'rejected' }).eq('id', docId)
+  const verdict = await Promise.race([check().catch(() => 'ok'), new Promise<string>((r) => setTimeout(() => r('ok'), 30_000))])
+  await admin.from('library_documents').update({ status: verdict === 'refus' ? 'rejected' : 'published' }).eq('id', docId).eq('status', 'pending')
   return json(req, 200, { reply: verdict })
 }
 
@@ -548,7 +576,7 @@ Deno.serve(async (req) => {
   if (LONG_TASKS.includes(task)) {
     if (prompt.length > MAX_LONG_TEXT) return json(req, 400, { error: 'Ce texte est trop long (environ 15 pages au maximum). Choisis moins de notes à la fois.' })
   } else if (prompt.length > (task === 'tp_section' ? 14000 : MAX_PROMPT)) return json(req, 400, { error: 'Ta demande est trop longue.' })
-  if (task === 'review_doc') return reviewDoc(req, user.id, body, prompt)
+  if (task === 'review_doc') return reviewDoc(req, user.id, body)
 
   const admin = adminClient()
 
