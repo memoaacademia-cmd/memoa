@@ -805,7 +805,7 @@ export const PRICE_LABEL = { USD: '4,99 USD', CDF: '11 000 FC' } as const
 
 /** Démarre un paiement Chariow : le serveur crée la vente (identité et prix côté serveur, rien n'est choisi par le navigateur)
  *  et renvoie l'adresse de la page de paiement sécurisée, où l'on redirige l'étudiant. */
-export async function startPayment(): Promise<{ url: string | null; message?: string }> {
+export async function startPayment(embed = false): Promise<{ url: string | null; message?: string }> {
   if (!isConfigured) {
     const db = loadDemo()
     db.payments.unshift({
@@ -815,7 +815,7 @@ export async function startPayment(): Promise<{ url: string | null; message?: st
     saveDemo(db)
     return { url: null, message: 'Mode démo : paiement simulé, en attente.' }
   }
-  return invoke<{ url: string }>('swift-worker', { action: 'start' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+  return invoke<{ url: string }>('swift-worker', { action: 'start', embed }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
 }
 
 /** « J'ai payé » / retour de la page de paiement : le serveur revérifie directement chez Chariow (sans attendre le webhook). */
