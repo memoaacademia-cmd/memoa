@@ -1,5 +1,6 @@
 const DAY = 864e5
-const iso = (d: Date) => d.toISOString().slice(0, 10)
+/** Jour calendaire à Kinshasa (UTC+1). */
+const iso = (d: Date) => new Date(d.getTime() + 3_600_000).toISOString().slice(0, 10)
 
 /** Série en cours : jours consécutifs jusqu'à aujourd'hui (ou hier, pour ne pas punir une journée pas encore finie). */
 export function currentStreak(days: string[]): number {
@@ -27,7 +28,7 @@ export function lastWeek(days: string[]): { label: string; on: boolean }[] {
   const names = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(Date.now() - (6 - i) * DAY)
-    return { label: names[d.getUTCDay()], on: set.has(iso(d)) }
+    return { label: names[new Date(d.getTime() + 3_600_000).getUTCDay()], on: set.has(iso(d)) }
   })
 }
 
@@ -35,7 +36,7 @@ export function lastWeek(days: string[]): { label: string; on: boolean }[] {
 export function memoMood(days: string[]): { state: 'energique' | 'faible' | 'endormi'; text: string } {
   if (!days.length) return { state: 'energique', text: 'Prêt pour ta première session.' }
   const last = [...days].sort().pop() as string
-  const gap = Math.floor((Date.now() - new Date(last + 'T00:00:00Z').getTime()) / DAY)
+  const gap = Math.floor((Date.now() + 3_600_000 - new Date(last + 'T00:00:00Z').getTime()) / DAY)
   if (gap <= 1) return { state: 'energique', text: 'En pleine forme.' }
   if (gap <= 3) return { state: 'faible', text: 'Un peu fatigué. Une courte session le réveille.' }
   return { state: 'endormi', text: 'Il dort. Il sera content de te revoir.' }

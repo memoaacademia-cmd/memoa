@@ -22,7 +22,8 @@ const sb = () => {
   if (!supabase) throw new Error('Supabase non configuré')
   return supabase
 }
-const today = () => new Date().toISOString().slice(0, 10)
+/** Jour calendaire à Kinshasa (UTC+1) : la série et les points changent de jour à minuit chez l'étudiant. */
+const today = () => new Date(Date.now() + 3_600_000).toISOString().slice(0, 10)
 const fail = (m: string): never => {
   throw new Error(m)
 }
@@ -667,7 +668,7 @@ export async function touchToday(userId: string): Promise<void> {
 export async function listActivity(userId: string): Promise<string[]> {
   if (!isConfigured) return loadDemo().activity
   void userId
-  const since = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10)
+  const since = new Date(Date.now() + 3_600_000 - 60 * 864e5).toISOString().slice(0, 10)
   const { data, error } = await sb().from('activity_days').select('day').gte('day', since)
   if (error) throw error
   return (data ?? []).map((r: any) => r.day as string)
