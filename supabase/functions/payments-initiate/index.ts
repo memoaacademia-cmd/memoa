@@ -107,6 +107,10 @@ Deno.serve(async (req) => {
   const { count } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending').gte('created_at', new Date(Date.now() - 30 * 60_000).toISOString())
   if ((count ?? 0) >= 3) return json(req, 429, { error: 'Tu as déjà des paiements en attente. Valide-les sur ton téléphone ou patiente.' })
 
+  // Anti-abus : au plus 10 tentatives de paiement par 24 h (échecs compris), pour ne pas saturer OPTGateway ni harceler un numéro.
+  const { count: dayCount } = await admin.from('payments').select('id', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', new Date(Date.now() - 24 * 3600_000).toISOString())
+  if ((dayCount ?? 0) >= 10) return json(req, 429, { error: 'Trop de tentatives aujourd’hui. Réessaie demain ou contacte-nous.' })
+
   const reference = 'MEMOA-' + crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()
   const amount = PRICES[currency]
   const { error: insertError } = await admin.from('payments').insert({ user_id: user.id, provider, amount, currency, provider_ref: reference })
