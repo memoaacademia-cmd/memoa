@@ -1,5 +1,5 @@
 // VERSION EN UN SEUL FICHIER pour l'éditeur du tableau de bord Supabase (pas de dossier _shared).
-// Copie tout ce fichier dans la fonction « payments-webhook ».
+// Copie tout ce fichier dans la fonction « payments-webhook » (désactive « Verify JWT » : c'est Chariow qui l'appelle).
 // Utilitaires partagés par les fonctions serveur (Deno / Supabase Edge Functions).
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
@@ -41,20 +41,70 @@ export async function requireUser(req: Request): Promise<{ id: string; email: st
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// ======================= payments-webhook =======================
-// payments-webhook — appelé PAR OPTGateway pour confirmer un paiement.
-// Sécurité : en-tête OPTGateway-Signature = « t=HORODATAGE,v1=SIGNATURE ». La signature est un HMAC-SHA256 (hex)
-// du texte « HORODATAGE.CORPS » (corps brut, tel que reçu), avec le secret de webhook (whsec_…). Message de plus de 5 min refusé.
+// ---------- Outils Chariow (dupliqués dans les 3 fonctions de paiement : l'éditeur du tableau de bord n'a pas de dossier partagé) ----------
+const CHARIOW_API = 'https://api.chariow.com/v1'
+const PRICE_USD = 4.99 // prix du produit Chariow, en USD. Doit être identique au prix configuré dans Chariow.
+
+/** Lit une vente chez Chariow. null = vente inconnue (404). Lève une erreur si Chariow est injoignable (→ réessai plus tard). */
+async function getSale(id: string): Promise<Record<string, any> | null> {
+  const key = Deno.env.get('CHARIOW_API_KEY')
+  if (!key) throw new Error('CHARIOW_API_KEY manquante')
+  const res = await fetch(`${CHARIOW_API}/sales/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15_000)
+  })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`Chariow HTTP ${res.status}`)
+  const j = await res.json()
+  return (j?.data ?? j) as Record<string, any>
+}
+
+/** Une vente ne compte QUE si Chariow dit « payée », pour NOTRE produit, au BON montant. Rien du webhook n'est cru sur parole. */
+function judgeSale(s: Record<string, any>): { ok: true; amount: number; currency: string } | { ok: false; reason: string } {
+  const status = String(s.status ?? '')
+  if (!['completed', 'settled'].includes(status)) return { ok: false, reason: `statut:${status}` }
+  const wantedProduct = Deno.env.get('CHARIOW_PRODUCT_ID')
+  const productId = String(s.product?.id ?? '')
+  if (!wantedProduct || !productId || productId !== wantedProduct) return { ok: false, reason: `produit:${productId}` }
+  // amount = prix du produit (dans la devise du produit), même si le client paie dans une autre devise.
+  const amount = Number(s.amount?.value ?? s.amount)
+  const currency = String(s.amount?.currency ?? '')
+  if (!Number.isFinite(amount) || Math.abs(amount - PRICE_USD) > 0.011 || currency !== 'USD') return { ok: false, reason: `montant:${amount} ${currency}` }
+  return { ok: true, amount, currency }
+}
+
+/** Vérifie une vente chez Chariow puis la passe à la fonction SQL atomique. Renvoie le résultat (applied | duplicate | …). */
+async function verifyAndApply(admin: SupabaseClient, saleId: string, hintUser?: string): Promise<{ outcome: string; expires_at?: string }> {
+  const sale = await getSale(saleId)
+  if (!sale) return { outcome: 'unknown_sale' }
+  const verdict = judgeSale(sale)
+  if (!verdict.ok) return { outcome: 'rejected:' + verdict.reason }
+  const { data, error } = await admin.rpc('apply_chariow_payment', {
+    p_sale_id: saleId,
+    p_amount: verdict.amount,
+    p_currency: verdict.currency,
+    p_email: String(sale.customer?.email ?? ''),
+    p_user_hint: hintUser ?? (sale.custom_metadata?.user_id ? String(sale.custom_metadata.user_id) : null),
+    p_raw: sale
+  })
+  if (error) throw new Error('apply_chariow_payment : ' + error.message)
+  const row = Array.isArray(data) ? data[0] : data
+  return { outcome: String(row?.o_outcome ?? 'unknown'), expires_at: row?.o_expires_at ?? undefined }
+}
+
+// ======================= payments-webhook (Chariow Pulse) =======================
+// Appelée PAR Chariow à chaque événement du « Pulse ». Fonction publique : seule la signature la protège.
+// Sécurité, dans l'ordre :
+//   1. signature HMAC-SHA256 du corps brut (en-tête x-chariow-signature = « sha256=<hex> »), comparaison en temps constant → sinon 401 ;
+//   2. seul « successful.sale » est traité ; les événements de test (identifiants « test_… ») sont ignorés ;
+//   3. on NE CROIT PAS le contenu reçu : on relit la vente chez Chariow avec la clé secrète (statut payé, bon produit, bon montant) ;
+//   4. activation par la fonction SQL atomique (idempotente : rejeu = « duplicate », jamais deux prolongations).
+// Réponses : 2xx = reçu (aussi pour doublons, tests, refus définitifs) ; 5xx UNIQUEMENT pour une panne temporaire → Chariow réessaie
+// (5 essais : +10 s, +100 s, +17 min, +2 h 47, puis le Pulse est DÉSACTIVÉ — d'où le cron de rattrapage payments-reconcile).
 //
-// Secret Supabase attendu : OPTGATEWAY_WEBHOOK_SECRET (généré dans l'espace marchand OPTGateway, page Webhooks).
-// Cette fonction est publique (verify_jwt = false dans config.toml) : seule la signature la protège.
+// Secrets : CHARIOW_WEBHOOK_SECRET (whsec_…, onglet Overview du Pulse), CHARIOW_API_KEY, CHARIOW_PRODUCT_ID.
 
-const DAYS_PER_PAYMENT = 30
-const TOLERANCE_SECONDS = 300
-const OK_EVENTS = ['payment.succeeded', 'checkout.session.completed']
-const FAIL_EVENTS = ['payment.failed', 'payment.expired', 'payment.cancelled']
-
-const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
+const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
 function sameText(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let diff = 0 // comparaison en temps constant
@@ -63,78 +113,48 @@ function sameText(a: string, b: string): boolean {
 }
 
 async function validSignature(raw: string, header: string, secret: string): Promise<boolean> {
-  let t = ''
-  const sigs: string[] = []
-  for (const part of header.split(',')) {
-    const i = part.indexOf('=')
-    if (i < 0) continue
-    const k = part.slice(0, i).trim()
-    const v = part.slice(i + 1).trim()
-    if (k === 't') t = v
-    if (k === 'v1') sigs.push(v)
-  }
-  if (!t || !sigs.length || !/^[0-9]+$/.test(t)) return false
-  if (Math.abs(Date.now() / 1000 - Number(t)) > TOLERANCE_SECONDS) return false
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const expected = hex(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${raw}`))))
-  return sigs.some((s) => sameText(expected, s))
-}
-
-function parse(raw: string): { type: string; reference: string; amount: number | null; currency: string | null } | null {
-  try {
-    const j = JSON.parse(raw)
-    const d = j?.data ?? {}
-    if (typeof j?.type !== 'string' || typeof d.reference !== 'string') return null
-    const amount = d.amount !== undefined && d.amount !== null && !Number.isNaN(Number(d.amount)) ? Number(d.amount) : null
-    return { type: j.type, reference: d.reference, amount, currency: typeof d.currency === 'string' ? d.currency : null }
-  } catch {
-    return null
-  }
+  const expected = 'sha256=' + hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw)))
+  return sameText(expected, header.trim())
 }
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
-  const secret = Deno.env.get('OPTGATEWAY_WEBHOOK_SECRET')
+  const secret = Deno.env.get('CHARIOW_WEBHOOK_SECRET')
   if (!secret) return new Response('Not configured', { status: 503 })
 
-  const raw = await req.text()
-  if (!(await validSignature(raw, req.headers.get('optgateway-signature') ?? '', secret))) {
-    console.error('payments-webhook : signature invalide (secret différent, ou en-tête absent)')
-    return new Response('Invalid signature', { status: 400 })
+  const raw = await req.text() // corps BRUT : la signature porte sur ces octets exacts
+  if (!(await validSignature(raw, req.headers.get('x-chariow-signature') ?? '', secret))) {
+    console.error('payments-webhook : signature invalide (mauvais secret whsec_ ou en-tête absent)')
+    return new Response('Invalid signature', { status: 401 })
   }
 
-  const event = parse(raw)
-  if (!event) {
-    // Signature valide mais pas un événement de paiement (par exemple le test du tableau de bord) : on répond OK sans rien faire.
-    console.log('payments-webhook : message signé sans paiement, ignoré')
-    return new Response('ignored', { status: 200 })
-  }
-  const success = OK_EVENTS.includes(event.type)
-  if (!success && !FAIL_EVENTS.includes(event.type)) return new Response('ignored', { status: 200 }) // autres événements : rien à faire
+  let payload: Record<string, any> = {}
+  try { payload = JSON.parse(raw) } catch { return new Response('Bad JSON', { status: 200 }) } // signé mais illisible : inutile de réessayer
+  const event = String(payload.event ?? req.headers.get('x-pulse-event') ?? '')
+  const deliveryId = req.headers.get('x-pulse-delivery-id') ?? null
+  const saleId = String(payload.sale?.id ?? '')
 
   const admin = adminClient()
-  const { data: payment } = await admin.from('payments').select('id,user_id,status,amount,currency').eq('provider_ref', event.reference).maybeSingle()
-  if (!payment) return new Response('Unknown reference', { status: 200 }) // pas à nous : inutile de faire réessayer
-  if (payment.status === 'paid' || (payment.status === 'failed' && !success)) return new Response('Already processed', { status: 200 }) // idempotent : un rejeu ne prolonge pas deux fois
-
-  if (!success) {
-    await admin.from('payments').update({ status: 'failed' }).eq('id', payment.id).eq('status', 'pending')
-    return new Response('ok', { status: 200 })
+  const log = async (outcome: string) => {
+    const { error } = await admin.from('payment_events').insert({ delivery_id: deliveryId, event, sale_id: saleId || null, outcome, raw: payload })
+    if (error) console.error('payments-webhook : journal', error.message)
   }
 
-  // On contrôle le montant et la devise annoncés avant d'activer Premium.
-  if ((event.amount !== null && Math.abs(event.amount - Number(payment.amount)) > 0.001) || (event.currency !== null && event.currency !== payment.currency)) {
-    console.error('payments-webhook : montant ou devise différent', event.reference)
-    return new Response('Mismatch', { status: 200 })
+  if (event !== 'successful.sale') { await log('ignored'); return new Response('ignored', { status: 200 }) }
+  if (!saleId || saleId.startsWith('test_')) { await log('test'); return new Response('test ignored', { status: 200 }) }
+
+  try {
+    const r = await verifyAndApply(admin, saleId)
+    await log(r.outcome)
+    if (r.outcome === 'applied' || r.outcome === 'duplicate') return new Response('ok', { status: 200 })
+    // unmatched / rejected / unknown_sale / user_mismatch : refus définitif → 200 (inutile de réessayer), trace dans payment_events + logs.
+    console.error('payments-webhook : vente non appliquée', saleId, r.outcome)
+    return new Response(r.outcome, { status: 200 })
+  } catch (e) {
+    // Panne temporaire (Chariow injoignable, base indisponible) : 503 → Chariow réessaiera.
+    console.error('payments-webhook : erreur temporaire', saleId, (e as Error).message)
+    await log('error:' + (e as Error).message.slice(0, 120))
+    return new Response('Temporary error', { status: 503 })
   }
-
-  // Marque payé seulement si encore « pending » (protège contre deux appels simultanés).
-  const { data: updated } = await admin.from('payments').update({ status: 'paid' }).eq('id', payment.id).in('status', ['pending', 'failed']).select('id')
-  if (!updated?.length) return new Response('Already processed', { status: 200 })
-
-  const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', payment.user_id).maybeSingle()
-  const base = sub && new Date(sub.expires_at) > new Date() ? new Date(sub.expires_at) : new Date()
-  const expires = new Date(base.getTime() + DAYS_PER_PAYMENT * 864e5)
-  await admin.from('subscriptions').upsert({ user_id: payment.user_id, expires_at: expires.toISOString() })
-  return new Response('ok', { status: 200 })
 })
