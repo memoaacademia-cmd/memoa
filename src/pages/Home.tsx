@@ -53,7 +53,7 @@ export default function Home() {
         <span className="hm-brand">memoa</span>
         <div className="hm-right">
           {pts && (
-            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants aujourd’hui (renouvelés chaque jour à minuit, heure de Kinshasa)`}>
+            <span data-tour="home-points" className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants aujourd’hui (renouvelés chaque jour à minuit, heure de Kinshasa)`}>
               <Icon name="bolt" size={14} />{pts.left}
             </span>
           )}
@@ -68,7 +68,7 @@ export default function Home() {
         <h1 className="h1 big" style={{ margin: 0 }}>Salut, {first}</h1>
       </div>
 
-      <div className="hm-search" role="search">
+      <div className="hm-search" role="search" data-tour="home-search">
         <span className="ico"><Icon name="search" size={20} /></span>
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cherche dans tes notes" aria-label="Chercher dans tes notes" />
       </div>
@@ -79,7 +79,7 @@ export default function Home() {
         : <div className="muted" role="status">Aucune note ne correspond.</div>)}
 
       {last && (
-        <Link to={`/sac/${last.id}`} className="hm-resume">
+        <Link to={`/sac/${last.id}`} className="hm-resume" data-tour="home-resume">
           <Spine color={COURSE_COLORS[0]} />
           <div className="hm-resume-body">
             <small>REPRENDRE</small>
@@ -91,7 +91,7 @@ export default function Home() {
       )}
 
       {list.length > 0 && (
-        <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <section data-tour="home-courses" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="hm-sec-head"><h2>Tes cours</h2><Link to="/sac">Tout voir</Link></div>
           <div className="hm-rail">
             {list.map((c, i) => (
@@ -107,7 +107,7 @@ export default function Home() {
         </section>
       )}
 
-      <section className="hm-memo" aria-label="Ton Memo">
+      <section className="hm-memo" aria-label="Ton Memo" data-tour="home-memo">
         <div className="hm-memo-top">
           <span className="hm-memo-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={42} /></span>
           <div style={{ minWidth: 0 }}>
@@ -131,7 +131,7 @@ export default function Home() {
         </div>
       </section>
 
-      <FactCard memoName={memoName} animal={profile?.memo_animal ?? null} />
+      <div data-tour="home-fact"><FactCard memoName={memoName} animal={profile?.memo_animal ?? null} /></div>
     </main>
   )
 }

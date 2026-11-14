@@ -182,7 +182,7 @@ export default function Assistant() {
   return (
     <main className={'as-root' + (kb ? ' kb' : '')} style={box ? { height: box.h, top: box.top } : undefined}>
       <div className="as-head">
-        <button type="button" className="icon-btn round" onClick={() => setSheet('menu')} aria-label="Menu : historique et nouvelle conversation"><Icon name="menu" /></button>
+        <button type="button" data-tour="as-menu" className="icon-btn round" onClick={() => setSheet('menu')} aria-label="Menu : historique et nouvelle conversation"><Icon name="menu" /></button>
         <span className="as-title-wrap">
           <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
           {pts && (
@@ -225,7 +225,7 @@ export default function Assistant() {
             {reading ? <span className="muted">{reading}</span> : attach && <span className="attach-chip"><Icon name="pdf" size={16} /><span>{attach.name}</span><button type="button" className="link" style={{ textDecoration: 'none' }} onClick={() => setAttach(null)} aria-label="Retirer le fichier joint"><Icon name="close" size={16} /></button></span>}
           </div>
         )}
-        <div className={'as-bar' + (listening ? ' live' : '')}>
+        <div data-tour="as-composer" className={'as-bar' + (listening ? ' live' : '')}>
           <label htmlFor="q" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ta question</label>
           <textarea
             id="q"
@@ -241,7 +241,7 @@ export default function Assistant() {
           />
           <div className="as-tools">
             <button type="button" className="as-ico" onClick={() => setSheet('plus')} aria-label="Joindre une photo ou un document"><Icon name="plus" size={22} /></button>
-            <button type="button" className={'as-ico' + (courseId ? ' on' : '')} onClick={() => setSheet('course')} aria-pressed={!!courseId} aria-label={courseId ? `Mes notes : ${courseName ?? 'cours choisi'}` : 'Mes notes : choisir un cours'}>
+            <button type="button" data-tour="as-course" className={'as-ico' + (courseId ? ' on' : '')} onClick={() => setSheet('course')} aria-pressed={!!courseId} aria-label={courseId ? `Mes notes : ${courseName ?? 'cours choisi'}` : 'Mes notes : choisir un cours'}>
               <Icon name="book" size={20} />
               {courseId && courseName && <span className="as-ico-t">{courseName}</span>}
             </button>

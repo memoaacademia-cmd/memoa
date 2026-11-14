@@ -20,7 +20,7 @@ import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
 import { adjustLength, assemble, loadProgress, parsePlan, partIsComplete, saveProgress } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
-import { startTpJob, takeTpResult, dismissTpError, pauseTpJob, abandonTpJob, useTpJob } from '../lib/tpjob'
+import { startTpJob, takeTpResult, dismissTpError, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
@@ -295,11 +295,11 @@ export function Backpack() {
           <h1 className="h1 big" style={{ margin: 0 }}>Mes cours</h1>
           <span className="muted">{all.length} {all.length > 1 ? 'cours' : 'cours'} · {totalNotes} {totalNotes > 1 ? 'notes' : 'note'}</span>
         </div>
-        <button type="button" className={'round-search' + (searchOpen ? ' on' : '')} aria-label="Chercher un cours" aria-expanded={searchOpen} onClick={() => { if (searchOpen) setQc(''); setSearchOpen((v) => !v) }}>
+        <button type="button" data-tour="courses-search" className={'round-search' + (searchOpen ? ' on' : '')} aria-label="Chercher un cours" aria-expanded={searchOpen} onClick={() => { if (searchOpen) setQc(''); setSearchOpen((v) => !v) }}>
           <Icon name="search" size={22} />
         </button>
       </div>
-      <PillButton size="lg" to="/cours"><Icon name="plus" size={22} stroke={2.4} />Nouveau cours</PillButton>
+      <PillButton size="lg" to="/cours" tour="courses-new"><Icon name="plus" size={22} stroke={2.4} />Nouveau cours</PillButton>
       {searchOpen && (
         <div className="cs-bar" role="search">
           <Icon name="search" size={20} color="var(--text-3)" />
@@ -313,7 +313,7 @@ export function Backpack() {
         <Empty title="Ton sac à dos est vide" text="Crée ton premier cours : il sera rangé ici." />
       ) : (
         <>
-          <RowGroup>
+          <RowGroup tour="courses-list">
             {shown.length ? shown.map((c) => (
               <Row key={c.id} icon="book" title={c.title} sub={`${c.notes_count} ${c.notes_count > 1 ? 'notes' : 'note'}`} to={`/sac/${c.id}`} />
             )) : <div className="rg-empty">Aucun cours ne correspond.</div>}
@@ -352,10 +352,8 @@ function saveBlob(name: string, blob: Blob) {
   const a = document.createElement('a')
   a.href = url
   a.download = fileName(name)
-  a.style.display = 'none'
-  document.body.appendChild(a)
   a.click()
-  setTimeout(() => { a.remove(); URL.revokeObjectURL(url) }, 30000)
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
 /* Un cours du sac à dos : un grand bouton « Ajouter une note », la liste des outils, puis les notes. */
@@ -758,29 +756,13 @@ export function CourseDetail() {
   async function pdf(mode: 'read' | 'save') {
     if (!course.data || !notes.data?.length) return
     // La fenêtre de lecture s'ouvre tout de suite (sinon le téléphone la bloque), puis reçoit le PDF.
-    let w: Window | null = null
-    if (mode === 'read') {
-      try {
-        w = window.open('', '_blank')
-        if (w) w.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF</title><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#444">Préparation du PDF…</body>')
-      } catch { w = null }
-    }
-    const made = await run(async () => buildCoursePdf(course.data!.title, profileName, notes.data as Note[], 'NOTES DE COURS', await coverOpts()))
-    if (!made) { try { w?.close() } catch { /* rien */ } return }
-    // Certains navigateurs ne reconnaissent pas le PDF sans type explicite.
-    const blob = made.type === 'application/pdf' ? made : new Blob([made], { type: 'application/pdf' })
-    if (mode === 'read') {
+    const w = mode === 'read' ? window.open('', '_blank') : null
+    const blob = await run(async () => buildCoursePdf(course.data!.title, profileName, notes.data as Note[], 'NOTES DE COURS', await coverOpts()))
+    if (!blob) { w?.close(); return }
+    if (w) {
       const url = URL.createObjectURL(blob)
-      let shown = false
-      if (w && !w.closed) {
-        try { w.location.replace(url); shown = true } catch { shown = false }
-      }
-      if (!shown) {
-        // Fenêtre bloquée ou refusée (téléphone, appli installée) : on télécharge le PDF pour que ça marche quand même.
-        try { w?.close() } catch { /* rien */ }
-        saveBlob(course.data.title, blob)
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000)
+      w.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } else saveBlob(course.data.title, blob)
   }
 
@@ -830,19 +812,19 @@ export function CourseDetail() {
         </PillButton>
       )}
 
-      <PillButton size="lg" onClick={openSheet}><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
+      <PillButton size="lg" onClick={openSheet} tour="course-add"><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
 
       {!online && <span className="muted" role="status" style={{ padding: '0 4px' }}>Sans connexion : tu peux lire ton cours (« Lire le PDF ») et l’écouter tel quel. Résumé, révision, TP et téléchargement reviennent avec le réseau.</span>}
 
       <RowGroup label="Outils">
-        <Row icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
-        <Row icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
-        {canSpeak() && <Row icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
-        <Row icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
+        <Row tour="course-modify" icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
+        <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
+        {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
+        <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
         <Row icon="download" title="Télécharger" sub={online ? 'Enregistrer en PDF' : 'Besoin du réseau'} onClick={() => void pdf('save')} disabled={!all.length || busy || !online} />
         {online
-          ? <Row icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
-          : <Row icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />}
+          ? <Row tour="course-tp" icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
+          : <Row tour="course-tp" icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />}
       </RowGroup>
 
       <ErrorBox message={editing || listenOpen ? null : error} />
@@ -1002,7 +984,7 @@ export function TpAssistant() {
   const [target, setTarget] = useState<'brief' | 'remarks'>('brief')
   const [step, setStep] = useState('')
   // Nombre de pages de CONTENU voulu (la page de garde est comptée à part). Vide = longueur naturelle.
-  const [pagesWanted, setPagesWanted] = useState('4')
+  const [pagesWanted, setPagesWanted] = useState('')
   const [notice, setNotice] = useState('')
   const lastTexts = useRef<Record<number, string>>({})
   const docTexts = useRef<Record<number, string>>({})
@@ -1052,7 +1034,7 @@ export function TpAssistant() {
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); abandonTpJob(id); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -1060,7 +1042,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); abandonTpJob(id); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -1140,18 +1122,6 @@ export function TpAssistant() {
       courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts,
       onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now() }) }
     })
-  }
-
-  // « Attendre » : la partie en cours se termine, puis la rédaction s'arrête. Rien n'est perdu : on corrige, puis « Reprendre ».
-  function waitWriting() { pauseTpJob(id) }
-  // « Abandonner » : on arrête tout, on efface le travail enregistré et on remet l'écran à zéro.
-  function abandonAll() {
-    if (!window.confirm('Abandonner ce TP ? Tout sera effacé (énoncé, plan, texte déjà rédigé) et tu devras recommencer depuis le début.')) return
-    abandonTpJob(id)
-    setTitle(''); setBrief(''); setAtts([]); setPlan(null); setRemarks(''); setRemAtts([])
-    setDoc(null); setTexts({}); setStep(''); setPagesWanted('4'); setNotice(''); setError(null)
-    setSupervisor(''); setMyLogo(null); setSheetFor(null)
-    tpSession.current = null; lastTexts.current = {}; docTexts.current = {}
   }
 
   const LogoCheck = () => (
@@ -1234,21 +1204,10 @@ export function TpAssistant() {
           <div>
             <div className="rg-label">Nombre de pages du travail (sans la page de garde)</div>
             <input className="pages-input" type="number" inputMode="numeric" min={1} max={60} value={pagesWanted} onChange={(e) => setPagesWanted(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Laisse vide : longueur naturelle" aria-label="Nombre de pages du travail" />
-            <small style={{ opacity: 0.75 }}>Par défaut 4 : le PDF fait 5 pages avec la page de garde. Efface le chiffre pour laisser la longueur naturelle.</small>
+            <small style={{ opacity: 0.75 }}>Ex. 9 donne un PDF de 10 pages avec la page de garde.</small>
           </div>
           <LogoCheck />
           <PillButton variant="outline" onClick={adjustPlan} disabled={busy}>{busy ? 'Un instant…' : 'Ajuster le plan'}</PillButton>
-          {job?.paused && !writing && <span className="muted" role="status">Rédaction en pause : ton travail est gardé. Corrige ce que tu veux, puis reprends.</span>}
-          <div className="tp-ctrl">
-            {writing && (
-              <button type="button" className="tp-ctrl-btn wait" onClick={waitWriting} disabled={!!job?.stopping} aria-label="Attendre : mettre la rédaction en pause" title="Attendre">
-                <Icon name="stop" size={20} stroke={2.4} />
-              </button>
-            )}
-            <button type="button" className="tp-ctrl-btn drop" onClick={abandonAll} disabled={actionBusy && !writing} aria-label="Abandonner et tout remettre à zéro" title="Abandonner">
-              <Icon name="close" size={22} stroke={2.6} />
-            </button>
-          </div>
           <PillButton size="lg" onClick={write} disabled={busy}>{busy ? 'Rédaction en cours…' : doneCount > 0 ? `Reprendre la rédaction (${doneCount}/${planParts.length})` : 'Valider et rédiger le TP'}</PillButton>
         </div>
       )}

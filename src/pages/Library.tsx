@@ -98,10 +98,10 @@ export default function Library() {
           <h1 className="h1 big" style={{ margin: 0 }}>Librairie</h1>
           <span className="muted">{shown.length} {shown.length > 1 ? 'documents partagés' : 'document partagé'} par des étudiants</span>
         </div>
-        <PillButton size="sm" onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</PillButton>
+        <PillButton size="sm" tour="lib-publish" onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</PillButton>
       </div>
 
-      <div className="hm-search" role="search">
+      <div className="hm-search" role="search" data-tour="lib-search">
         <span className="ico"><Icon name="search" size={20} /></span>
         <input
           type="search"
@@ -111,7 +111,7 @@ export default function Library() {
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
-      <div className="row">
+      <div className="row" data-tour="lib-filters">
         <select className="select" aria-label="Faculté" value={fac} onChange={(e) => setFac(e.target.value)}>
           <option value="">Faculté : toutes</option>
           {faculties.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -136,7 +136,7 @@ export default function Library() {
           text={filtered ? 'Essaie un autre mot, ou touche « Tout afficher ».' : 'Sois le premier à partager un document avec les étudiants.'}
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div data-tour="lib-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {shown.map((d) => (
             <article key={d.id} className="lib-card">
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>

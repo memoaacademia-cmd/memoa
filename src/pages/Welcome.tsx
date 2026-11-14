@@ -18,7 +18,8 @@ const tour = (me: string, first: string): { icon: string; tag: string; text: str
   { icon: 'quiz', tag: 'Réviser', text: 'Je te pose des quiz tirés de tes propres notes, avec la correction. Et un autre quiz, avec de nouvelles questions, quand tu veux.' },
   { icon: 'book', tag: 'Assistant TP', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec la page de garde de ton université.' },
   { icon: 'shelf', tag: 'Librairie', text: 'Retrouve les documents partagés par ta promotion, et partage les tiens pour aider les autres.' },
-  { icon: 'chat', tag: 'Parle-moi', text: 'Dans l’assistant, pose-moi tes questions : je m’appuie sur tes notes. Je peux aussi te lire un cours à voix haute.' }
+  { icon: 'chat', tag: 'Parle-moi', text: 'Dans l’assistant, pose-moi tes questions : je m’appuie sur tes notes. Je peux aussi te lire un cours à voix haute.' },
+  { icon: 'sparkle', tag: 'À toi de jouer', text: `Ensuite, je te guiderai page par page : une petite visite à ta première arrivée sur chaque écran. Tu pourras la revoir quand tu veux depuis « Moi ».` }
 ]
 
 export function Presentation() {

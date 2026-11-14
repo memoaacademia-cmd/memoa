@@ -94,6 +94,12 @@ export function Help() {
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher dans l'aide" aria-label="Chercher dans l'aide" style={{ height: 54, borderRadius: 27 }} />
       </div>
 
+      {!term && (
+        <RowGroup label="Découvrir Memoa">
+          <Row icon="sparkle" title="Visites guidées" sub="Revoir les explications de chaque page" to="/visites" />
+        </RowGroup>
+      )}
+
       {groups.length === 0 && <div className="muted" role="status" style={{ textAlign: 'center', padding: '12px 0' }}>Aucune question ne correspond.</div>}
 
       {groups.map((g) => (

@@ -71,11 +71,12 @@ export function Me() {
       </section>
 
       <RowGroup label="Compte">
-        <Row icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
-        <Row iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
-        <Row icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
+        <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
+        <Row tour="me-memo" iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
+        <Row tour="me-settings" icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
       </RowGroup>
       <RowGroup label="Aide">
+        <Row tour="me-tours" icon="sparkle" title="Visites guidées" sub="Revoir les explications de chaque page" to="/visites" />
         <Row icon="chat" title="Centre d’aide" to="/aide" />
         <Row icon="text" title="Signaler un problème" to="/signaler" />
         <Row icon="star" title="Donner mon avis" to="/avis" />
