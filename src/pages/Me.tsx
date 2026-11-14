@@ -276,13 +276,55 @@ export function Premium() {
   const [info, setInfo] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(() => /[?&]paiement=retour/.test(window.location.search))
   const hasPending = !!pay.data?.some((p) => p.provider === 'chariow' && p.status === 'pending')
+  const [frame, setFrame] = useState<string | null>(null) // adresse de la page de paiement, affichée dans la fenêtre
 
   async function go() {
     setInfo(null)
-    const r = await run(() => startPayment())
+    const r = await run(() => startPayment(true))
     if (!r) return
-    if (r.url) window.location.assign(r.url) // page de paiement sécurisée ; retour automatique dans l'app ensuite
+    if (r.url) setFrame(r.url) // le paiement s'ouvre dans une fenêtre, l'étudiant reste dans Memoa
     else { setInfo(r.message ?? null); pay.reload() }
+  }
+
+  // Fenêtre de paiement ouverte : (1) Chariow nous renvoie dans la fenêtre → message de la page de retour → on ferme et on attend l'activation ;
+  // (2) en parallèle, on interroge le serveur (le webhook active même sans retour, ex. confirmation Mobile Money sur le téléphone).
+  useEffect(() => {
+    if (!frame) return
+    let alive = true
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.data?.type !== 'memoa-paiement-retour') return
+      setFrame(null)
+      setWaiting(true)
+    }
+    window.addEventListener('message', onMessage)
+    ;(async () => {
+      for (let i = 0; i < 150 && alive; i++) { // ~10 minutes
+        await new Promise((res) => setTimeout(res, 4000))
+        if (!alive) return
+        try {
+          const r = await checkPayment()
+          if (r.active) { if (alive) { setFrame(null); setInfo('Paiement reçu : ton Premium est activé. Merci !'); sub.reload(); pay.reload() } return }
+        } catch { /* réseau : on réessaie */ }
+      }
+    })()
+    return () => { alive = false; window.removeEventListener('message', onMessage) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame])
+
+  function closeFrame() {
+    setFrame(null)
+    setInfo("Fenêtre fermée. Si tu as payé, ton Premium s'active tout seul dans quelques minutes ; sinon, appuie sur « Vérifier mon paiement ».")
+    pay.reload()
+  }
+
+  // Repli : certains moyens de paiement n'aiment pas les fenêtres intégrées → on ouvre la page complète dans un nouvel onglet.
+  function openFull() {
+    if (!frame) return
+    const w = window.open(frame, '_blank', 'noopener')
+    if (!w) { window.location.assign(frame); return }
+    setFrame(null)
+    setInfo("Le paiement s'est ouvert dans un nouvel onglet. Une fois payé, reviens ici : ton Premium s'active tout seul, ou appuie sur « Vérifier mon paiement ».")
+    pay.reload()
   }
 
   // Retour de la page de paiement (?paiement=retour) : « Activation en cours… » → on interroge le serveur jusqu'à l'activation.
@@ -353,6 +395,22 @@ export function Premium() {
       {hasPending && !waiting && <button type="button" className="pill-btn sm" onClick={() => void verify()} disabled={busy}>J’ai payé · Vérifier mon paiement</button>}
       <span className="muted" style={{ textAlign: 'center' }}>Tu choisis ton moyen de paiement sur la page sécurisée, puis tu reviens ici automatiquement. Aucune donnée bancaire n'est stockée dans l'app.</span>
       </div>
+
+      {frame && (
+        <div role="dialog" aria-modal="true" aria-label="Paiement Memoa Premium" style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 480, height: '100dvh', maxHeight: 780, background: 'var(--surface)', color: 'var(--text)', display: 'flex', flexDirection: 'column', borderRadius: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 'calc(10px + env(safe-area-inset-top, 0px)) 16px 10px' }}>
+              <strong style={{ fontSize: 16 }}>Paiement sécurisé · Memoa Premium</strong>
+              <button type="button" className="pill-btn sm" onClick={closeFrame}>Fermer</button>
+            </div>
+            <iframe src={frame} title="Paiement sécurisé Chariow" allow="payment" style={{ flex: 1, width: '100%', border: 0, background: '#fff' }} />
+            <div style={{ padding: '10px 16px calc(10px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+              <span className="muted" style={{ textAlign: 'center' }}>Ton Premium s'active tout seul dès que le paiement est confirmé.</span>
+              <button type="button" className="pill-btn sm" onClick={openFull}>La page ne s'affiche pas ? Ouvrir dans un nouvel onglet</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <RowGroup label="Historique des paiements">
         {pay.loading ? <div className="rg-empty">Chargement…</div> : !pay.data?.length ? <div className="rg-empty">Aucun paiement pour l'instant.</div> : pay.data.map((p) => {
