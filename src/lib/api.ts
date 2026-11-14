@@ -803,19 +803,25 @@ export async function listPayments(): Promise<Payment[]> {
 export const PRICES = { USD: 4.99, CDF: 11000 } as const // affichage seulement : le serveur fixe le vrai montant
 export const PRICE_LABEL = { USD: '4,99 USD', CDF: '11 000 FC' } as const
 
-/** Le navigateur n'envoie PAS le montant : le serveur le déduit du plan et de la devise. */
-export async function startPayment(provider: string, phone: string, currency: 'USD' | 'CDF'): Promise<{ message: string }> {
-  if (!/^[0-9]{9}$/.test(phone.replace(/\s/g, ''))) fail('Entre ton numéro Mobile Money (9 chiffres, sans le +243).')
+/** Démarre un paiement Chariow : le serveur crée la vente (identité et prix côté serveur, rien n'est choisi par le navigateur)
+ *  et renvoie l'adresse de la page de paiement sécurisée, où l'on redirige l'étudiant. */
+export async function startPayment(): Promise<{ url: string | null; message?: string }> {
   if (!isConfigured) {
     const db = loadDemo()
     db.payments.unshift({
-      id: uid(), provider, amount: PRICES[currency], currency, status: 'pending',
+      id: uid(), provider: 'chariow', amount: PRICES.USD, currency: 'USD', status: 'pending',
       provider_ref: 'DEMO-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: new Date().toISOString()
     })
     saveDemo(db)
-    return { message: 'Mode démo : paiement simulé, en attente.' }
+    return { url: null, message: 'Mode démo : paiement simulé, en attente.' }
   }
-  return invoke<{ message: string }>('swift-worker', { provider, phone, currency, plan: 'monthly' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+  return invoke<{ url: string }>('swift-worker', { action: 'start' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+}
+
+/** « J'ai payé » / retour de la page de paiement : le serveur revérifie directement chez Chariow (sans attendre le webhook). */
+export async function checkPayment(): Promise<{ active: boolean; expires_at: string | null }> {
+  if (!isConfigured) return { active: false, expires_at: null }
+  return invoke<{ active: boolean; expires_at: string | null }>('swift-worker', { action: 'check' }, 'Vérification impossible pour le moment. Réessaie dans un instant.')
 }
 
 export async function hasPremium(userId: string): Promise<boolean> {
