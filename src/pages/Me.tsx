@@ -248,9 +248,9 @@ export function Settings() {
 }
 
 const OPERATORS = [
-  { id: 'orange', name: 'Orange Money', dot: '#f2762e' },
-  { id: 'airtel', name: 'Airtel Money', dot: '#e5202e' },
-  { id: 'mpesa', name: 'M-Pesa', dot: '#3fb950' }
+  { id: 'orange', name: 'Orange Money', dot: '#f2762e', logo: 'pay-orange.png' },
+  { id: 'airtel', name: 'Airtel Money', dot: '#e5202e', logo: 'pay-airtel.png' },
+  { id: 'mpesa', name: 'M-Pesa', dot: '#3fb950', logo: 'pay-mpesa.png' }
 ]
 const STATUS: Record<string, [string, string]> = { paid: ['Payé', 'badge'], pending: ['En attente', 'badge amber'], failed: ['Échoué', 'badge red'] }
 const BENEFITS = [
@@ -320,7 +320,7 @@ export function Premium() {
       <RowGroup label={active ? 'Prolonger mon abonnement' : 'Payer par Mobile Money'}>
         {OPERATORS.map((o) => (
           <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className="rg-row" onClick={() => setOp(o.id)}>
-            <span className="dot" style={{ background: o.dot }} />
+            <img src={`${import.meta.env.BASE_URL}logos/${o.logo}`} alt="" width={40} height={40} style={{ flex: 'none', width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
             <span className="rg-body"><span className="rg-title">{o.name}</span></span>
             <span className={'radio' + (op === o.id ? ' on' : '')} />
           </button>
