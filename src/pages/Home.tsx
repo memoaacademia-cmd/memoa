@@ -8,6 +8,9 @@ import { firstNameOf } from '../lib/names'
 import { currentStreak, lastWeek, memoMood } from '../lib/streak'
 import { usePoints } from '../lib/points'
 import { useAvatar } from '../lib/avatar'
+import { usePlan } from '../lib/plan'
+import { usePref } from '../lib/prefs'
+import { Price } from '../components/PlanInfo'
 
 const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
@@ -23,6 +26,12 @@ export default function Home() {
   const days = act.data ?? []
   const streak = currentStreak(days)
   const pts = usePoints()
+  const plan = usePlan()
+  const [promoDay, setPromoDay] = usePref('home-promo-day', '')
+  const today = new Date().toDateString()
+  const showPromo = (plan.state === 'free' || plan.state === 'expired') && promoDay !== today
+  const promoTitle = plan.state === 'expired' ? 'Retrouve Premium' : (pts && pts.left <= 0) ? 'Plus de points aujourd’hui ?' : 'Plus d’IA avec Premium'
+  const promoSub = plan.state === 'expired' ? <>Ton abonnement est terminé · <Price cur="USD" /></> : (pts && pts.left <= 0) ? 'Premium te laisse continuer sans attendre minuit' : <>Sans compte à rebours de points · <Price cur="USD" /></>
   const mood = memoMood(days)
   const avatarSrc = useAvatar(profile?.avatar_url)
   const first = firstNameOf(profile) || 'toi'
@@ -53,8 +62,8 @@ export default function Home() {
         <span className="hm-brand">memoa</span>
         <div className="hm-right">
           {pts && (
-            <span data-tour="home-points" className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants aujourd’hui (renouvelés chaque jour à minuit, heure de Kinshasa)`}>
-              <Icon name="bolt" size={14} />{pts.left}
+            <span data-tour="home-points" className={'pts-chip free' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={`${pts.left} points restants aujourd’hui (renouvelés chaque jour à minuit, heure de Kinshasa)`}>
+              <span className="gold-bolt"><Icon name="bolt" size={14} /></span>{pts.left}
             </span>
           )}
           <Link to="/moi" className="hm-avatar" aria-label="Mon profil">
@@ -132,6 +141,17 @@ export default function Home() {
       </section>
 
       <div data-tour="home-fact"><FactCard memoName={memoName} animal={profile?.memo_animal ?? null} /></div>
+
+      {showPromo && (
+        <aside className="hm-promo" aria-label="Premium">
+          <Link to="/premium" className="hm-promo-link">
+            <span className="hm-promo-ico" aria-hidden="true"><Icon name="crown" size={18} stroke={2} /></span>
+            <span className="hm-promo-txt"><strong>{promoTitle}</strong><span>{promoSub}</span></span>
+            <Icon name="chevright" size={18} />
+          </Link>
+          <button type="button" className="hm-promo-x" aria-label="Masquer pour aujourd’hui" onClick={() => setPromoDay(today)}><Icon name="close" size={16} /></button>
+        </aside>
+      )}
     </main>
   )
 }

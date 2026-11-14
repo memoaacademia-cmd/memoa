@@ -4,6 +4,7 @@ import { getSubscription } from './api'
 import { useAuth } from './auth'
 import { isOnline } from './online'
 import { isActive } from './subscription'
+import { compute as computePlan } from './plan'
 
 const KEY = 'memoa-sub-exp'
 
@@ -16,14 +17,17 @@ function cached(userId: string): boolean {
   }
 }
 
-/** Vrai si l'abonnement est en cours. Hors connexion, on s'appuie sur la dernière date d'expiration connue (jamais sur un état inventé). */
+/** Vrai si l'abonnement est en cours OU si l'essai gratuit est en cours (l'étudiant en essai goûte à tout Premium : pages de garde dorées,
+ *  sans la mention « Créé avec Memoa »). Hors connexion, on s'appuie sur la dernière date d'expiration connue (jamais sur un état inventé) :
+ *  l'essai n'est donc reconnu qu'avec une réponse du serveur. Ne change aucun droit serveur : c'est de la présentation de PDF. */
 export async function isPremiumNow(userId: string | undefined): Promise<boolean> {
   if (!userId) return false
   if (!isOnline()) return cached(userId)
   try {
     const s = await getSubscription(userId)
     try { localStorage.setItem(KEY, JSON.stringify({ u: userId, exp: s?.expires_at ?? '' })) } catch { /* stockage indisponible */ }
-    return !!s && isActive(s.expires_at)
+    if (!!s && isActive(s.expires_at)) return true
+    return (await computePlan(userId)).state === 'trial'
   } catch {
     return cached(userId)
   }

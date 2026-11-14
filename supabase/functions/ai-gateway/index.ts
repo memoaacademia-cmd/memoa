@@ -71,16 +71,18 @@ const KIN_OFFSET_MS = 3_600_000 // Kinshasa = UTC+1
 const DAY_MS = 86_400_000
 /** Début (en ms UTC) du jour de Kinshasa qui contient « t » : 00h00 Kinshasa = 23h00 UTC la veille. */
 const kinDayStart = (t: number) => Math.floor((t + KIN_OFFSET_MS) / DAY_MS) * DAY_MS - KIN_OFFSET_MS
-// Coût fixe par tâche. Les tâches sur des notes (LENGTH_TASKS) coûtent selon la longueur du texte envoyé.
+// Coût fixe par tâche. Créer ou ajouter une note (structure_notes, enrich_note) coûte toujours NOTE_POINTS, quelle que soit la longueur.
+// Seul le résumé (summary) coûte encore selon la longueur du texte envoyé.
 const CHAT_PAID = 1 // chat : 1 point tous les 2 messages (voir plus bas)
 const COURSE_POINTS = 15 // génération complète d'un cours, quelle que soit la méthode (notes, consignes seules…)
+const NOTE_POINTS = 15 // créer ou ajouter une note dans un cours : 15 points FIXES, jamais selon la longueur
 const TP_POINTS = 10 // un TP complet (plan + ajustements + rédaction) : payé UNE seule fois, à l'ouverture de la « session de TP »
 const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
 const LENGTH_TASKS: string[] = ['structure_notes', 'summary', 'enrich_note']
 const PAGE_CHARS = 1500 // une page environ
 /** « course » = création d'un cours (appelé par l'écran Nouveau cours, sans cours existant) : 15 points au total, tout compris. */
 function costOf(task: string, textLen: number, purpose: 'course' | null = null): number {
-  if (purpose === 'course' && (task === 'structure_notes' || task === 'enrich_note')) return COURSE_POINTS
+  if (task === 'structure_notes' || task === 'enrich_note') return purpose === 'course' ? COURSE_POINTS : NOTE_POINTS // 15 dans les deux cas
   if (task.startsWith('tp_')) return TP_POINTS // coût d'une NOUVELLE session de TP ; les appels suivants de la même session sont gratuits (voir plus bas)
   if (!LENGTH_TASKS.includes(task)) return POINTS[task] ?? 1
   if (textLen < PAGE_CHARS) return 4 // courte : moins d'une page
@@ -141,7 +143,7 @@ async function logUsage(admin: ReturnType<typeof adminClient>, row: { user_id: s
 /** Message de refus quand les points ne suffisent pas (jamais de traitement partiel). */
 function lackMessage(st: Extract<Access, { mode: 'points' }>, task: string, cost: number) {
   if (st.left <= 0) return { status: 429, error: premiumMsg(waitLabel(st.resetAt - Date.now())), code: 'premium_required' }
-  const what = LENGTH_TASKS.includes(task) ? (cost === COURSE_POINTS ? 'ce cours' : 'cette note') : task.startsWith('tp_') ? 'ce travail' : 'cette demande'
+  const what = LENGTH_TASKS.includes(task) ? 'cette note ou ce cours' : task.startsWith('tp_') ? 'ce travail' : 'cette demande'
   return { status: 429, error: `Il te reste ${st.left} point${st.left > 1 ? 's' : ''}, ${what} en demande ${cost}. Ils reviennent à minuit (heure de Kinshasa), ou passe à Premium pour continuer.`, code: 'premium_required' }
 }
 
@@ -291,7 +293,7 @@ Barre du bas : Accueil, Cours, Librairie, Assistant, Moi.
 - Assistant (ce chat) : en bas, le champ de message ; icône + (joindre photo ou document), icône livre (choisir un cours comme contexte), icône globe (recherche web), micro (dicter), flèche (envoyer), carré (arrêter), haut-parleur sous une réponse (écouter). L'historique des conversations est dans le menu du haut ; on peut chercher dans ses notes.
 - Moi : photo et nom, séries et chiffres, carte Premium, « Mon profil » (modifier université, faculté, promotion…), « Mon Memo » (changer d'animal et de nom), « Réglages » (notifications, thème clair/sombre, langue, déconnexion), aide, signaler un problème, donner son avis, confidentialité, conditions, à propos.
 - Premium (Moi, puis la carte Premium) : 4,99 USD ou 11 000 FC pour 30 jours, payé par Orange Money, Airtel Money ou M-Pesa. Après paiement, l'abonnement s'active ; on voit sa date de fin. Memoa prévient 7 jours, 2 jours avant et le jour de la fin.
-- Essai et points : 5 jours d'IA complète offerts à l'inscription (un essai par numéro). Ensuite 20 points gratuits PAR JOUR : ils reviennent à 20 chaque jour à minuit (heure de Kinshasa), les points non utilisés ne se cumulent pas. Créer un cours avec l'IA coûte 15 points (quelle que soit la méthode) ; un TP complet 10 points au total (plan, ajustements et rédaction compris) ; deux questions au chat 1 point ; une révision (un quiz) 1 ; un résumé ou une mise en forme de note 4 à 20 selon la longueur. Le solde est affiché dans l'Assistant et sur l'Accueil. Premium enlève cette limite.
+- Essai et points : 5 jours d'IA complète offerts à l'inscription (un essai par numéro). Ensuite 20 points gratuits PAR JOUR : ils reviennent à 20 chaque jour à minuit (heure de Kinshasa), les points non utilisés ne se cumulent pas. Créer un cours avec l'IA coûte 15 points (quelle que soit la méthode) ; créer ou ajouter une note coûte aussi 15 points fixes, quelle que soit sa longueur (3 points de plus si elle vient d'un audio) ; un TP complet 10 points au total (plan, ajustements et rédaction compris) ; deux questions au chat 1 point ; une révision (un quiz) 1 ; un résumé de notes 4 à 20 selon la longueur. Le solde est affiché dans l'Assistant et sur l'Accueil. Premium enlève cette limite.
 - Brouillons : dans l'écran d'écriture, le bouton « Brouillon » garde ta note 72 h sur le téléphone, même sans connexion. Les brouillons apparaissent dans l'onglet Cours, section « Brouillons en attente », avec un compte à rebours ; quand le réseau revient, on ouvre le brouillon et on touche « Générer le PDF ». Sans PDF au bout de 72 h, le brouillon est supprimé. Sans connexion, un cours déjà ouvert se lit quand même : « Lire le PDF » et « Écouter » (« Lire tel quel ») marchent, mais le résumé, « Réviser », « Assistant TP » et « Télécharger » ont besoin du réseau. Dans l'écran d'écriture, l'info « Sans connexion » est repliée en une ligne : on la touche pour la dérouler.
 - Compte : inscription par e-mail ou Google ; avec Google il faut créer un mot de passe et ajouter son numéro de téléphone, car c'est ce qui sert à se reconnecter. Installer l'app : page « Installer » (ajouter à l'écran d'accueil).
 Réponses types : « C'est quoi Memoa ? » → compagnon d'étude (ci-dessus). « Où je change mon Memo ? » → Moi, puis Mon Memo. « Comment télécharger mon cours ? » → ouvre le cours, bouton Télécharger.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { getSubscription, hasPremium, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
+import { getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
@@ -9,9 +9,60 @@ import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
+import { BASE_PRICE_LABEL, FREE_POINTS_PER_DAY, TRIAL_DAYS, usePlan } from '../lib/plan'
+import { FreeVsPremium, PointsGuide, Price, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
 import { currentStreak } from '../lib/streak'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
+
+/* Carte Premium du profil : une seule carte, dont le contenu suit l'état réel du compte. */
+function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
+  const { state, expiresAt, points } = plan
+  const active = state === 'premium' && !!expiresAt
+  const left = expiresAt ? daysLeft(expiresAt) : 0
+  const pill = { unknown: 'PREMIUM', free: 'OFFRE FREE', trial: 'ESSAI GRATUIT', premium: 'PREMIUM ACTIF', expired: 'PREMIUM TERMINÉ' }[state]
+  const cta = { unknown: 'Passer à Premium', free: 'Passer à Premium', trial: 'Voir les offres', premium: 'Mon abonnement', expired: 'Renouveler Premium' }[state]
+  return (
+    <section className={'me-premium ' + (active ? 'active' : state === 'unknown' ? '' : state)} aria-label="Premium">
+      <span className="me-premium-pill">{pill}</span>
+      {active && expiresAt ? (
+        <>
+          <strong>Valable jusqu’au {dateFr(expiresAt)}</strong>
+          <span className="sub">{left <= 1 ? 'Il reste moins d’un jour' : `Il reste ${left} jours`}. Utilisation généreuse de l’IA, sans compte à rebours de points.</span>
+        </>
+      ) : state === 'trial' ? (
+        <>
+          <strong>Ton essai de {TRIAL_DAYS} jours est en cours</strong>
+          <span className="sub">Toute l’IA de Memoa est offerte pendant l’essai, sans carte bancaire. Ensuite : {FREE_POINTS_PER_DAY} points gratuits par jour, ou Premium si tu veux aller plus loin.</span>
+        </>
+      ) : state === 'free' ? (
+        <>
+          <strong>Tu es en offre Free</strong>
+          <span className="sub">{FREE_POINTS_PER_DAY} points d’IA gratuits chaque jour, renouvelés à minuit. Premium enlève cette limite.</span>
+        </>
+      ) : state === 'expired' && expiresAt ? (
+        <>
+          <strong>Ton abonnement s’est terminé le {dateFr(expiresAt)}</strong>
+          <span className="sub">Tu es repassé en offre Free ({FREE_POINTS_PER_DAY} points par jour). Recharge pour retrouver Premium.</span>
+        </>
+      ) : (
+        <>
+          <strong>Étudie sans te poser de limites</strong>
+          <span className="sub">Notes IA, TP, audio et résumés avec une utilisation généreuse. Paiement par Orange Money, Airtel Money ou M-Pesa.</span>
+        </>
+      )}
+      {points && (state === 'free' || state === 'expired') && (
+        <span className="me-pts" role="status"><span className="gold-bolt"><Icon name="bolt" size={16} /></span><b>{points.left}</b> / {points.max} points aujourd’hui</span>
+      )}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        {active ? <span className="sub">Prolonge quand tu veux : les jours s’ajoutent.</span> : (
+          <div><del className="price-old big">{BASE_PRICE_LABEL.USD}</del><br /><span className="price">{PRICE_LABEL.USD}</span><br /><span className="sub">pour 30 jours · ou <del className="price-old">{BASE_PRICE_LABEL.CDF}</del> {PRICE_LABEL.CDF}</span></div>
+        )}
+        <Link to="/premium" className={'pill-btn sm ' + (active ? 'me-prem-link' : 'gold-btn')}>{cta}</Link>
+      </div>
+    </section>
+  )
+}
 
 export function Me() {
   const { user, profile, refresh } = useAuth()
@@ -32,7 +83,7 @@ export function Me() {
   }
 
   const courses = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
-  const prem = useLoad(() => hasPremium(user?.id ?? ''), [user?.id])
+  const plan = usePlan()
   const nCourses = courses.data?.length ?? 0
   const nNotes = (courses.data ?? []).reduce((n, c) => n + c.notes_count, 0)
   const uni = profile?.university?.match(/\(([^)]+)\)/)?.[1] ?? profile?.university
@@ -60,15 +111,7 @@ export function Me() {
         <div><b>{nNotes}</b><span>{nNotes > 1 ? 'notes' : 'note'}</span></div>
       </section>
 
-      <section className="me-premium" aria-label="Premium">
-        <span className="me-premium-pill">PREMIUM</span>
-        <strong>Étudie sans te poser de limites</strong>
-        <span className="sub">Notes IA, TP, audio et résumés avec une utilisation généreuse. Paiement par Orange Money, Airtel Money ou M-Pesa.</span>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
-          <div><span className="price">{PRICE_LABEL.USD}</span> <span className="sub">/ 30 jours</span><br /><span className="sub">ou {PRICE_LABEL.CDF}</span></div>
-          <Link to="/premium" className="pill-btn sm gold-btn">{prem.data ? 'Mon abonnement' : 'Passer à Premium'}</Link>
-        </div>
-      </section>
+      <PremiumCard plan={plan} />
 
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
@@ -215,6 +258,7 @@ const BENEFITS = [
   'Notes IA, résumés, quiz et cartes de révision',
   'Assistant TP avec export PDF et page de garde',
   'Assistant IA qui connaît ton cours',
+  'Page de garde dorée, sans la mention « Créé avec Memoa »',
   'Utilisation généreuse, avec une limite anti-abus'
 ]
 
@@ -226,6 +270,7 @@ export function Premium() {
   const active = !!exp && isActive(exp)
   const ended = !!exp && !active
   const left = exp ? daysLeft(exp) : 0
+  const plan = usePlan()
   const { busy, error, setError, run } = useAction()
   const [op, setOp] = useState('orange')
   const [cur, setCur] = useState<'USD' | 'CDF'>('USD')
@@ -255,12 +300,22 @@ export function Premium() {
       <section className="prem-hero">
         <span className="label-mono" style={{ color: '#f2a33a' }}>Abonnement mensuel · un seul plan</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <del className="price-old big">{BASE_PRICE_LABEL.USD}</del>
           <span style={{ fontFamily: 'var(--font-title)', fontWeight: 700, fontSize: 44, lineHeight: 1 }}>{PRICE_LABEL.USD}</span>
-          <span style={{ color: '#b9c8c2', fontSize: 16 }}>ou {PRICE_LABEL.CDF}</span>
+          <span style={{ color: '#b9c8c2', fontSize: 16 }}>ou <del className="price-old">{BASE_PRICE_LABEL.CDF}</del> {PRICE_LABEL.CDF}</span>
         </div>
+        <span className="label-mono" style={{ color: '#f2a33a' }}>Prix promotionnel</span>
         {BENEFITS.map((b) => <div key={b} style={{ display: 'flex', gap: 10 }}><Icon name="check" size={20} color="#3ccfb4" stroke={2.4} /><span style={{ fontSize: 15, lineHeight: 1.4 }}>{b}</span></div>)}
+        <button type="button" className="pill-btn sm prem-pay-go" onClick={() => document.getElementById('pay')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Choisir mon paiement</button>
       </section>
       )}
+
+      {!active && <FreeVsPremium />}
+      {!active && <PointsGuide />}
+      {!active && <TrialInfo state={plan.state} />}
+      <SubscriptionTerms />
+
+      <div id="pay" style={{ display: 'flex', flexDirection: 'column', gap: 18, scrollMarginTop: 12 }}>
 
       <RowGroup label={active ? 'Prolonger mon abonnement' : 'Payer par Mobile Money'}>
         {OPERATORS.map((o) => (
@@ -272,13 +327,14 @@ export function Premium() {
         ))}
       </RowGroup>
       <div className="chips" role="radiogroup" aria-label="Devise">
-        {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}>{PRICE_LABEL[c]}</button>)}
+        {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}><Price cur={c} /></button>)}
       </div>
       <div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="Numéro Mobile Money · 8X XXX XX XX" aria-label="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
       <ErrorBox message={error} />
       {info && <div className="notice">{info}</div>}
       <PillButton size="lg" onClick={() => void go()} disabled={busy}>{busy ? 'Un instant…' : `${active ? 'Prolonger' : 'Payer maintenant'} · ${PRICE_LABEL[cur]}`}</PillButton>
       <span className="muted" style={{ textAlign: 'center' }}>Tu valides le paiement sur ton téléphone. Aucune donnée bancaire n'est stockée dans l'app.</span>
+      </div>
 
       <RowGroup label="Historique des paiements">
         {pay.loading ? <div className="rg-empty">Chargement…</div> : !pay.data?.length ? <div className="rg-empty">Aucun paiement pour l'instant.</div> : pay.data.map((p) => {

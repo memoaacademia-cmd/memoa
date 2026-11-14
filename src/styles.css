@@ -717,3 +717,76 @@ a.pill-btn { text-decoration: none; }
 .tour-next { min-height: 44px; padding: 0 26px; border: 0; border-radius: 22px; background: var(--btn); color: var(--btn-text); font-weight: 700; font-size: 16px; }
 .tour-bubble button:focus-visible { outline: 3px solid #f2a33a; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .tour-spot::after { animation: none; opacity: 0; } .tour-spot.moving, .tour-bubble.moving, .tour-dots i { transition: none; } }
+
+/* ============================================================
+   Bloc 5B — offres Free / Premium, essai, promotion
+   ============================================================ */
+
+/* Éclair des crédits Free : doré chaud (réservé à l'offre Free ; Premium garde son propre doré en dégradé sur fond plein). */
+.gold-bolt { display: inline-flex; color: #f0bd52; filter: drop-shadow(0 0 3px rgba(230, 180, 80, .35)); }
+.gold-bolt svg path { fill: currentColor; fill-opacity: .38; }
+[data-theme='light'] .gold-bolt { color: #b27a12; filter: drop-shadow(0 0 2px rgba(178, 122, 18, .25)); }
+
+/* Carte Premium du profil : un état par classe */
+.me-premium .me-pts { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 13.5px; padding: 5px 11px 5px 8px; border-radius: 999px; background: rgba(0, 0, 0, .22); color: #fff; }
+.me-premium .me-pts .gold-bolt { color: #f0c15a; }
+.me-premium.free .me-premium-pill, .me-premium.expired .me-premium-pill { background: rgba(255, 255, 255, .18) !important; color: #fff; }
+.me-premium.trial .me-premium-pill { background: #3ccfb4 !important; color: #0b1513; }
+.me-premium.active { background: linear-gradient(135deg, #fbe29a 0%, #f2b84a 38%, #d99a1f 70%, #f6cf70 100%); color: #3a2400; border: 1px solid #b9801a; box-shadow: 0 8px 22px rgba(185, 128, 26, .28); }
+.me-premium.active .sub { color: #3a2400; }
+.me-premium.active .me-premium-pill { background: #3a2400 !important; color: #fbe29a; }
+.me-prem-link { background: #3a2400 !important; color: #fbe29a !important; }
+
+/* Page Premium : cartes d'explication */
+.prem-pay-go { align-self: flex-start; margin-top: 4px; }
+.plan-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); }
+.plan-h { margin: 0; font-family: var(--font-title); font-size: 18px; line-height: 1.25; display: flex; align-items: center; gap: 8px; }
+.plan-lead, .plan-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+.plan-note { font-size: 13px; color: var(--text-3); }
+.plan-vs-head { display: none; }
+.plan-vs-row { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.plan-vs-label { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.plan-vs-cells { display: flex; flex-direction: column; gap: 8px; }
+.plan-vs-cells p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text); }
+.plan-tag { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .04em; vertical-align: 1px; }
+.plan-tag.free { background: var(--surface-2); color: var(--link); }
+.plan-tag.prem { background: linear-gradient(135deg, #fbe29a, #e0a22a); color: #3a2400; }
+.plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.plan-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.4; }
+.plan-list li:first-child { border-top: 0; }
+.plan-list b { flex: none; max-width: 46%; text-align: right; font-weight: 800; color: var(--link); }
+.plan-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.plan-checks li { display: flex; gap: 10px; font-size: 14px; line-height: 1.45; }
+.plan-checks svg { color: var(--link); margin-top: 2px; }
+.plan-dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.plan-dl dt { font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.plan-dl dd { margin: 2px 0 0; font-size: 14px; line-height: 1.5; }
+.plan-status { margin: 0; display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 6px 12px; border-radius: 999px; background: var(--surface-2); color: var(--link); font-size: 13px; font-weight: 800; }
+.plan-status.off { background: transparent; border: 1px solid var(--line-strong); color: var(--text-2); font-weight: 600; }
+@media (min-width: 380px) {
+  .plan-vs-head { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .plan-vs-head b { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .plan-vs-head b.free { color: var(--link); }
+  .plan-vs-head b.prem { color: #d99a1f; }
+  .plan-vs-head span { display: none; }
+  .plan-vs-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .plan-vs-cells p { font-size: 13px; }
+  .plan-tag { display: none; }
+}
+
+/* Promotion Premium discrète sur l'Accueil */
+.hm-promo { position: relative; border-radius: 18px; background: var(--surface); border: 1px solid var(--line-strong); }
+.hm-promo-link { display: flex; align-items: center; gap: 12px; padding: 12px 44px 12px 12px; color: var(--text); text-decoration: none; }
+.hm-promo-ico { flex: none; width: 36px; height: 36px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #fbe29a, #e0a22a); color: #3a2400; }
+.hm-promo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.hm-promo-txt strong { font-size: 14px; line-height: 1.3; }
+.hm-promo-txt span { font-size: 12.5px; line-height: 1.35; color: var(--text-2); }
+.hm-promo-link > svg { display: none; }
+.hm-promo-x { position: absolute; top: 4px; right: 4px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; }
+.me-premium .pill-btn { white-space: nowrap; flex: none; }
+
+/* Prix de base barré (le prix payé est le prix promotionnel) */
+.price-old { text-decoration: line-through; text-decoration-thickness: 2px; opacity: .65; font-weight: 600; white-space: nowrap; }
+.price-old.big { font-size: 20px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.me-premium .price { white-space: nowrap; }

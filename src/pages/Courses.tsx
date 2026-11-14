@@ -887,7 +887,7 @@ export function CourseDetail() {
           banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
-          guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (4 à 20 points selon la longueur). Elle s’en sert quand tu touches « Terminé »."
+          guideHelp="Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note avec ses connaissances (15 points, quelle que soit la longueur). Elle s’en sert quand tu touches « Terminé »."
           guideExtra={
             <div className="ed-tools-row">
               <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />

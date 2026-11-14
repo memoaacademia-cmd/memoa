@@ -186,8 +186,8 @@ export default function Assistant() {
         <span className="as-title-wrap">
           <span className="as-title">{profile?.memo_name ?? 'Memo'}</span>
           {pts && (
-            <span className={'pts-chip' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={pts.left <= 0 ? 'Plus de points. Ils reviennent à minuit, heure de Kinshasa.' : `${pts.left} points restants aujourd’hui. Ils reviennent à 20 chaque jour à minuit, heure de Kinshasa.`}>
-              <Icon name="bolt" size={14} />
+            <span className={'pts-chip free' + (pts.left <= 0 ? ' zero' : '')} role="status" aria-label={pts.left <= 0 ? 'Plus de points. Ils reviennent à minuit, heure de Kinshasa.' : `${pts.left} points restants aujourd’hui. Ils reviennent à 20 chaque jour à minuit, heure de Kinshasa.`}>
+              <span className="gold-bolt"><Icon name="bolt" size={14} /></span>
               {pts.left > 0 || !resetMs ? pts.left : countdown(resetMs - now)}
             </span>
           )}

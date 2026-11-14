@@ -6,7 +6,7 @@ import { TourProvider } from './components/Tour'
 import { DraftWatcher } from './components/Drafts'
 import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
-import { NotifStep, Presentation, TrialStep } from './pages/Welcome'
+import { NotifStep, TrialStep } from './pages/Welcome'
 import Home from './pages/Home'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
@@ -131,7 +131,7 @@ export default function App() {
             <Route path="/adoption" element={<Adoption />} />
             <Route path="/photo" element={<PhotoStep />} />
             <Route path="/bienvenue" element={<Navigate to="/inscription" replace />} />
-            <Route path="/presentation" element={<Presentation />} />
+            <Route path="/presentation" element={<Navigate to="/essai" replace />} />
             <Route path="/essai" element={<TrialStep />} />
             <Route path="/notifications-etape" element={<NotifStep />} />
           </Route>

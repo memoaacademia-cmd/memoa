@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Icon, Logo, MemoAvatar, MemoHero, Steps } from '../components/ui'
+import { Icon, Logo, MemoHero, Steps } from '../components/ui'
+import { FreeVsPremium } from '../components/PlanInfo'
+import { PRICE_LABEL } from '../lib/api'
+import { FREE_POINTS_PER_DAY, PREMIUM_DAYS, TRIAL_DAYS } from '../lib/plan'
 import { useAuth } from '../lib/auth'
-import { firstNameOf } from '../lib/names'
 import { enablePush, needsInstallFirst, pushSupported } from '../lib/push'
 
 function Skip({ to }: { to: string }) {
@@ -10,77 +12,35 @@ function Skip({ to }: { to: string }) {
   return <button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={() => nav(to, { replace: true })}>Passer</button>
 }
 
-/* Présentation de l'appli par le Memo de l'étudiant : une fois son animal adopté et nommé, il lui fait visiter Memoa. */
-const tour = (me: string, first: string): { icon: string; tag: string; text: string }[] => [
-  { icon: 'sparkle', tag: 'Salut !', text: `Salut ${first} ! Moi, c’est ${me}, ton compagnon d’étude. Je te fais visiter Memoa en une minute.` },
-  { icon: 'text', tag: 'Tes cours', text: 'Ici, tu crées tes cours : écris, dicte ou photographie tes notes. Je les range dans ton sac à dos, cours par cours.' },
-  { icon: 'sparkle', tag: 'Notes et résumés', text: 'Je mets tes notes en forme, je les complète si tu veux, et je t’en fais un résumé clair à relire avant l’examen.' },
-  { icon: 'quiz', tag: 'Réviser', text: 'Je te pose des quiz tirés de tes propres notes, avec la correction. Et un autre quiz, avec de nouvelles questions, quand tu veux.' },
-  { icon: 'book', tag: 'Assistant TP', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec la page de garde de ton université.' },
-  { icon: 'shelf', tag: 'Librairie', text: 'Retrouve les documents partagés par ta promotion, et partage les tiens pour aider les autres.' },
-  { icon: 'chat', tag: 'Parle-moi', text: 'Dans l’assistant, pose-moi tes questions : je m’appuie sur tes notes. Je peux aussi te lire un cours à voix haute.' },
-  { icon: 'sparkle', tag: 'À toi de jouer', text: `Ensuite, je te guiderai page par page : une petite visite à ta première arrivée sur chaque écran. Tu pourras la revoir quand tu veux depuis « Moi ».` }
-]
-
-export function Presentation() {
-  const nav = useNavigate()
-  const { profile } = useAuth()
-  const me = profile?.memo_name || 'Memo'
-  const first = firstNameOf(profile) || 'toi'
-  const cards = tour(me, first)
-  const [i, setI] = useState(0)
-  const [x0, setX0] = useState<number | null>(null)
-  const last = i === cards.length - 1
-  const done = () => nav('/essai', { replace: true })
-  const go = (n: number) => setI(Math.max(0, Math.min(cards.length - 1, n)))
-  return (
-    <main className="step-page">
-      <div className="step-top"><span /><button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={done}>Passer</button></div>
-      <div
-        className="intro-viewport"
-        onTouchStart={(e) => setX0(e.touches[0].clientX)}
-        onTouchEnd={(e) => {
-          if (x0 === null) return
-          const dx = e.changedTouches[0].clientX - x0
-          setX0(null)
-          if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1))
-        }}
-      >
-        <div className="intro-track" style={{ transform: `translateX(-${i * 100}%)` }}>
-          {cards.map((c, k) => (
-            <section key={c.tag} className="intro-card pres" aria-hidden={k !== i} aria-roledescription="carte" aria-label={`${k + 1} sur ${cards.length}`}>
-              <span className="pres-av"><MemoAvatar animal={profile?.memo_animal ?? null} size={112} /></span>
-              <div className="pres-bubble">
-                <span className="pres-tag"><Icon name={c.icon} size={16} stroke={2} />{c.tag}</span>
-                <p>{c.text}</p>
-                <i aria-hidden="true" />
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
-      <div className="intro-dots" role="img" aria-label={`Carte ${i + 1} sur ${cards.length}`}>
-        {cards.map((c, k) => <i key={c.tag} className={k === i ? 'on' : ''} />)}
-      </div>
-      <button type="button" className="pill-btn" onClick={() => (last ? done() : go(i + 1))}>{last ? 'C’est parti' : 'Suivant'}</button>
-    </main>
-  )
-}
-
-/* Étape 3 sur 4 : l'essai de 5 jours */
+/* Étape 3 sur 4 : l'essai de 5 jours. L'essai démarre à l'inscription (règle du serveur) : ce bouton ne lance rien, il continue l'accueil. */
 export function TrialStep() {
   const nav = useNavigate()
-  const items = ['IA complète : notes, quiz, TP, audio et résumés', 'Sans carte bancaire', 'Ensuite, 20 points gratuits chaque jour à minuit']
+  const items: [string, string][] = [
+    ['Ce que tu reçois', 'Toute l’IA de Memoa : notes, quiz, TP, audio et résumés, sans compter de points.'],
+    ['Durée', `${TRIAL_DAYS} jours, jusqu’à minuit (heure de Kinshasa) le dernier jour. Le jour de ton inscription compte comme le 1er.`],
+    ['Conditions', 'Sans carte bancaire. Un seul essai par numéro de téléphone. Il commence à ton inscription.'],
+    ['Aperçu Premium', 'Pendant l’essai, tu as aussi les pages de garde dorées et aucune mention « Créé avec Memoa » sur tes PDF.'],
+    ['À la fin', `Rien n’est facturé : tu restes en Memoa Free (${FREE_POINTS_PER_DAY} points gratuits chaque jour, renouvelés à minuit). Premium reste en option : ${PRICE_LABEL.USD} ou ${PRICE_LABEL.CDF} pour ${PREMIUM_DAYS} jours.`]
+  ]
   return (
     <main className="step-page">
       <div className="step-top"><span /><Skip to="/notifications-etape" /></div>
       <Steps n={3} />
-      <MemoHero height={210} bubble="5 jours d’IA complète, offerts !" />
-      <h1 className="h1 big" style={{ margin: 0 }}>Ton essai gratuit</h1>
-      {items.map((t) => <div key={t} className="check-row"><span className="ck"><Icon name="check" size={16} stroke={2.4} /></span><span>{t}</span></div>)}
-      <div style={{ flex: 1 }} />
-      <span className="muted" style={{ textAlign: 'center' }}>L’essai est lié à ton numéro de téléphone.</span>
-      <button type="button" className="pill-btn" onClick={() => nav('/notifications-etape', { replace: true })}>Démarrer mon essai</button>
+      <MemoHero height={150} bubble={`${TRIAL_DAYS} jours d’IA complète, offerts !`} />
+      <h1 className="h1 big" style={{ margin: 0 }}>Memoa Free ou Memoa Premium</h1>
+      <FreeVsPremium />
+      <section className="plan-card" aria-label="Conditions de l’essai gratuit">
+        <h2 className="plan-h">Conditions de l’essai gratuit</h2>
+        {items.map(([k, t]) => (
+          <div key={k} className="check-row" style={{ alignItems: 'flex-start' }}>
+            <span className="ck"><Icon name="check" size={16} stroke={2.4} /></span>
+            <span><b>{k}.</b> {t}</span>
+          </div>
+        ))}
+      </section>
+      <div style={{ position: 'sticky', bottom: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0 4px', background: 'linear-gradient(to top, var(--bg) 70%, transparent)' }}>
+        <button type="button" className="pill-btn" onClick={() => nav('/notifications-etape', { replace: true })}>Commencer l’essai gratuit de {TRIAL_DAYS} jours</button>
+      </div>
     </main>
   )
 }
