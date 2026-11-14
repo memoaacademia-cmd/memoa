@@ -15,11 +15,14 @@ export function sanitize(s: string): string {
     .replace(/…/g, '...')
     .replace(/→/g, '->')
     .replace(/[  ]/g, ' ')
+    .replace(/œ/g, 'oe')
+    .replace(/Œ/g, 'Oe')
+    .replace(/€/g, 'EUR')
     .replace(/\*\*/g, '')
     .replace(/(^|\s)\*(\S)/g, '$1$2')
     .replace(/(\S)\*(\s|$)/g, '$1$2')
     .replace(/`/g, '')
-    .replace(/[^\n\x20-\x7EÀ-ÿ]/g, '')
+    .replace(/[^\n\x20-\x7E\xA0-\xFF]/g, '')
 }
 
 export type Measure = (text: string, sizePt: number, bold: boolean) => number // largeur en mm
