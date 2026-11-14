@@ -88,15 +88,37 @@ export function clearProgress(courseId: string) { try { localStorage.removeItem(
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const transient = (e: unknown) => !(e instanceof LimitError) && !/expir|session|point|Premium|limite|Doucement/i.test(e instanceof Error ? e.message : '')
 
+/** Levée quand l'étudiant appuie sur « pause » ou « annuler » : ce n'est pas une erreur à afficher. */
+export class StopError extends Error { constructor() { super('stop') } }
+export const isStop = (e: unknown): e is StopError => e instanceof StopError
+
+const TRY_MS = 130_000 // une tentative qui dépasse 2 min 10 s est abandonnée (le serveur coupe lui-même vers 150 s)
+/** Attend le résultat, mais s'arrête si l'étudiant met en pause / annule, ou si le serveur met trop longtemps. */
+function withLimit<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false
+    const end = () => { done = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort) }
+    const timer = setTimeout(() => { if (!done) { end(); reject(new Error('Le serveur met trop de temps à répondre.')) } }, TRY_MS)
+    const onAbort = () => { if (!done) { end(); reject(new StopError()) } }
+    if (signal?.aborted) { onAbort(); return }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    p.then((v) => { if (!done) { end(); resolve(v) } }, (e) => { if (!done) { end(); reject(e) } })
+  })
+}
+
 /** Un appel avec 2 nouvelles tentatives en cas de coupure réseau ou d'erreur passagère (aucun point en plus : même session). */
-async function callRetry<T>(fn: () => Promise<T>): Promise<T> {
+async function callRetry<T>(fn: () => Promise<T>, signal?: AbortSignal, note?: (m: string) => void): Promise<T> {
   let last: unknown
   for (let i = 0; i < 3; i++) {
-    try { return await fn() } catch (e) {
+    if (signal?.aborted) throw new StopError()
+    try { return await withLimit(fn(), signal) } catch (e) {
+      if (e instanceof StopError) throw e
       last = e
       if (!transient(e)) throw e
+      if (i < 2) note?.(`Le serveur répond lentement… nouvelle tentative (${i + 2} sur 3)`)
       await wait(2500 * (i + 1))
-      for (let k = 0; k < 30 && typeof navigator !== 'undefined' && !navigator.onLine; k++) await wait(1000) // attend le retour du réseau (30 s)
+      for (let k = 0; k < 30 && !signal?.aborted && typeof navigator !== 'undefined' && !navigator.onLine; k++) await wait(1000) // attend le retour du réseau (30 s)
+      if (signal?.aborted) throw new StopError()
     }
   }
   throw last
@@ -107,6 +129,10 @@ export interface WriteArgs {
   texts: Record<number, string>
   onProgress: (done: number, total: number, current: string) => void
   onSave: (texts: Record<number, string>) => void
+  /** Pause / annulation demandée par l'étudiant. */
+  signal?: AbortSignal
+  /** Petit message d'état (ex. nouvelle tentative). */
+  onNote?: (msg: string) => void
 }
 
 /** Rédige le TP partie par partie. Ne refait que les parties manquantes ou incomplètes. Lève une erreur claire si une partie échoue : le travail déjà fait est conservé (onSave). */
@@ -118,10 +144,11 @@ export async function writeTp(a: WriteArgs): Promise<string> {
     const todo = parts.filter((p) => !partIsComplete(p, texts[p.n], round === 2))
     if (!todo.length) break
     for (const p of todo) {
+      if (a.signal?.aborted) throw new StopError()
       a.onProgress(parts.length - todo.length + todo.indexOf(p), parts.length, p.title)
       const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
       const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
-      const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }))
+      const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }), a.signal, a.onNote)
       const txt = cleanTpText(r.reply).trim()
       if (txt) texts[p.n] = txt
       a.onSave(texts)
