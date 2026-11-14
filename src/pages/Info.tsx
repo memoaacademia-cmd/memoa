@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ErrorBox, Icon, Logo, PageHead, PillButton, Row, RowGroup, useAction } from '../components/ui'
 import { sendFeedback, type FeedbackKind } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -15,9 +16,15 @@ function scrollToSection(id: string) {
 }
 
 function DocPage({ label, title, intro, sections, showDate = true, hero }: { label: string; title: string; intro: string; sections: Sec[]; showDate?: boolean; hero?: boolean }) {
+  const nav = useNavigate()
+  const { user } = useAuth()
+  // Ces pages sont aussi lisibles sans compte (inscription) : le retour revient d'où l'on vient, sinon à un écran accessible.
+  const back = () => (window.history.length > 1 ? nav(-1) : nav(user ? '/parametres' : '/creer-un-compte', { replace: true }))
   return (
     <main className="page" style={{ gap: 20 }}>
-      <PageHead to="/parametres" />
+      <div className="topbar">
+        <button type="button" className="icon-btn round" aria-label="Retour" onClick={back}><Icon name="back" stroke={2.2} /></button>
+      </div>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {hero && <Logo size={56} />}
         <span className="doc-label">{label}</span>
@@ -39,7 +46,7 @@ function DocPage({ label, title, intro, sections, showDate = true, hero }: { lab
         </section>
       ))}
 
-      <PillButton size="lg" to="/signaler">Contacter le support</PillButton>
+      {user && <PillButton size="lg" to="/signaler">Contacter le support</PillButton>}
     </main>
   )
 }
@@ -219,6 +226,7 @@ const PRIVACY: Sec[] = [
     title: "L'intelligence artificielle",
     paras: [
       "Quand tu utilises l'IA (cours, notes, Assistant, TP, transcription audio), le texte ou l'audio concerné est envoyé à un fournisseur d'IA pour produire la réponse. La photo qu'on lit pour en extraire le texte est analysée sur ton téléphone.",
+      "Si tu allumes la recherche web dans le chat, le texte de ta question est envoyé à Tavily, un service de recherche sur internet, pour trouver des sources. Si tu ne l'allumes pas, rien ne part chez Tavily.",
       "La dictée vocale utilise le service de reconnaissance de ton navigateur, qui peut avoir ses propres règles."
     ]
   },

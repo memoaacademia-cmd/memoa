@@ -115,6 +115,8 @@ export function Signup() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [accepted, setAccepted] = useState(false)
+  const MUST_ACCEPT = 'Coche la case pour accepter les conditions d’utilisation et la politique de confidentialité.'
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -123,6 +125,7 @@ export function Signup() {
     const tel = cleanPhone(phone)
     if (!/^[0-9]{9}$/.test(tel)) return setError('Entre ton numéro à 9 chiffres (sans le +243).')
     if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
+    if (!accepted) return setError(MUST_ACCEPT)
     const res = await run(() => signUp(mail, password, '+243' + tel))
     if (!res) return
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
@@ -133,6 +136,7 @@ export function Signup() {
   }
 
   async function google() {
+    if (!accepted) return setError(MUST_ACCEPT)
     const ok = await run(async () => {
       await signInWithGoogle()
       await refresh()
@@ -166,6 +170,12 @@ export function Signup() {
           <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="muted">8 caractères minimum.</span>
         </div>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.4, cursor: 'pointer' }}>
+          <input type="checkbox" checked={accepted} onChange={(e) => { setAccepted(e.target.checked); if (e.target.checked) setError('') }} style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1, accentColor: 'var(--btn)' }} />
+          <span>
+            J’accepte les <a className="link" href="#/legal/conditions" target="_blank" rel="noopener">conditions d’utilisation</a> et la <a className="link" href="#/legal/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a> de Memoa.
+          </span>
+        </label>
         <ErrorBox message={error} />
         <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Création…' : 'Créer mon compte'}</button>
       </form>
