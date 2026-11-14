@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, uploadAvatar } from '../lib/api'
+import { getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
@@ -10,7 +10,7 @@ import { usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import { BASE_PRICE_LABEL, FREE_POINTS_PER_DAY, TRIAL_DAYS, usePlan } from '../lib/plan'
-import { FreeVsPremium, PointsGuide, Price, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
+import { FreeVsPremium, PointsGuide, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
 import { currentStreak } from '../lib/streak'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
@@ -250,7 +250,8 @@ export function Settings() {
 const OPERATORS = [
   { id: 'orange', name: 'Orange Money', dot: '#f2762e', logo: 'pay-orange.png' },
   { id: 'airtel', name: 'Airtel Money', dot: '#e5202e', logo: 'pay-airtel.png' },
-  { id: 'mpesa', name: 'M-Pesa', dot: '#3fb950', logo: 'pay-mpesa.png' }
+  { id: 'mpesa', name: 'M-Pesa', dot: '#3fb950', logo: 'pay-mpesa.png' },
+  { id: 'chariow', name: 'Paiement en ligne', dot: '#1f7a6d', logo: '' }
 ]
 const STATUS: Record<string, [string, string]> = { paid: ['Payé', 'badge'], pending: ['En attente', 'badge amber'], failed: ['Échoué', 'badge red'] }
 const BENEFITS = [
@@ -272,16 +273,44 @@ export function Premium() {
   const left = exp ? daysLeft(exp) : 0
   const plan = usePlan()
   const { busy, error, setError, run } = useAction()
-  const [op, setOp] = useState('orange')
-  const [cur, setCur] = useState<'USD' | 'CDF'>('USD')
-  const [phone, setPhone] = useState('')
   const [info, setInfo] = useState<string | null>(null)
+  const [waiting, setWaiting] = useState(() => /[?&]paiement=retour/.test(window.location.search))
+  const hasPending = !!pay.data?.some((p) => p.provider === 'chariow' && p.status === 'pending')
 
   async function go() {
     setInfo(null)
-    if (!OPERATORS.some((o) => o.id === op)) return setError('Choisis un opérateur.')
-    const r = await run(() => startPayment(op, phone, cur))
-    if (r) { setInfo(r.message); pay.reload() }
+    const r = await run(() => startPayment())
+    if (!r) return
+    if (r.url) window.location.assign(r.url) // page de paiement sécurisée ; retour automatique dans l'app ensuite
+    else { setInfo(r.message ?? null); pay.reload() }
+  }
+
+  // Retour de la page de paiement (?paiement=retour) : « Activation en cours… » → on interroge le serveur jusqu'à l'activation.
+  useEffect(() => {
+    if (!waiting) return
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.hash) } catch { /* sans importance */ }
+    let alive = true
+    ;(async () => {
+      for (let i = 0; i < 40 && alive; i++) { // ~2 minutes
+        try {
+          const r = await checkPayment()
+          if (r.active) { if (alive) { setWaiting(false); setInfo('Paiement reçu : ton Premium est activé. Merci !'); sub.reload(); pay.reload() } return }
+        } catch { /* réseau : on réessaie */ }
+        await new Promise((res) => setTimeout(res, 3000))
+      }
+      if (alive) { setWaiting(false); setInfo("Ton paiement n'est pas encore confirmé. S'il est validé, ton Premium s'activera tout seul dans quelques minutes ; sinon, appuie sur « Vérifier mon paiement ».") ; pay.reload() }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting])
+
+  async function verify() {
+    setInfo(null)
+    const r = await run(() => checkPayment())
+    if (!r) return
+    if (r.active) { setInfo('Paiement reçu : ton Premium est activé. Merci !'); sub.reload() }
+    else setInfo("Pas encore confirmé par le paiement. Si tu viens de payer, patiente une minute puis réessaie.")
+    pay.reload()
   }
 
   return (
@@ -317,23 +346,12 @@ export function Premium() {
 
       <div id="pay" style={{ display: 'flex', flexDirection: 'column', gap: 18, scrollMarginTop: 12 }}>
 
-      <RowGroup label={active ? 'Prolonger mon abonnement' : 'Payer par Mobile Money'}>
-        {OPERATORS.map((o) => (
-          <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className="rg-row" onClick={() => setOp(o.id)}>
-            <img src={`${import.meta.env.BASE_URL}logos/${o.logo}`} alt="" width={40} height={40} style={{ flex: 'none', width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
-            <span className="rg-body"><span className="rg-title">{o.name}</span></span>
-            <span className={'radio' + (op === o.id ? ' on' : '')} />
-          </button>
-        ))}
-      </RowGroup>
-      <div className="chips" role="radiogroup" aria-label="Devise">
-        {(['USD', 'CDF'] as const).map((c) => <button key={c} type="button" role="radio" aria-checked={cur === c} className={'pill' + (cur === c ? ' on' : '')} onClick={() => setCur(c)}><Price cur={c} /></button>)}
-      </div>
-      <div className="phone"><span>+243</span><input id="mm" type="tel" inputMode="numeric" placeholder="Numéro Mobile Money · 8X XXX XX XX" aria-label="Numéro Mobile Money" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+      {waiting && <div className="notice" role="status">Activation en cours… Ne ferme pas cette page, ton Premium s’active dès que le paiement est confirmé.</div>}
       <ErrorBox message={error} />
       {info && <div className="notice">{info}</div>}
-      <PillButton size="lg" onClick={() => void go()} disabled={busy}>{busy ? 'Un instant…' : `${active ? 'Prolonger' : 'Payer maintenant'} · ${PRICE_LABEL[cur]}`}</PillButton>
-      <span className="muted" style={{ textAlign: 'center' }}>Tu valides le paiement sur ton téléphone. Aucune donnée bancaire n'est stockée dans l'app.</span>
+      <PillButton size="lg" onClick={() => void go()} disabled={busy || waiting}>{busy ? 'Un instant…' : `${active ? 'Prolonger' : "S'abonner"} · ${PRICE_LABEL.USD}`}</PillButton>
+      {hasPending && !waiting && <button type="button" className="pill-btn sm" onClick={() => void verify()} disabled={busy}>J’ai payé · Vérifier mon paiement</button>}
+      <span className="muted" style={{ textAlign: 'center' }}>Tu choisis ton moyen de paiement sur la page sécurisée, puis tu reviens ici automatiquement. Aucune donnée bancaire n'est stockée dans l'app.</span>
       </div>
 
       <RowGroup label="Historique des paiements">
