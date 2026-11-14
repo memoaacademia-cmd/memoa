@@ -181,6 +181,8 @@ Deno.serve(async (req) => {
         last_name: last,
         phone: { number: phone, country_code: 'CD' },
         redirect_url: redirect,
+        // Fenêtre intégrée : Chariow n'autorise l'iframe que depuis les origines déclarées ici (HTTPS, sans chemin ni « / » final).
+        ...(body.embed === true ? { embed_origins: [new URL(appUrl).origin] } : {}),
         custom_metadata: { user_id: user.id, app: 'memoa' } // trace + contrôle de cohérence côté serveur ; jamais utilisé seul pour activer
       }),
       signal: AbortSignal.timeout(20_000)
