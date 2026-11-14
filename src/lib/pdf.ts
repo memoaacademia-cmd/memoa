@@ -21,6 +21,8 @@ const M = 20
 const WIDTH = W - 2 * M
 
 type Doc = InstanceType<typeof import('jspdf').jsPDF>
+/** Classe jsPDF, gardée dès qu'elle est chargée : sert à créer le PDF « d'épreuve » (doc.constructor n'est pas fiable une fois l'appli compilée). */
+let JsPdfClass: (new (o: object) => Doc) | null = null
 
 /** Petit « rédacteur » : écrit du texte avec retour à la ligne et changement de page automatiques. */
 function writer(doc: Doc) {
@@ -119,7 +121,7 @@ function buildBody(doc: Doc, blocks: Block[], target: number | null): { params: 
   for (let attempt = 0; attempt < 4; attempt++) {
     const fit = layoutDocument(blocks, measurer(doc, 1 + attempt * 0.004), target)
     // épreuve : on dessine pour de vrai sur un PDF jetable et on compte les pages
-    const probe = new (doc.constructor as new (o: object) => Doc)({ unit: 'mm', format: 'a4' })
+    const probe = new JsPdfClass!({ unit: 'mm', format: 'a4' })
     drawPages(probe, fit.pages)
     const real = probe.getNumberOfPages() - 1
     if (!best || Math.abs(real - (target ?? real)) < Math.abs(best.real - (target ?? best.real))) best = { fit, real }
@@ -152,6 +154,7 @@ export interface CoursePdfOptions {
 
 export async function buildCoursePdf(title: string, author: string, notes: Note[], kind = 'NOTES DE COURS', opts: CoursePdfOptions = {}): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
+  JsPdfClass = jsPDF as unknown as new (o: object) => Doc
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const look = lookFor(opts.template, !!opts.premium)
   drawCourseCover(doc, look, { title, author, kind, ...opts })
@@ -467,6 +470,7 @@ export async function buildTpPdf(c: TpCover, content: string, targetPages: numbe
 /** Comme buildTpPdf, mais renvoie aussi le contrôle réel du PDF produit (nombre de pages de contenu, défauts). */
 export async function buildTpPdfDetailed(c: TpCover, content: string, targetPages: number | null = null): Promise<{ blob: Blob; report: PdfReport }> {
   const { jsPDF } = await import('jspdf')
+  JsPdfClass = jsPDF as unknown as new (o: object) => Doc
   const logo = await loadLogo(c.logoUrl)
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const premium = !!c.premium
