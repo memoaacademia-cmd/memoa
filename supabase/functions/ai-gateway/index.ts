@@ -427,6 +427,9 @@ async function transcribe(req: Request, userId: string) {
   if (file.size > TRANSCRIBE_MAX_MB * 1024 * 1024) return json(req, 413, { error: `Ce fichier est trop lourd (${TRANSCRIBE_MAX_MB} Mo maximum). Coupe l'enregistrement en plusieurs parties.` })
 
   const admin = adminClient()
+  const minuteAgo = new Date(Date.now() - 60_000).toISOString()
+  const { count: recent } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'transcribe').gte('created_at', minuteAgo)
+  if ((recent ?? 0) >= 3) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
   const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).gt('expires_at', new Date().toISOString()).maybeSingle()
   const st = await accessState(admin, userId, sub)
   const cost = costOf('transcribe', 0)
