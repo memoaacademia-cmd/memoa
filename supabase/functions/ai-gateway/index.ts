@@ -105,7 +105,7 @@ async function trialStart(admin: ReturnType<typeof adminClient>, userId: string)
   // Le premier compte qui a utilisé ce numéro fixe le début de l'essai, même si l'étudiant refait un compte.
   await admin.from('trial_phones').upsert({ phone, started_at: own.toISOString() }, { onConflict: 'phone', ignoreDuplicates: true })
   const { data } = await admin.from('trial_phones').select('started_at').eq('phone', phone).maybeSingle()
-  return data?.started_at ? new Date(data.started_at) : own
+  return data?.started_at ? new Date(Math.min(own.getTime(), new Date(data.started_at).getTime())) : own
 }
 
 type Access = { mode: 'premium' } | { mode: 'trial' } | { mode: 'points'; left: number; resetAt: number; from: number }
