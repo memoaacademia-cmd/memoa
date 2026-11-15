@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { track } from '../lib/track'
 import { ErrorBox, Icon, PillButton, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
 import { askAI, deleteDocForever, docDownloadUrl, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
@@ -20,6 +21,7 @@ function departmentsOf(faculty: string): string[] {
 /* Librairie : tout le monde voit tout. Par défaut « Tout » ; on affine avec la recherche, la faculté et la promotion. */
 export default function Library() {
   const { user } = useAuth()
+  useEffect(() => { track('library_view') }, [])
   const [q, setQ] = useState('')
   const [promo, setPromo] = useState('')
   const [fac, setFac] = useState('')

@@ -790,3 +790,8 @@ a.pill-btn { text-decoration: none; }
 .price-old.big { font-size: 20px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .me-premium .price { white-space: nowrap; }
+
+/* Chiffre des points gratuits (20) : même doré que l'éclair des crédits, lisible en thème sombre et clair. */
+.pts-gold { color: #f0bd52; font-weight: 800; }
+[data-theme='light'] .pts-gold { color: #9a6808; }
+.me-premium .pts-gold { color: #f0c15a; }

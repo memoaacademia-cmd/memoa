@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
+import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { DELETE_WORD, deleteMyAccount, downloadMyData } from '../lib/account'
+import { friendlyError, getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
@@ -9,9 +10,11 @@ import { disablePush, enablePush, isSubscribed } from '../lib/push'
 import { usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
-import { BASE_PRICE_LABEL, FREE_POINTS_PER_DAY, TRIAL_DAYS, usePlan } from '../lib/plan'
+import FreePts from '../components/FreePts'
+import { BASE_PRICE_LABEL, TRIAL_DAYS, usePlan } from '../lib/plan'
 import { FreeVsPremium, PointsGuide, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
 import { currentStreak } from '../lib/streak'
+import { track } from '../lib/track'
 
 const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
 
@@ -22,6 +25,8 @@ const EMBED_PAYMENT = false
 /* Carte Premium du profil : une seule carte, dont le contenu suit l'état réel du compte. */
 function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
   const { state, expiresAt, points } = plan
+  // « Carte Premium vue » : une fois que l'état du compte est connu.
+  useEffect(() => { if (state !== 'unknown') track('premium_view', { where: 'moi', state }) }, [state])
   const active = state === 'premium' && !!expiresAt
   const left = expiresAt ? daysLeft(expiresAt) : 0
   const pill = { unknown: 'PREMIUM', free: 'OFFRE FREE', trial: 'ESSAI GRATUIT', premium: 'PREMIUM ACTIF', expired: 'PREMIUM TERMINÉ' }[state]
@@ -37,17 +42,17 @@ function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
       ) : state === 'trial' ? (
         <>
           <strong>Ton essai de {TRIAL_DAYS} jours est en cours</strong>
-          <span className="sub">Toute l’IA de Memoa est offerte pendant l’essai, sans carte bancaire. Ensuite : {FREE_POINTS_PER_DAY} points gratuits par jour, ou Premium si tu veux aller plus loin.</span>
+          <span className="sub">Toute l’IA de Memoa est offerte pendant l’essai, sans carte bancaire. Ensuite : <FreePts /> points gratuits par jour, ou Premium si tu veux aller plus loin.</span>
         </>
       ) : state === 'free' ? (
         <>
           <strong>Tu es en offre Free</strong>
-          <span className="sub">{FREE_POINTS_PER_DAY} points d’IA gratuits chaque jour, renouvelés à minuit. Premium enlève cette limite.</span>
+          <span className="sub"><FreePts /> points d’IA gratuits chaque jour, renouvelés à minuit. Premium enlève cette limite.</span>
         </>
       ) : state === 'expired' && expiresAt ? (
         <>
           <strong>Ton abonnement s’est terminé le {dateFr(expiresAt)}</strong>
-          <span className="sub">Tu es repassé en offre Free ({FREE_POINTS_PER_DAY} points par jour). Recharge pour retrouver Premium.</span>
+          <span className="sub">Tu es repassé en offre Free (<FreePts /> points par jour). Recharge pour retrouver Premium.</span>
         </>
       ) : (
         <>
@@ -166,6 +171,41 @@ export function Settings() {
   }
   const [confirm, setConfirm] = useState(false)
   const [shared, setShared] = useState(false)
+  // Compte : export des données et suppression.
+  const [exporting, setExporting] = useState(false)
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [delOpen, setDelOpen] = useState(false)
+  const [word, setWord] = useState('')
+  const [delBusy, setDelBusy] = useState(false)
+  const [delErr, setDelErr] = useState<string | null>(null)
+  const wordOk = word.trim().toUpperCase() === DELETE_WORD
+
+  async function exportData() {
+    if (!user || exporting) return
+    setExporting(true)
+    setExportMsg(null)
+    try {
+      await downloadMyData(user.id, user.email)
+      setExportMsg('Ton fichier est prêt : cherche-le dans tes téléchargements.')
+    } catch (e) {
+      setExportMsg(friendlyError(e))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function removeAccount() {
+    if (!user || !wordOk || delBusy) return
+    setDelBusy(true)
+    setDelErr(null)
+    try {
+      await deleteMyAccount(user.id, word)
+      nav('/connexion', { replace: true })
+    } catch (e) {
+      setDelErr(friendlyError(e))
+      setDelBusy(false)
+    }
+  }
 
   async function share() {
     const url = window.location.origin + window.location.pathname
@@ -216,7 +256,13 @@ export function Settings() {
         <Row title="E-mail" right={user?.email ?? '—'} chevron={false} />
         <Row title="Téléphone" right={profile?.phone ?? user?.phone ?? '—'} chevron={false} />
         <Row icon="crown" title="Abonnement et paiements" to="/premium" />
+        <Row icon="download" title="Exporter mes données" sub="Un seul fichier avec ton profil, tes cours, tes notes, tes brouillons et tes favoris" onClick={() => void exportData()} disabled={exporting} chevron={false} right={exporting ? 'Un instant…' : undefined} />
+        <button type="button" className="rg-row" onClick={() => { setWord(''); setDelErr(null); setDelOpen(true) }} style={{ color: 'var(--danger)' }}>
+          <span className="rg-ico"><Icon name="trash" size={22} /></span>
+          <span className="rg-body"><span className="rg-title">Supprimer mon compte</span></span>
+        </button>
       </RowGroup>
+      {exportMsg && <div className="notice" role="status">{exportMsg}</div>}
 
       {!confirm ? (
         <PillButton variant="outline" onClick={() => setConfirm(true)}>Se déconnecter</PillButton>
@@ -227,6 +273,26 @@ export function Settings() {
         </div>
       )}
 
+      <BottomSheet open={delOpen} onClose={() => { if (!delBusy) setDelOpen(false) }} title="Supprimer mon compte">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 4px 8px' }}>
+          <p className="lead" style={{ margin: 0 }}>Cette action est définitive. Voici ce qui se passe :</p>
+          <ul className="plan-checks">
+            <li><Icon name="check" size={16} stroke={2.4} /><span>Ton profil, tes cours, tes notes, tes conversations avec l’assistant et ta photo sont effacés.</span></li>
+            <li><Icon name="check" size={16} stroke={2.4} /><span>Si tu as Premium, il est perdu : il n’y a pas de remboursement.</span></li>
+            <li><Icon name="check" size={16} stroke={2.4} /><span>Les documents que tu as publiés dans la Librairie restent pour les autres étudiants, sans ton nom.</span></li>
+            <li><Icon name="check" size={16} stroke={2.4} /><span>Les paiements sont gardés pour la comptabilité, sans aucun lien avec toi.</span></li>
+            <li><Icon name="check" size={16} stroke={2.4} /><span>Ton numéro ne pourra pas relancer un nouvel essai gratuit.</span></li>
+          </ul>
+          <span className="muted">Pour garder une copie de tes données, utilise d’abord « Exporter mes données ».</span>
+          <label htmlFor="del-word" style={{ fontWeight: 700 }}>Pour confirmer, écris {DELETE_WORD}</label>
+          <PillInput id="del-word" value={word} onChange={(e) => setWord(e.target.value)} autoCapitalize="characters" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder={DELETE_WORD} disabled={delBusy} />
+          <ErrorBox message={delErr} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <PillButton variant="outline" onClick={() => setDelOpen(false)} disabled={delBusy}>Annuler</PillButton>
+            <PillButton onClick={() => void removeAccount()} disabled={!wordOk || delBusy}>{delBusy ? 'Suppression…' : 'Supprimer pour de bon'}</PillButton>
+          </div>
+        </div>
+      </BottomSheet>
       <BottomSheet open={pick === 'lang'} onClose={() => setPick(null)} title="Langue de l'application">
         <RowGroup>
           {LANGUAGES.map(([code, name]) => (
@@ -276,6 +342,7 @@ export function Premium() {
   const ended = !!exp && !active
   const left = exp ? daysLeft(exp) : 0
   const plan = usePlan()
+  useEffect(() => { if (plan.state !== 'unknown') track('premium_view', { where: 'page', state: plan.state }) }, [plan.state])
   const { busy, error, setError, run } = useAction()
   const [info, setInfo] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(() => /[?&]paiement=retour/.test(window.location.search))

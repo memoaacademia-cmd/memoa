@@ -1,5 +1,6 @@
 // Dictée vocale et lecture à voix haute : tout se fait avec le navigateur du téléphone, sans serveur ni coût.
 import { useSyncExternalStore } from 'react'
+import { track } from './track'
 
 /** Lecture en cours (une seule à la fois). Partagée par toute l'application : le mini-lecteur la montre sur tous les écrans. */
 export interface Voice {
@@ -171,6 +172,7 @@ export function speak(text: string, onEnd?: () => void, m: Voice = { label: 'Lec
   meta = m
   setCurrent({ ...m, paused: false })
   playChunk(my)
+  track('voice_play', { where: m.id ? 'assistant' : 'cours' })
   return true
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
+import { takeDeletedNotice } from '../lib/account'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
@@ -60,6 +61,7 @@ export function Login() {
   const nav = useNavigate()
   const { refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
+  const [deleted] = useState(takeDeletedNotice)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -89,6 +91,7 @@ export function Login() {
       <div style={{ alignSelf: 'center', width: 76, height: 76, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0 4px' }}>
         <Logo size={44} />
       </div>
+      {deleted && <div className="notice" role="status">Ton compte a été supprimé, avec tes données. Merci d’avoir essayé Memoa.</div>}
       <h1 className="h1 big" style={{ textAlign: 'center', margin: '0 0 8px' }}>Content de te revoir</h1>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <PillInput id="email" type="email" autoComplete="email" placeholder="Adresse e-mail" aria-label="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)} />

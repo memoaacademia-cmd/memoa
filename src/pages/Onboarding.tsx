@@ -4,6 +4,7 @@ import { Brand, ErrorBox, MemoAvatar, Steps, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
 import { saveProfile, uploadAvatar } from '../lib/api'
+import { track } from '../lib/track'
 import { useAuth } from '../lib/auth'
 import { composeFullName, initialsOf, titleCase } from '../lib/names'
 import type { Profile } from '../lib/types'
@@ -77,7 +78,10 @@ export default function Onboarding() {
       await refresh()
       return true
     })
-    if (ok) nav(editing || profile?.memo_animal ? '/moi' : '/adoption', { replace: true })
+    if (ok) {
+      if (!editing && !profile?.memo_animal) track('onboarding_step', { step: 'profil' })
+      nav(editing || profile?.memo_animal ? '/moi' : '/adoption', { replace: true })
+    }
   }
 
   return (
@@ -182,7 +186,10 @@ export function Adoption() {
       await refresh()
       return true
     })
-    if (ok) nav(changing ? '/moi' : '/photo', { replace: true })
+    if (ok) {
+      track(changing ? 'memo_changed' : 'onboarding_step', changing ? { animal } : { step: 'memo', animal })
+      nav(changing ? '/moi' : '/photo', { replace: true })
+    }
   }
 
   if (!chosen) {
@@ -241,7 +248,7 @@ export function PhotoStep() {
       await refresh()
       return url
     })
-    if (ok) setPreview(ok)
+    if (ok) { setPreview(ok); track('onboarding_step', { step: 'photo' }) }
   }
 
   const shown = preview ?? profile?.avatar_url ?? null
@@ -265,7 +272,7 @@ export function PhotoStep() {
         ) : (
           <>
             <button className="btn" type="button" onClick={() => file.current?.click()} disabled={busy}>{busy ? 'Un instant…' : 'Choisir une photo'}</button>
-            <button className="link" type="button" onClick={() => nav('/essai', { replace: true })} disabled={busy}>Passer</button>
+            <button className="link" type="button" onClick={() => { track('onboarding_step', { step: 'photo', skipped: true }); nav('/essai', { replace: true }) }} disabled={busy}>Passer</button>
           </>
         )}
       </div>

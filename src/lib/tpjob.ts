@@ -1,5 +1,6 @@
 // Rédaction du TP « hors de la page » : le travail vit dans ce module, pas dans l'écran.
 // L'étudiant peut changer de page dans l'appli, la rédaction continue ; en revenant, il retrouve l'avancement ou le résultat.
+import { track } from './track'
 import { useSyncExternalStore } from 'react'
 import { friendlyError } from './api'
 import { writeTp, clearProgress, saveProgress, isStop } from './tpwrite'
@@ -78,6 +79,7 @@ async function run(id: string) {
       onSave: (t) => { set(id, { texts: { ...t } }); a.onSave({ ...t }) }
     })
     set(id, { running: false, step: '', result })
+    track('tp_done')
     void notify('Ton TP est prêt', 'Ouvre Memoa pour le télécharger en PDF.')
   } catch (e) {
     if (isStop(e)) {

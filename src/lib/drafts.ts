@@ -1,6 +1,7 @@
 // Brouillons : notes gardées sur le téléphone (IndexedDB), surtout utiles sans connexion.
 // Un brouillon vit 72 h à partir de sa première sauvegarde, puis il est supprimé définitivement.
 // Le serveur ne reçoit JAMAIS le texte : seulement « ce brouillon disparaît à telle heure », pour pouvoir prévenir par notification.
+import { track } from './track'
 import { useCallback, useEffect, useState } from 'react'
 import { isConfigured, supabase } from './supabase'
 
@@ -113,6 +114,7 @@ export async function saveDraft(input: {
   await run('readwrite', (s) => s.put(draft))
   changed()
   void syncDraftExpiry(input.userId)
+  track('draft_saved', { kind: input.kind, update: !!prev })
   return draft
 }
 
@@ -121,6 +123,13 @@ export async function deleteDraft(id: string): Promise<void> {
   await run('readwrite', (s) => s.delete(id))
   changed()
   if (d) void syncDraftExpiry(d.userId)
+}
+
+/** Efface du téléphone TOUS les brouillons de cet étudiant (suppression de compte), sans rien envoyer au serveur. */
+export async function wipeLocalDrafts(userId: string): Promise<void> {
+  const all = await allOf(userId)
+  for (const d of all) await run('readwrite', (s) => s.delete(d.id))
+  changed()
 }
 
 /** Supprime définitivement les brouillons dont les 72 h sont écoulées. */

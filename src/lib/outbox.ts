@@ -2,6 +2,7 @@
 // puis envoyées automatiquement au retour du réseau. Aucun doublon possible : le cours et la note reçoivent leur identifiant sur le téléphone
 // AVANT l'envoi ; si la connexion coupe en plein envoi, le renvoi retombe sur le même identifiant (« déjà reçu » = succès).
 import { isConfigured, supabase } from './supabase'
+import { track } from './track'
 
 export type OutboxKind = 'new_course' | 'add_note'
 export interface OutboxItem {
@@ -211,6 +212,8 @@ export async function syncOutbox(userId: string, deps: { store?: Store; client?:
         const n = await client.insertNote({ id: it.id, user_id: userId, course_id: courseId, title: it.title, content: it.content, source: it.source })
         if (n.error && !isDup(n.error)) throw n.error
         await store.del(it.id)
+        if (isNew) track('course_created', { source: 'hors_ligne' })
+        track('note_added', { source: it.source, offline: true })
         res.sent++
       } catch (e) {
         const err = e as Err

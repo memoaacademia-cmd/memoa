@@ -12,6 +12,7 @@ import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
 import { OfflineSaveSheet, PendingAudioChip } from '../components/OfflineSave'
 import { enqueueNote } from '../lib/outbox'
+import { track } from '../lib/track'
 import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle, COVER_ORDER, COVER_TEMPLATES, effectiveTemplate, type CoverTemplate } from '../lib/pdf'
 import { isPremiumNow, usePremium } from '../lib/premium'
@@ -75,6 +76,7 @@ export function NewCourse() {
       if (!alive) return
       if (d && d.userId === user.id && d.kind === 'course') {
         setTitle(d.title); setContent(d.body); setConsignes(d.guide); setSource(d.source || 'texte'); setDraftId(d.id)
+        track('draft_resumed', { kind: 'course' })
         if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
       } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })
@@ -546,6 +548,7 @@ export function CourseDetail() {
         setNoteTitle(d.title); setNoteText(d.body); setNoteGuide(d.guide); setNoteSource(d.source || 'texte')
         setModify(d.kind === 'edit'); setMainId(d.kind === 'edit' ? d.noteId : null); setDraftId(d.id)
         setError(null); setEditing(true)
+        track('draft_resumed', { kind: d.kind })
         if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
       } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })

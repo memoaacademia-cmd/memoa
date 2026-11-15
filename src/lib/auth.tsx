@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getCurrentUser, getProfile, onAuthChange, touchToday, type AuthUser } from './api'
 import type { Profile } from './types'
+import { setTrackUser, trackOncePerDay } from './track'
 
 interface AuthState {
   user: AuthUser | null
@@ -69,12 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = await getCurrentUser()
       if (!u) {
         setUser(null)
+        setTrackUser(null)
         setProfile(null)
         setLoadFailed(false)
         writeCache(null)
         return
       }
       setUser(u)
+      setTrackUser(u.id)
       // Profil déjà connu : on ouvre l'appli tout de suite avec lui, la mise à jour arrive ensuite.
       const known = readCache(u.id)
       if (known) { setProfile((prev) => prev ?? known); setLoading(false) }
@@ -84,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(p)
         writeCache(p)
         setLoadFailed(false)
-        if (p?.memo_animal) void touchToday(u.id)
+        if (p?.memo_animal) { void touchToday(u.id); trackOncePerDay('app_open', { standalone: window.matchMedia?.('(display-mode: standalone)').matches ?? false }) }
       } catch {
         // Réseau coupé ou serveur lent : on NE déconnecte PAS l'étudiant. On garde le profil connu (ou celui du dernier passage).
         setProfile((prev) => prev ?? readCache(u.id))

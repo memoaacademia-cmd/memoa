@@ -39,6 +39,17 @@ export async function requireUser(req: Request): Promise<{ id: string; email: st
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Empreinte NON réversible d'un numéro (HMAC-SHA256 avec le secret serveur PHONE_HASH_SECRET), en hexadécimal.
+ *  Sert à retenir « essai déjà utilisé » après la suppression d'un compte, sans garder le numéro.
+ *  Renvoie null si le secret n'est pas configuré (on ne fabrique jamais une empreinte faible : un numéro a trop peu de combinaisons). */
+export async function phoneHash(phoneDigits: string): Promise<string | null> {
+  const secret = Deno.env.get('PHONE_HASH_SECRET')
+  if (!secret || secret.length < 16 || !phoneDigits) return null
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(phoneDigits))
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 // ======================= ai-gateway =======================
 // ai-gateway — l'UNIQUE point d'entrée vers un modèle d'IA.
 // Le navigateur n'a jamais de clé d'IA : il appelle cette fonction avec le jeton de l'étudiant.
@@ -105,7 +116,14 @@ async function trialStart(admin: ReturnType<typeof adminClient>, userId: string)
   // Le premier compte qui a utilisé ce numéro fixe le début de l'essai, même si l'étudiant refait un compte.
   await admin.from('trial_phones').upsert({ phone, started_at: own.toISOString() }, { onConflict: 'phone', ignoreDuplicates: true })
   const { data } = await admin.from('trial_phones').select('started_at').eq('phone', phone).maybeSingle()
-  return data?.started_at ? new Date(Math.min(own.getTime(), new Date(data.started_at).getTime())) : own
+  let start = data?.started_at ? Math.min(own.getTime(), new Date(data.started_at).getTime()) : own.getTime()
+  // Numéro dont un ancien compte a été supprimé : seule son empreinte est restée (table trial_phone_hashes), l'essai ne repart pas.
+  const hash = await phoneHash(phone)
+  if (hash) {
+    const { data: gone } = await admin.from('trial_phone_hashes').select('started_at').eq('phone_hash', hash).maybeSingle()
+    if (gone?.started_at) start = Math.min(start, new Date(gone.started_at).getTime())
+  }
+  return new Date(start)
 }
 
 type Access = { mode: 'premium' } | { mode: 'trial' } | { mode: 'points'; left: number; resetAt: number; from: number }

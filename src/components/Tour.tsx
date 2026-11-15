@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { track } from '../lib/track'
 import { firstNameOf } from '../lib/names'
 import { fillTour, loadProgress, readLocalProgress, saveProgress, tourById, tourForPath, type TourId, type TourProgress, type TourStatus, type TourStep } from '../lib/tours'
 import { Icon, MemoAvatar } from './ui'
@@ -88,6 +89,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
   }, [uid])
 
   const finish = useCallback((id: TourId, status: TourStatus) => {
+    track(status === 'done' ? 'tour_done' : 'tour_skipped', { id })
     setActive(null)
     update((p) => ({ ...p, [id]: status }))
   }, [update])
@@ -132,7 +134,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     void prepareSteps(def.steps).then((steps) => {
       if (!alive) return
       setLaunch(null)
-      if (steps.length && def.match(pathRef.current)) setActive({ id: def.id, steps, index: 0 })
+      if (steps.length && def.match(pathRef.current)) { setActive({ id: def.id, steps, index: 0 }); track('tour_started', { id: def.id }) }
     })
     return () => { alive = false }
   }, [launch])

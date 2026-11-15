@@ -136,7 +136,7 @@ export default function Assistant() {
   }
   function readAloud(m: Message) {
     if (speakingId === m.id) { stopSpeaking(); return }
-    if (!speak(m.content, undefined, { label: 'Réponse de Memo', id: m.id }))
+    if (!speak(m.content, undefined, { label: `Réponse de ${profile?.memo_name || 'Memo'}`, id: m.id }))
       setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
   }
   async function copy(m: Message) {

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { Icon } from './ui'
+import FreePts from './FreePts'
 import { PRICE_LABEL } from '../lib/api'
-import { BASE_PRICE_LABEL, FREE_POINTS_PER_DAY, POINT_COSTS, PREMIUM_DAYS, TRIAL_DAYS, type PlanState } from '../lib/plan'
+import { BASE_PRICE_LABEL, POINT_COSTS, PREMIUM_DAYS, TRIAL_DAYS, type PlanState } from '../lib/plan'
 
 /* Présentation des offres. Tous les chiffres viennent de src/lib/plan.ts (qui reprend les règles du serveur) et de PRICE_LABEL. */
 
@@ -13,12 +14,12 @@ export function Price({ cur }: { cur: 'USD' | 'CDF' }) {
 const ROWS: { label: string; free: ReactNode; premium: ReactNode }[] = [
   {
     label: 'Usage de l’IA',
-    free: `${FREE_POINTS_PER_DAY} points gratuits par jour`,
+    free: <><FreePts /> points gratuits par jour</>,
     premium: 'Utilisation généreuse, sans points à compter'
   },
   {
     label: 'Renouvellement',
-    free: `Retour à ${FREE_POINTS_PER_DAY} chaque jour à minuit (heure de Kinshasa). Les points non utilisés ne se cumulent pas.`,
+    free: <>Retour à <FreePts /> chaque jour à minuit (heure de Kinshasa). Les points non utilisés ne se cumulent pas.</>,
     premium: 'Une limite quotidienne existe seulement contre les abus'
   },
   {
@@ -58,7 +59,7 @@ export function PointsGuide() {
   return (
     <section className="plan-card" aria-labelledby="plan-pts">
       <h2 id="plan-pts" className="plan-h"><span className="gold-bolt"><Icon name="bolt" size={18} /></span>Comment marchent les points</h2>
-      <p className="plan-lead">En offre Free, tu disposes de {FREE_POINTS_PER_DAY} points par jour. Chaque demande à l’IA en consomme quelques-uns :</p>
+      <p className="plan-lead">En offre Free, tu disposes de <FreePts /> points par jour. Chaque demande à l’IA en consomme quelques-uns :</p>
       <ul className="plan-list">
         {POINT_COSTS.map((c) => <li key={c.label}><span>{c.label}</span><b>{c.cost}</b></li>)}
       </ul>
@@ -69,11 +70,11 @@ export function PointsGuide() {
 
 /** L'essai gratuit : apport, durée, conditions, fin. Le texte s'adapte à l'état du compte. */
 export function TrialInfo({ state }: { state: PlanState }) {
-  const items: [string, string][] = [
+  const items: [string, ReactNode][] = [
     ['Ce que tu reçois', 'Toute l’IA de Memoa : notes, quiz, TP, audio et résumés, avec une utilisation généreuse et sans compter de points.'],
     ['Durée', `${TRIAL_DAYS} jours, jusqu’à minuit (heure de Kinshasa) le dernier jour. Le jour de ton inscription compte comme le 1er.`],
     ['Conditions', 'Sans carte bancaire et sans paiement. Un seul essai par numéro de téléphone : refaire un compte avec le même numéro ne relance pas l’essai.'],
-    ['À la fin', `Rien n’est facturé. Tu gardes ton compte et tout ton contenu, avec ${FREE_POINTS_PER_DAY} points gratuits chaque jour. Tu passes à Premium seulement si tu le décides.`]
+    ['À la fin', <>Rien n’est facturé. Tu gardes ton compte et tout ton contenu, avec <FreePts /> points gratuits chaque jour. Tu passes à Premium seulement si tu le décides.</>]
   ]
   return (
     <section className="plan-card" aria-labelledby="plan-trial">
@@ -94,7 +95,7 @@ export function SubscriptionTerms() {
     'Aucun renouvellement automatique : tu valides chaque paiement sur ton téléphone.',
     `Si tu paies avant la fin, les ${PREMIUM_DAYS} jours s’ajoutent à la date de fin actuelle.`,
     'Memoa te prévient 7 jours avant, 2 jours avant, puis le jour de la fin.',
-    `Quand l’abonnement se termine, tu repasses en offre Free (${FREE_POINTS_PER_DAY} points par jour). Tes cours et tes notes restent là.`
+    <>Quand l’abonnement se termine, tu repasses en offre Free (<FreePts /> points par jour). Tes cours et tes notes restent là.</>
   ]
   return (
     <section className="plan-card" aria-labelledby="plan-terms">

@@ -6,6 +6,7 @@ import { cacheCourses } from './outbox'
 import { isConfigured, supabase } from './supabase'
 import { loadDemo, saveDemo, uid } from './demo'
 import { shrinkImage } from './image'
+import { reportError, track } from './track'
 import type { AiTask, Conversation, Course, LibDoc, Message, Note, Payment, Profile } from './types'
 
 export interface AuthUser {
@@ -422,6 +423,7 @@ export async function createCourse(userId: string, title: string): Promise<Cours
   }
   const { data, error } = await sb().from('courses').insert({ user_id: userId, title: clean }).select().single()
   if (error) throw error
+  track('course_created', { source: 'en_ligne' })
   return { id: data.id, title: data.title, created_at: data.created_at, notes_count: 0 }
 }
 
@@ -490,6 +492,7 @@ export async function addNote(userId: string, courseId: string, title: string, c
   const { data, error } = await sb()
     .from('notes').insert({ user_id: userId, course_id: courseId, title: title.trim() || 'Note', content, source }).select().single()
   if (error) throw error
+  track('note_added', { source, offline: false })
   return data as Note
 }
 
@@ -568,6 +571,7 @@ export async function publishDoc(
   // Déposé « en vérification » : c'est le SERVEUR (tâche review_doc) qui le publie s'il est correct, ou le refuse. Sans cette vérification, il reste invisible des autres.
   const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'pending' }).select('id').single()
   if (error) throw error
+  track('library_publish', { type: input.doc_type, pdf: !!file })
   return (data as { id: string }).id
 }
 
@@ -686,6 +690,8 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
   let msg = fallback
   let limit = false
   const ctx = (error as { context?: Response }).context
+  // Rapport d'erreur : seulement les vraies pannes (serveur en erreur, réponse illisible), pas les refus normaux (points épuisés, demande invalide).
+  if ((!ctx && navigator.onLine !== false) || (ctx && ctx.status >= 500)) reportError(String((error as Error).message ?? 'échec'), `fn:${name}:${ctx?.status ?? 'réseau'}`)
   if (ctx && typeof ctx.json === 'function') {
     try {
       const j = await ctx.json()
@@ -698,6 +704,18 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
   throw limit ? new LimitError(msg) : new Error(msg)
 }
 
+
+/** Mesure d'usage des fonctions IA (une fois la demande réussie). Rien du texte de l'étudiant n'est envoyé : seulement le type de demande. */
+function trackAi(a: { task: AiTask; courseId?: string | null; web?: boolean; purpose?: 'course' }) {
+  switch (a.task) {
+    case 'chat': track('assistant_message', { web: !!a.web, course: !!a.courseId }); break
+    case 'quiz': track('quiz_started', { course: !!a.courseId }); break
+    case 'tp_plan': track('tp_started'); break
+    case 'summary': track('summary_requested'); break
+    case 'structure_notes': case 'enrich_note': track('ai_note_generated', { task: a.task, purpose: a.purpose ?? 'note', web: !!a.web }); break
+    default: break // tp_section / tp_write / tp_revise / review_doc : pas des usages à compter ici
+  }
+}
 
 /** Points gratuits du jour : solde, maximum, et prochain renouvellement (minuit à Kinshasa). null pendant l'essai et avec Premium. */
 export interface PointsInfo {
@@ -760,6 +778,7 @@ export async function askAI(args: {
     return { reply: `[Démo — tâche « ${args.task} »]\n\n${args.prompt.slice(0, 400)}`, conversationId: null }
   }
   const res = await invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+  trackAi(args)
   // Tout l'appli (Accueil, Assistant) affiche le nouveau solde tout de suite.
   if (res.points !== undefined) window.dispatchEvent(new CustomEvent('memoa-points', { detail: res.points }))
   return res
@@ -815,13 +834,24 @@ export async function startPayment(embed = false): Promise<{ url: string | null;
     saveDemo(db)
     return { url: null, message: 'Mode démo : paiement simulé, en attente.' }
   }
-  return invoke<{ url: string }>('swift-worker', { action: 'start', embed }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+  const r = await invoke<{ url: string | null; message?: string }>('swift-worker', { action: 'start', embed }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+  if (r.url) { track('payment_started'); try { localStorage.setItem(PAY_MARK, String(Date.now())) } catch { /* sans importance */ } }
+  return r
 }
+const PAY_MARK = 'memoa-pay-started'
 
 /** « J'ai payé » / retour de la page de paiement : le serveur revérifie directement chez Chariow (sans attendre le webhook). */
 export async function checkPayment(): Promise<{ active: boolean; expires_at: string | null }> {
   if (!isConfigured) return { active: false, expires_at: null }
-  return invoke<{ active: boolean; expires_at: string | null }>('swift-worker', { action: 'check' }, 'Vérification impossible pour le moment. Réessaie dans un instant.')
+  const r = await invoke<{ active: boolean; expires_at: string | null }>('swift-worker', { action: 'check' }, 'Vérification impossible pour le moment. Réessaie dans un instant.')
+  // « Paiement réussi » : une seule fois, et seulement si CE téléphone a lancé un paiement dans les 3 derniers jours (pas pour un Premium déjà actif).
+  if (r.active) {
+    try {
+      const t = Number(localStorage.getItem(PAY_MARK) ?? 0)
+      if (t && Date.now() - t < 3 * 864e5) { localStorage.removeItem(PAY_MARK); track('payment_success') }
+    } catch { /* sans importance */ }
+  }
+  return r
 }
 
 export async function hasPremium(userId: string): Promise<boolean> {

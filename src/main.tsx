@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import ErrorBoundary from './components/ErrorBoundary'
+import { installTracking } from './lib/track'
 import { getPref } from './lib/prefs'
 import './styles.css'
 
@@ -18,10 +20,15 @@ if (framed && /[?&]paiement=retour/.test(window.location.search)) {
 } else {
   createRoot(document.getElementById('root') as HTMLElement).render(
     <StrictMode>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </StrictMode>
   )
 }
+
+// Erreurs non rattrapées (window.onerror, promesses rejetées) + envoi de la file de mesure.
+installTracking()
 
 // Rend le site installable sur l'écran d'accueil. Sans effet si le navigateur ne le permet pas.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
