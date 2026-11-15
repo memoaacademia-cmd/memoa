@@ -795,3 +795,9 @@ a.pill-btn { text-decoration: none; }
 .pts-gold { color: #f0bd52; font-weight: 800; }
 [data-theme='light'] .pts-gold { color: #9a6808; }
 .me-premium .pts-gold { color: #f0c15a; }
+/* Chiffre du compteur de points (Accueil, Assistant) : même doré que l'éclair */
+.pts-chip.free:not(.zero) { color: #f0bd52; }
+[data-theme='light'] .pts-chip.free:not(.zero) { color: #b27a12; }
+.me-pts b { color: #f0bd52; }
+[data-theme='light'] .me-pts b { color: #b27a12; }
+.me-premium .me-pts b { color: #f0c15a; }
