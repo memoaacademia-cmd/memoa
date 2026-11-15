@@ -7,7 +7,7 @@ import { clearOfflineCopy } from './api'
 import { flush, reportError, setTrackUser, track } from './track'
 
 /** Nom de la fonction serveur de suppression (le nom affiché dans le tableau de bord Supabase / l'adresse de déploiement). */
-export const ACCOUNT_DELETE_FN = 'account-delete'
+export const ACCOUNT_DELETE_FN = 'smooth-api'
 /** Le mot à taper pour confirmer. Le serveur le revérifie. */
 export const DELETE_WORD = 'SUPPRIMER'
 const DELETED_FLAG = 'memoa-account-deleted'
