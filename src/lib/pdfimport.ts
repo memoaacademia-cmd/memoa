@@ -4,7 +4,7 @@ export async function extractPdfText(file: File, maxPages = 60): Promise<string>
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.js?url')).default
   pdfjs.GlobalWorkerOptions.workerSrc = worker
   const data = new Uint8Array(await file.arrayBuffer())
-  const pdf = await pdfjs.getDocument({ data }).promise
+  const pdf = await pdfjs.getDocument({ data, isEvalSupported: false }).promise
   const pages: string[] = []
   const max = Math.min(pdf.numPages, maxPages)
   for (let i = 1; i <= max; i++) {

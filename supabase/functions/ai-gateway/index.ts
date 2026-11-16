@@ -127,10 +127,12 @@ const waitLabel = (ms: number) => {
 }
 const premiumMsg = (wait: string) => `Tu as utilisé tes 20 points d'aujourd'hui. Ils reviennent à minuit (heure de Kinshasa), dans ${wait}. Ou passe à Premium pour continuer sans attendre.`
 
+const natPhone = (raw: unknown): string => { let d = String(raw ?? '').replace(/\D/g, ''); if (d.length > 9 && d.startsWith('243')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d }
+
 async function trialStart(admin: ReturnType<typeof adminClient>, userId: string): Promise<Date> {
   const { data: prof } = await admin.from('profiles').select('phone,created_at').eq('id', userId).maybeSingle()
   const own = prof?.created_at ? new Date(prof.created_at) : new Date()
-  const phone = String(prof?.phone ?? '').replace(/\D/g, '')
+  const phone = natPhone(prof?.phone)
   if (phone.length < 9) return own
   // Le premier compte qui a utilisé ce numéro fixe le début de l'essai, même si l'étudiant refait un compte.
   await admin.from('trial_phones').upsert({ phone, started_at: own.toISOString() }, { onConflict: 'phone', ignoreDuplicates: true })

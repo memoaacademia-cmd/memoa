@@ -23,3 +23,7 @@ verify_jwt = false
 # Le rappel des cartes de révision est lancé par la planification de Supabase (CRON_SECRET vérifié dans le code).
 [functions.cards-reminder-push]
 verify_jwt = false
+
+# Les rappels d'examen sont lancés par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.exam-reminder-push]
+verify_jwt = false

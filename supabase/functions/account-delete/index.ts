@@ -63,6 +63,7 @@ export async function phoneHash(phoneDigits: string): Promise<string | null> {
 //  6. efface le numéro en clair de trial_phones (il ne reste que l'empreinte) et vérifie qu'aucune ligne ne traîne.
 // Variables d'environnement : PHONE_HASH_SECRET (obligatoire, 16 caractères minimum, jamais changé ensuite), plus celles déjà présentes (SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY).
 
+const natPhone = (raw: unknown): string => { let d = String(raw ?? '').replace(/\D/g, ''); if (d.length > 9 && d.startsWith('243')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d }
 const WORD = 'SUPPRIMER'
 type Admin = ReturnType<typeof adminClient>
 
@@ -107,7 +108,8 @@ Deno.serve(async (req) => {
     if (adm) return json(req, 403, { error: "Ce compte est un compte d'équipe : il ne peut pas être supprimé depuis l'application." })
 
     const { data: prof } = await admin.from('profiles').select('phone,created_at').eq('id', uid).maybeSingle()
-    const phone = String(prof?.phone ?? '').replace(/\D/g, '')
+    const rawDigits = String(prof?.phone ?? '').replace(/\D/g, '')
+    const phone = natPhone(prof?.phone)
     const hasPhone = phone.length >= 9
 
     // 1) Empreinte du numéro : « essai déjà utilisé ». Sans secret, on refuse plutôt que d'oublier ou de garder le numéro.
@@ -169,7 +171,7 @@ Deno.serve(async (req) => {
     if (del.error) throw new Error(`Suppression du compte : ${del.error.message}`)
 
     // 6) Numéro en clair effacé (il ne reste que l'empreinte), puis contrôle : plus aucune ligne au nom de ce compte.
-    if (hasPhone) await admin.from('trial_phones').delete().eq('phone', phone)
+    if (hasPhone) await admin.from('trial_phones').delete().in('phone', [...new Set([phone, rawDigits])])
     const leftovers: Record<string, number> = {}
     for (const [table, col] of LEFTOVER_TABLES) {
       const { count } = await admin.from(table).select('*', { count: 'exact', head: true }).eq(col, uid)
