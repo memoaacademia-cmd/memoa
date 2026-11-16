@@ -22,6 +22,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Vérifier que les secrets Supabase sont présents
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "Secrets VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY manquants : on ne publie pas un site en mode démo."
+            exit 1
+          fi
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - run: npm install --no-audit --no-fund
       - run: npm run build
         env:
