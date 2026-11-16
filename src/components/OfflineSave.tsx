@@ -12,7 +12,7 @@ export function OfflineSaveSheet({ open, onClose, userId, title, content, source
   /** Écran d'un cours : ce cours est proposé en premier. */
   currentCourse?: { id: string; title: string }
   onQueued: (item: OutboxItem) => void
-  /** Garder seulement en brouillon de 72 h (comportement habituel, sans choix de cours). */
+  /** Garder seulement en brouillon de 48 h (comportement habituel, sans choix de cours). */
   onDraftOnly?: () => void
 }) {
   const [mode, setMode] = useState<'choose' | 'new' | 'existing'>('choose')
@@ -49,7 +49,7 @@ export function OfflineSaveSheet({ open, onClose, userId, title, content, source
         <RowGroup>
           <Row icon="plus" title="Créer un nouveau cours à partir de la note" sub="La note devient le premier contenu du cours" onClick={() => setMode('new')} />
           <Row icon="book" title="Ajouter à un cours existant" sub={courses.length ? 'Choisis le cours dans ta liste' : 'Aucun cours enregistré sur ce téléphone'} onClick={() => setMode('existing')} />
-          {onDraftOnly && <Row icon="text" title="Garder en brouillon seulement" sub="Brouillon de 72 h, tu choisiras plus tard" onClick={onDraftOnly} />}
+          {onDraftOnly && <Row icon="text" title="Garder en brouillon seulement" sub="Brouillon de 48 h, tu choisiras plus tard" onClick={onDraftOnly} />}
         </RowGroup>
       )}
       {mode === 'new' && (

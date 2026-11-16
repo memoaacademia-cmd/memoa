@@ -3,6 +3,7 @@ import { BottomSheet, Icon, MemoAvatar, PillButton, Row, RowGroup } from './ui'
 import { useAuth } from '../lib/auth'
 import { track } from '../lib/track'
 import { joinSegments, insertBlock, lineToFig, replaceBlock, splitSegments, type Fig } from '../lib/blocks'
+import { useTours } from './Tour'
 import { AutoText, BLOCK_ROWS, BlockSheet, FigBlock, TableBlock, type BlockKind } from './Blocks'
 
 /* Écran d'écriture plein écran, style Notes : sans cadre, titre grand, texte qui occupe la page.
@@ -21,6 +22,8 @@ export function EditorScreen(p: {
   /** Bouton « Brouillon » (hors de la zone de texte) : garde la note sur le téléphone. Absent = pas de bouton. */
   onDraft?: () => void
   draftDisabled?: boolean
+  /** Repère de visite posé sur l'écran entier (ex. « editor-note » : visite « Ajouter une note »). */
+  tourKey?: string
   title: string
   onTitle: (v: string) => void
   titlePlaceholder: string
@@ -74,15 +77,19 @@ export function EditorScreen(p: {
     }
   }, [])
 
+  // Prévient les visites guidées que l'éditeur vient de s'ouvrir (la visite « Ajouter une note » en dépend).
+  const { nudge } = useTours()
+  useEffect(() => { const t = window.setTimeout(nudge, 350); return () => window.clearTimeout(t) }, [nudge])
+
   return (
-    <div className="editor" style={box ? { height: box.h, top: box.top } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
+    <div className="editor" data-tour={p.tourKey} style={box ? { height: box.h, top: box.top } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
       <div className="ed-top">
         <button type="button" className="ed-back" onClick={p.onBack} aria-label="Retour">
           <Icon name="back" size={22} stroke={2.2} />
           <span>{p.backLabel}</span>
         </button>
         {p.status && <span className="ed-status">{p.status}</span>}
-        {p.onDraft && <button type="button" className="ed-draft" onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
+        {p.onDraft && <button type="button" data-tour="editor-draft" className="ed-draft" onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
         <button type="button" data-tour="editor-done" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>
       </div>
 

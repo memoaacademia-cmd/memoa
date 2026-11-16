@@ -81,7 +81,7 @@ export function NewCourse() {
         setTitle(d.title); setContent(d.body); setConsignes(d.guide); setSource(d.source || 'texte'); setDraftId(d.id)
         track('draft_resumed', { kind: 'course' })
         if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
-      } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
+      } else setError('Ce brouillon a disparu (48 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })
     }).catch(() => { if (alive) setParams({}, { replace: true }) })
     return () => { alive = false }
@@ -96,7 +96,7 @@ export function NewCourse() {
 
   function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
 
-  /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (72 h), puis retourne à la liste. */
+  /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (48 h), puis retourne à la liste. */
   async function keepDraft(force = false) {
     if (!user) return
     if (!title.trim() && !content.trim() && !consignes.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
@@ -165,7 +165,7 @@ export function NewCourse() {
   }
 
   function leave() {
-    if ((title.trim() || content.trim() || consignes.trim()) && !window.confirm('Fermer sans créer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 72 h.)')) return
+    if ((title.trim() || content.trim() || consignes.trim()) && !window.confirm('Fermer sans créer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 48 h.)')) return
     dict.current?.stop()
     nav('/')
   }
@@ -250,7 +250,7 @@ export function NewCourse() {
         body={content}
         onBody={setContent}
         bodyPlaceholder="Écris ou colle ton cours ici. Tu peux aussi le créer vide et ajouter des notes plus tard."
-        hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » : ton cours est gardé sur ton téléphone en attente et sera créé tout seul dès que le réseau revient. Ou touche « Brouillon » pour tout garder 72 h.' : undefined}
+        hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Créer » : ton cours est gardé sur ton téléphone en attente et sera créé tout seul dès que le réseau revient. Ou touche « Brouillon » pour tout garder 48 h.' : undefined}
         banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
@@ -575,7 +575,7 @@ export function CourseDetail() {
         setError(null); setEditing(true)
         track('draft_resumed', { kind: d.kind })
         if (d.audio) void transcribeFile(asFile(d.audio), 'audio')
-      } else setError('Ce brouillon a disparu (72 h écoulées) ou n’existe plus sur ce téléphone.')
+      } else setError('Ce brouillon a disparu (48 h écoulées) ou n’existe plus sur ce téléphone.')
       setParams({}, { replace: true })
     }).catch(() => { if (alive) setParams({}, { replace: true }) })
     return () => { alive = false }
@@ -666,11 +666,11 @@ export function CourseDetail() {
     setEditing(false)
   }
   function closeEditor() {
-    if ((noteText.trim() || noteGuide.trim() || noteTitle.trim()) && !window.confirm('Fermer sans enregistrer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 72 h.)')) return
+    if ((noteText.trim() || noteGuide.trim() || noteTitle.trim()) && !window.confirm('Fermer sans enregistrer ? Ce que tu as écrit sera perdu. (Touche « Brouillon » pour le garder 48 h.)')) return
     resetNote()
   }
 
-  /** « Brouillon » : garde la note (ou la modification du cours) sur le téléphone pendant 72 h. Le cours n'est pas touché. */
+  /** « Brouillon » : garde la note (ou la modification du cours) sur le téléphone pendant 48 h. Le cours n'est pas touché. */
   async function keepDraft(force = false) {
     if (!user) return
     if (!noteTitle.trim() && !noteText.trim() && !noteGuide.trim() && !pendingAudio) return setError('Écris quelque chose avant de le garder en brouillon.')
@@ -901,6 +901,7 @@ export function CourseDetail() {
           backLabel={course.data.title}
           onBack={closeEditor}
           status={modify ? 'Modification' : 'Nouvelle note'}
+          tourKey={modify ? undefined : 'editor-note'}
           doneLabel={busy ? 'Un instant…' : draftId && online ? 'Générer le PDF' : 'Terminé'}
           onDone={() => void save()}
           doneDisabled={busy || rec.state !== 'idle'}
@@ -913,7 +914,7 @@ export function CourseDetail() {
           body={noteText}
           onBody={setNoteText}
           bodyPlaceholder={modify ? 'Le texte de ton cours' : 'Écris ta note ici…'}
-          hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Terminé » : ta note est gardée sur ton téléphone et ajoutée à ce cours dès que le réseau revient. Ou touche « Brouillon » pour la ranger dans un cours ou la garder 72 h.' : undefined}
+          hint={!online ? 'Sans connexion : tu peux écrire, dicter ou enregistrer ta voix (la dictée devient un enregistrement, transcrit automatiquement quand tu auras du réseau). Touche « Terminé » : ta note est gardée sur ton téléphone et ajoutée à ce cours dès que le réseau revient. Ou touche « Brouillon » pour la ranger dans un cours ou la garder 48 h.' : undefined}
           banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}

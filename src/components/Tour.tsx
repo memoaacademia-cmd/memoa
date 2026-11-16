@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { track } from '../lib/track'
 import { firstNameOf } from '../lib/names'
-import { fillTour, loadProgress, readLocalProgress, saveProgress, tourById, tourForPath, type TourId, type TourProgress, type TourStatus, type TourStep } from '../lib/tours'
+import { fillTour, loadProgress, readLocalProgress, saveProgress, tourById, toursForPath, type TourId, type TourProgress, type TourStatus, type TourStep } from '../lib/tours'
 import { Icon, MemoAvatar } from './ui'
 
 /* Visites guidées interactives.
@@ -25,9 +25,11 @@ interface TourApi {
   restart: (id: TourId, to?: string) => void
   /** Efface toute la progression : chaque visite se relancera à la prochaine arrivée sur sa page. */
   resetAll: () => void
+  /** À appeler quand un écran vient de s'ouvrir sur la page (ex. l'éditeur) : relance le test de lancement des visites. */
+  nudge: () => void
 }
 
-const Ctx = createContext<TourApi>({ progress: {}, ready: false, active: null, restart: () => {}, resetAll: () => {} })
+const Ctx = createContext<TourApi>({ progress: {}, ready: false, active: null, restart: () => {}, resetAll: () => {}, nudge: () => {} })
 export const useTours = () => useContext(Ctx)
 
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
@@ -44,6 +46,9 @@ function findTarget(s: TourStep): HTMLElement | null {
   }
   return null
 }
+
+/** Vrai si un élément visible porte ce data-tour. */
+const present = (name: string) => !!findTarget({ target: name, tag: '', icon: '', text: '' })
 
 /** Attend (au plus `timeout` ms) que les éléments visés apparaissent, puis ne garde que les étapes réalisables. */
 async function prepareSteps(steps: TourStep[], timeout = 1000): Promise<TourStep[]> {
@@ -66,6 +71,8 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const pathRef = useRef(loc.pathname)
   pathRef.current = loc.pathname
   const tried = useRef<Set<string>>(new Set())
+  const [tick, setTick] = useState(0)
+  const nudge = useCallback(() => setTick((t) => t + 1), [])
 
   // Progression : copie locale tout de suite, puis fusion avec celle du compte.
   useEffect(() => {
@@ -112,19 +119,23 @@ export function TourProvider({ children }: { children: ReactNode }) {
   useEffect(() => { tried.current.clear() }, [loc.pathname])
 
   // Lancement : automatique à la première arrivée sur la page, ou demandé (restart).
+  // Plusieurs visites peuvent partager une page : une visite avec `needs` (ex. « Ajouter une note ») n'est
+  // proposée que lorsque son écran est ouvert, et elle passe avant la visite de la page elle-même.
   useEffect(() => {
     if (!ready || active || launch) return
-    const def = tourForPath(loc.pathname)
+    const cands = toursForPath(loc.pathname)
+    if (!cands.length) return
+    const open = cands.filter((d) => !d.needs || present(d.needs)).sort((a, b) => (b.needs ? 1 : 0) - (a.needs ? 1 : 0))
+    const def = open.find((d) => pending === d.id) ?? open.find((d) => !progress[d.id] && !tried.current.has(d.id))
     if (!def) return
     const forced = pending === def.id
-    if (!forced && (progress[def.id] || tried.current.has(def.id))) return
     const t = window.setTimeout(() => {
       tried.current.add(def.id)
       if (forced) setPending(null)
       setLaunch(def.id)
     }, forced ? 350 : 600)
     return () => window.clearTimeout(t)
-  }, [ready, active, launch, loc.pathname, pending, progress])
+  }, [ready, active, launch, loc.pathname, pending, progress, tick])
 
   // Préparation : on attend les éléments, on garde les étapes réalisables, puis on affiche.
   useEffect(() => {
@@ -144,7 +155,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     if (active && !tourById(active.id).match(loc.pathname)) setActive(null)
   }, [loc.pathname, active])
 
-  const value = useMemo<TourApi>(() => ({ progress, ready, active: active?.id ?? null, restart, resetAll }), [progress, ready, active, restart, resetAll])
+  const value = useMemo<TourApi>(() => ({ progress, ready, active: active?.id ?? null, restart, resetAll, nudge }), [progress, ready, active, restart, resetAll, nudge])
   const vars = { first: firstNameOf(profile) || 'toi', memo: profile?.memo_name || 'Memo' }
 
   return (

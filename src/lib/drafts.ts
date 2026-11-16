@@ -1,11 +1,11 @@
 // Brouillons : notes gardées sur le téléphone (IndexedDB), surtout utiles sans connexion.
-// Un brouillon vit 72 h à partir de sa première sauvegarde, puis il est supprimé définitivement.
+// Un brouillon vit 48 h à partir de sa première sauvegarde, puis il est supprimé définitivement.
 // Le serveur ne reçoit JAMAIS le texte : seulement « ce brouillon disparaît à telle heure », pour pouvoir prévenir par notification.
 import { track } from './track'
 import { useCallback, useEffect, useState } from 'react'
 import { isConfigured, supabase } from './supabase'
 
-export const DRAFT_HOURS = 72
+export const DRAFT_HOURS = 48
 export const WARN_HOURS = 5
 const HOUR = 3_600_000
 
@@ -108,7 +108,7 @@ export async function saveDraft(input: {
     audio: input.audio ?? null,
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
-    // Enregistrer à nouveau ne prolonge PAS les 72 h : le compte à rebours part de la première sauvegarde.
+    // Enregistrer à nouveau ne prolonge PAS les 48 h : le compte à rebours part de la première sauvegarde.
     expiresAt: prev?.expiresAt ?? now + DRAFT_HOURS * HOUR
   }
   await run('readwrite', (s) => s.put(draft))
@@ -132,7 +132,7 @@ export async function wipeLocalDrafts(userId: string): Promise<void> {
   changed()
 }
 
-/** Supprime définitivement les brouillons dont les 72 h sont écoulées. */
+/** Supprime définitivement les brouillons dont les 48 h sont écoulées. */
 export async function purgeExpired(userId: string): Promise<number> {
   try {
     const all = await allOf(userId)

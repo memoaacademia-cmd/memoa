@@ -1,4 +1,4 @@
-// Notes créées SANS réseau : gardées sur le téléphone (IndexedDB « memoa-outbox », séparée des brouillons de 72 h, qui ne sont pas touchés),
+// Notes créées SANS réseau : gardées sur le téléphone (IndexedDB « memoa-outbox », séparée des brouillons de 48 h, qui ne sont pas touchés),
 // puis envoyées automatiquement au retour du réseau. Aucun doublon possible : le cours et la note reçoivent leur identifiant sur le téléphone
 // AVANT l'envoi ; si la connexion coupe en plein envoi, le renvoi retombe sur le même identifiant (« déjà reçu » = succès).
 import { isConfigured, supabase } from './supabase'

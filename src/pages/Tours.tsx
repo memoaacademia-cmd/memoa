@@ -16,7 +16,7 @@ export default function Tours() {
   async function replay(t: TourDef) {
     let to: string | undefined
     // La visite d'un cours se joue dans un cours : on ouvre le plus récent s'il y en a un.
-    if (t.id === 'course') {
+    if (t.id === 'course' || t.id === 'note') {
       try {
         const list = await listCourses(user?.id ?? '')
         if (list[0]) to = `/sac/${list[0].id}`
@@ -35,7 +35,7 @@ export default function Tours() {
         ))}
       </RowGroup>
       <PillButton variant="outline" onClick={() => { resetAll(); nav('/') }}>Tout revoir depuis l’accueil</PillButton>
-      <span className="muted" style={{ textAlign: 'center' }}>La visite d’un cours s’ouvre dans ton cours le plus récent. Sans cours, elle se lance à ton premier cours.</span>
+      <span className="muted" style={{ textAlign: 'center' }}>La visite d’un cours s’ouvre dans ton cours le plus récent. Pour « Ajouter une note », touche ensuite « Ajouter une note » : la visite démarre quand l’écran d’écriture s’ouvre.</span>
     </main>
   )
 }

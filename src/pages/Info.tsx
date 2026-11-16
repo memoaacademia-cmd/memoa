@@ -214,7 +214,7 @@ const PRIVACY: Sec[] = [
     title: 'Ce qui reste sur ton téléphone',
     paras: [
       "Pour que tu puisses lire et écouter tes cours sans connexion, Memoa garde une copie de tes cours et de tes notes déjà ouverts sur ton téléphone. Cette copie n'est envoyée à personne et elle est effacée quand tu te déconnectes.",
-      "Tes brouillons, tes notes écrites sans réseau, tes enregistrements en attente et l'avancement d'un TP en cours de rédaction sont aussi gardés sur ton téléphone, pour une durée limitée (72 h pour les brouillons, 24 h pour un TP).",
+      "Tes brouillons, tes notes écrites sans réseau, tes enregistrements en attente et l'avancement d'un TP en cours de rédaction sont aussi gardés sur ton téléphone, pour une durée limitée (48 h pour les brouillons, 24 h pour un TP).",
       "Pendant la rédaction d'un TP, Memoa peut garder l'écran allumé et, si tu l'autorises, t'envoyer une notification quand il est prêt. Tu peux refuser ou retirer cette autorisation dans les réglages de ton téléphone."
     ]
   },

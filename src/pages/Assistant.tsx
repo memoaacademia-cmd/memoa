@@ -293,13 +293,13 @@ export default function Assistant() {
             <span className="hm-memo-av" style={{ width: 72, height: 72 }}><MemoAvatar animal={profile?.memo_animal ?? null} size={50} /></span>
             <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong>
             <span className="muted">{courseId ? 'Je m’appuie sur les notes de ce cours.' : 'Choisis un cours pour que je m’appuie sur tes notes, ou pose-moi une question libre.'}</span>
-            <span className="muted" style={{ fontSize: 13 }}>Je peux aussi créer un cours, ajouter une note, faire un quiz ou un résumé, et préparer un TP : demande-moi ici.</span>
+            <span data-tour="as-actions" className="muted" style={{ fontSize: 13 }}>Je peux aussi créer un cours, ajouter une note, faire un quiz ou un résumé, et préparer un TP : demande-moi ici.</span>
             {!!courseId && <div className="as-pills" style={{ justifyContent: 'center' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => void send(s)}>{s}</button>)}</div>}
           </div>
         )}
         {messages.map((m, i) => m.role === 'user' ? (
           <div key={m.id} className="as-user-wrap">
-            {!thinking && <button type="button" className="as-edit" onClick={() => startEdit(i)} aria-label="Modifier ce message"><Icon name="pencil" size={16} /></button>}
+            {!thinking && <button type="button" data-tour={i === messages.findIndex((x) => x.role === 'user') ? 'as-edit' : undefined} className="as-edit" onClick={() => startEdit(i)} aria-label="Modifier ce message"><Icon name="pencil" size={16} /></button>}
             <div className="as-user">{m.content}</div>
           </div>
         ) : (

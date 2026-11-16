@@ -32,7 +32,7 @@ function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
   const pill = { unknown: 'PREMIUM', free: 'OFFRE FREE', trial: 'ESSAI GRATUIT', premium: 'PREMIUM ACTIF', expired: 'PREMIUM TERMINÉ' }[state]
   const cta = { unknown: 'Passer à Premium', free: 'Passer à Premium', trial: 'Voir les offres', premium: 'Mon abonnement', expired: 'Renouveler Premium' }[state]
   return (
-    <section className={'me-premium ' + (active ? 'active' : state === 'unknown' ? '' : state)} aria-label="Premium">
+    <section data-tour="me-premium" className={'me-premium ' + (active ? 'active' : state === 'unknown' ? '' : state)} aria-label="Premium">
       <span className="me-premium-pill">{pill}</span>
       {active && expiresAt ? (
         <>
