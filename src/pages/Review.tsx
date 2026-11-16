@@ -9,8 +9,9 @@ import { track } from '../lib/track'
 /** Cartes de révision : « À réviser aujourd’hui » (toutes les cours) ou celles d’un cours (/revision/:courseId). Marche sans connexion avec les cartes déjà créées. */
 export default function Review() {
   const { courseId } = useParams()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const uid = user?.id ?? ''
+  const memo = profile?.memo_name || 'Memo' // le prénom que l'étudiant a donné à son Memo
   const online = useOnline()
   const { cards, ready } = useCardList(uid)
   const { busy, error, setError, run } = useAction()
@@ -51,13 +52,13 @@ export default function Review() {
   async function generate() {
     if (!courseId) return
     setMade(null)
-    const n = await run(() => generateCards(uid, courseId))
+    const n = await run(() => generateCards(uid, courseId, memo))
     if (typeof n === 'number') setMade(n)
   }
 
   const genBtn = courseId && (
     <PillButton variant={mine.length ? 'outline' : 'solid'} onClick={() => void generate()} disabled={busy || !online}>
-      <Icon name="sparkle" size={20} />{busy ? 'Memo prépare tes cartes…' : mine.length ? 'Créer d’autres cartes' : 'Créer des cartes avec Memo'}
+      <Icon name="sparkle" size={20} />{busy ? `${memo} prépare tes cartes…` : mine.length ? 'Créer d’autres cartes' : `Créer des cartes avec ${memo}`}
     </PillButton>
   )
 
@@ -127,11 +128,11 @@ export default function Review() {
         </>
       ) : courseId ? (
         <>
-          <Empty title="Pas encore de cartes" text="Memo lit les notes de ce cours et prépare des cartes question / réponse. Ça coûte 1 point (comme un quiz) ; réviser est gratuit." />
+          <Empty title="Pas encore de cartes" text={`${memo} lit les notes de ce cours et prépare des cartes question / réponse. Ça coûte 1 point (comme un quiz) ; réviser est gratuit.`} />
           {genBtn}
         </>
       ) : (
-        <Empty title="Pas encore de cartes" text="Ouvre un cours et choisis « Cartes de révision » : Memo les prépare à partir de tes notes.">
+        <Empty title="Pas encore de cartes" text={`Ouvre un cours et choisis « Cartes de révision » : ${memo} les prépare à partir de tes notes.`}>
           <Link to="/sac" className="pill-btn sm">Voir mes cours</Link>
         </Empty>
       )}

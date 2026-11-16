@@ -823,7 +823,7 @@ export function CourseDetail() {
 
       <RowGroup label="Outils">
         <Row tour="course-modify" icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
-        <Row tour="course-cards" icon="copy" title="Cartes de révision" sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} à réviser · ${courseCards.length} au total` : 'Memo crée des cartes à partir de tes notes'} to={`/revision/${id}`} />
+        <Row tour="course-cards" icon="copy" title="Cartes de révision" sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} à réviser · ${courseCards.length} au total` : `${profile?.memo_name || 'Memo'} crée des cartes à partir de tes notes`} to={`/revision/${id}`} />
         <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
         {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
         <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
