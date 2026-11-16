@@ -45,6 +45,59 @@ export function parsePlan(plan: string): TpPart[] {
   return parts
 }
 
+/** Nombre MAXIMUM de parties principales selon les pages voulues (introduction, conclusion et bibliographie comprises). 1 page = 3 parties. */
+export const partsFor = (n: number) => (n <= 1 ? 3 : n <= 3 ? 4 : n <= 5 ? 5 : n <= 7 ? 6 : n <= 10 ? 7 : n <= 15 ? 8 : 10)
+/** Nombre maximum de sous-parties par partie : aucune pour un travail très court (1 à 2 pages), sinon 2. */
+export const subsFor = (n: number) => (n <= 2 ? 0 : 2)
+
+/** Retire la numérotation ou la puce au début d'une ligne de plan, pour garder seulement le titre. */
+const stripNum = (s: string) => s.replace(/^\s*[0-9]+(\.[0-9]+)+\s*[.)\-:–]?\s*/, '').replace(/^\s*(partie\s+)?([0-9]+|[ivxl]+|[a-z])\s*[.)\-:–]\s*/i, '').replace(/^[-•·▪●]\s*/, '').trim()
+
+/**
+ * Impose au plan le nombre de parties voulu. Le modèle ne respecte pas toujours « au plus N parties » (un TP d'une page pouvait revenir avec 18 parties,
+ * donc 18 appels de rédaction). Ici le code garde l'introduction et la conclusion, regroupe les parties du milieu (les titres en trop deviennent des
+ * sous-parties, ou sont joints au titre quand il n'y a pas de sous-partie) et renumérote. Un plan déjà dans la limite n'est pas touché.
+ */
+export function limitPlan(plan: string, pages: number): string {
+  if (!pages || pages < 1) return plan
+  const maxP = partsFor(pages)
+  const maxS = subsFor(pages)
+  const parts = parsePlan(plan)
+  if (parts.length < 2) return plan
+  const subsOf = (p: TpPart) => p.subs.map(stripNum).filter(Boolean)
+  if (parts.length <= maxP && parts.every((p) => subsOf(p).length <= maxS)) return plan
+
+  type Item = { title: string; subs: string[] }
+  const items: Item[] = parts.map((p) => ({ title: stripNum(p.title), subs: subsOf(p) }))
+  const intro = items.filter((i, k) => k === 0 && /^introduction/i.test(i.title))
+  let concl = items.filter((i, k) => k >= items.length - 2 && /^conclusion/i.test(i.title))
+  let biblio = items.filter((i) => /^bibliographie/i.test(i.title))
+  const middle = items.filter((i) => !intro.includes(i) && !concl.includes(i) && !biblio.includes(i))
+  if (intro.length + concl.length + biblio.length >= maxP) biblio = [] // très court : la bibliographie saute en premier
+  if (intro.length + concl.length + biblio.length >= maxP) concl = concl.slice(0, 1)
+  const slots = Math.max(1, maxP - intro.length - concl.length - biblio.length)
+
+  // Regroupe les parties du milieu en `slots` groupes consécutifs de taille à peu près égale.
+  const groups: Item[][] = []
+  const base = Math.floor(middle.length / slots)
+  let extra = middle.length % slots
+  let at = 0
+  for (let g = 0; g < slots && at < middle.length; g++) {
+    const size = base + (extra-- > 0 ? 1 : 0)
+    groups.push(middle.slice(at, at + size))
+    at += size
+  }
+  const merged: Item[] = groups.map((g) => {
+    if (g.length === 1) return g[0]
+    const [head, ...rest] = g
+    return maxS > 0
+      ? { title: head.title, subs: [...head.subs, ...rest.map((r) => r.title)] }
+      : { title: [head.title, rest[0].title].join(' et '), subs: [] }
+  })
+  const out = [...intro, ...merged, ...concl, ...biblio]
+  return out.map((it, i) => [`${i + 1}. ${it.title}`, ...it.subs.slice(0, maxS).map((x, j) => `${i + 1}.${j + 1} ${x}`)].join('\n')).join('\n')
+}
+
 /** Une partie est valide si son titre et chacune de ses sous-parties y figurent, avec un vrai développement. */
 export function partIsComplete(part: TpPart, text: string | undefined, relaxed = false): boolean {
   if (!text) return false
@@ -139,7 +192,7 @@ export interface WriteArgs {
 
 /** Rédige le TP partie par partie. Ne refait que les parties manquantes ou incomplètes. Lève une erreur claire si une partie échoue : le travail déjà fait est conservé (onSave). */
 export async function writeTp(a: WriteArgs): Promise<string> {
-  const parts = parsePlan(a.plan)
+  const parts = parsePlan(a.pages ? limitPlan(a.plan, a.pages) : a.plan)
   const texts: Record<number, string> = { ...a.texts }
   const titles = parts.map((p) => p.title).join('\n')
   // Longueur visée par partie : répartit les pages voulues (≈ 2000 caractères par page, titres et espaces compris) ; introduction et conclusion plus courtes.

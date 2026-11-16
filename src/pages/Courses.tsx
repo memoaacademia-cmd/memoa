@@ -22,7 +22,7 @@ import { isPremiumNow, usePremium } from '../lib/premium'
 import { usePref } from '../lib/prefs'
 import { cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
-import { adjustLength, assemble, loadProgress, parsePlan, partIsComplete, saveProgress } from '../lib/tpwrite'
+import { adjustLength, assemble, limitPlan, loadProgress, parsePlan, partIsComplete, partsFor, saveProgress, subsFor } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -1018,8 +1018,6 @@ export function TpAssistant() {
   const [planPages, setPlanPages] = useState<number | null>(null)
   /** Pages voulues : 5 par défaut (champ vide = 5). */
   const pagesNum = () => Math.max(1, Math.min(60, Math.round(Number(pagesWanted) || 5)))
-  /** Nombre de parties principales du plan selon les pages (introduction, conclusion et bibliographie comprises). */
-  const partsFor = (n: number) => (n <= 3 ? 4 : n <= 5 ? 5 : n <= 7 ? 6 : n <= 10 ? 7 : n <= 15 ? 8 : 10)
   const [notice, setNotice] = useState('')
   const lastTexts = useRef<Record<number, string>>({})
   const docTexts = useRef<Record<number, string>>({})
@@ -1068,8 +1066,8 @@ export function TpAssistant() {
 
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
-    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et AU PLUS 2 sous-parties par partie : chaque partie doit rester courte pour que tout tienne en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
+    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pagesNum()) ? `AU PLUS ${subsFor(pagesNum())} sous-parties par partie` : 'AUCUNE sous-partie (seulement les titres des parties)'} : chaque partie doit rester courte pour que tout tienne en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanTpText(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -1077,7 +1075,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}\n\nLe travail final doit rester à environ ${pagesNum()} pages : n'ajoute des parties que si l'étudiant le demande.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = cleanTpText(r.reply); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanTpText(r.reply), pagesNum()); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -1158,7 +1156,8 @@ export function TpAssistant() {
     if (!tpSession.current) return setError('Cette session de TP a expiré. Relance « Proposer un plan ».')
     setError(null)
     lastTexts.current = { ...texts }
-    const planNow = plan
+    const planNow = limitPlan(plan, pagesNum()) // sécurité : jamais plus de parties que ne le permet le nombre de pages
+    if (planNow !== plan) setPlan(planNow)
     startTpJob({
       courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts, pages: pagesNum(),
       onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum() }) }

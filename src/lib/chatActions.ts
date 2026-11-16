@@ -9,7 +9,7 @@ import { toAiText } from './blocks'
 import { track } from './track'
 import { stripAiNoise } from './pdf'
 import { cleanTpText } from './tpclean'
-import { saveProgress } from './tpwrite'
+import { limitPlan, saveProgress, subsFor, partsFor } from './tpwrite'
 import { startTpJob } from './tpjob'
 import { parseQuiz, QUIZ_PROMPT } from '../pages/Courses'
 import type { Course } from './types'
@@ -61,7 +61,6 @@ export function findCourse(courses: Course[], name: string, selectedId: string):
   return selectedId ? courses.find((c) => c.id === selectedId) ?? null : null
 }
 
-const partsFor = (n: number) => (n <= 3 ? 4 : n <= 5 ? 5 : n <= 7 ? 6 : n <= 10 ? 7 : n <= 15 ? 8 : 10)
 const pagesLabel = (n: number) => `${n} page${n > 1 ? 's' : ''}`
 
 const noCourse = (name: string): ActionOutcome => ({
@@ -156,9 +155,9 @@ async function tpPlanAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
   const pages = Math.max(1, Math.min(60, Math.round(Number(a.pages) || 5)))
   const r = await askAI({
     task: 'tp_plan', courseId: course.id, tpSession: null,
-    prompt: `Titre : ${title}\nConsignes : ${brief}\n\nLONGUEUR DU TRAVAIL : ${pagesLabel(pages)} au total (sans la page de garde). Propose AU PLUS ${partsFor(pages)} parties principales (introduction, conclusion et bibliographie comprises) et AU PLUS 2 sous-parties par partie : chaque partie doit rester courte pour que tout tienne en ${pagesLabel(pages)}. Ne dépasse jamais ce nombre de parties.`
+    prompt: `Titre : ${title}\nConsignes : ${brief}\n\nLONGUEUR DU TRAVAIL : ${pagesLabel(pages)} au total (sans la page de garde). Propose AU PLUS ${partsFor(pages)} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pages) ? `AU PLUS ${subsFor(pages)} sous-parties par partie` : 'AUCUNE sous-partie (seulement les titres des parties)'} : chaque partie doit rester courte pour que tout tienne en ${pagesLabel(pages)}. Ne dépasse jamais ce nombre de parties.`
   })
-  const plan = cleanTpText(r.reply)
+  const plan = limitPlan(cleanTpText(r.reply), pages)
   const tp: TpDraft = { courseId: course.id, courseTitle: course.title, title, brief, plan, session: r.tpSession ?? null, pages }
   saveProgress({ courseId: course.id, title, brief, plan, session: tp.session, texts: {}, at: Date.now(), pages })
   track('chat_action_done', { type: 'tp_plan' })
@@ -174,7 +173,7 @@ async function tpReviseAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
     task: 'tp_revise', courseId: tp.courseId, tpSession: tp.session,
     prompt: `Titre : ${tp.title}\nConsignes : ${tp.brief.slice(0, 2500)}\n\nPlan actuel :\n${tp.plan}\n\nModifications demandées par l'étudiant : ${changes}\n\nLe travail final doit rester à environ ${tp.pages} pages : n'ajoute des parties que si l'étudiant le demande.`
   })
-  const plan = cleanTpText(r.reply)
+  const plan = limitPlan(cleanTpText(r.reply), tp.pages)
   const next: TpDraft = { ...tp, plan, session: r.tpSession ?? tp.session }
   saveProgress({ courseId: next.courseId, title: next.title, brief: next.brief, plan, session: next.session, texts: {}, at: Date.now(), pages: next.pages })
   track('chat_action_done', { type: 'tp_revise' })
@@ -186,15 +185,16 @@ async function tpWriteAction(env: ActionEnv): Promise<ActionOutcome> {
   if (!tp) return { text: 'Je n’ai pas de plan de TP validé. Dis-moi le cours, le sujet et le nombre de pages, et je prépare un plan.' }
   if (!tp.session) return { text: 'La session de ce TP a expiré. Redemande-moi le plan et on repart.', tp: null }
   if (tp.writing) return { text: 'La rédaction de ce TP est déjà lancée : je te préviens ici dès que c’est prêt.' }
+  const planNow = limitPlan(tp.plan, tp.pages) // sécurité : jamais plus de parties que ne le permet le nombre de pages
   startTpJob({
-    courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: tp.plan, session: tp.session, texts: {}, pages: tp.pages,
-    onSave: (t) => saveProgress({ courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: tp.plan, session: tp.session, texts: t, at: Date.now(), pages: tp.pages })
+    courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: {}, pages: tp.pages,
+    onSave: (t) => saveProgress({ courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: t, at: Date.now(), pages: tp.pages })
   })
   track('chat_action_done', { type: 'tp_write' })
   return {
     text: `Je rédige ton TP « ${tp.title} » : ça prend quelques minutes, et tu peux changer de page, la rédaction continue. Quand il est prêt (je te le dis ici si tu restes, sinon une notification te prévient), va dans le cours « ${tp.courseTitle} » › Assistant TP : tu le trouveras déjà rédigé, prêt à télécharger en PDF avec sa page de garde.`,
     link: { to: `/tp/${tp.courseId}`, label: 'Ouvrir l’Assistant TP' },
-    tp: { ...tp, writing: true }
+    tp: { ...tp, plan: planNow, writing: true }
   }
 }
 
