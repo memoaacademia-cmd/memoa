@@ -8,6 +8,7 @@ import { useAuth } from '../lib/auth'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
 import { pendingState, runChatAction, type TpDraft } from '../lib/chatActions'
 import { useTpJob } from '../lib/tpjob'
+import { chatRun, clearPending, markPending, recoverChat, useChat, getChat, type ChatMsg } from '../lib/chatstate'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -15,19 +16,6 @@ import type { Message } from '../lib/types'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
-
-/** Message du chat : en plus d'un message normal, un message « local » est écrit par l'appli (résultat d'une action, refus d'image) et n'est pas dans l'historique du serveur. */
-type ChatMsg = Message & {
-  local?: boolean
-  link?: { to: string; label: string }
-  /** Texte tapé (sans le nom du fichier joint) et fichier joint : pour pouvoir modifier le message. */
-  raw?: string
-  att?: { name: string; text: string }
-  /** Ce que l'action a fait (une ligne, sans contenu de notes) : renvoyé à Memo pour qu'il s'en souvienne. */
-  fact?: string
-  /** État du TP après cette action (sert à revenir en arrière quand on modifie un message plus haut). */
-  tpSnap?: TpDraft | null
-}
 
 const IMAGE_NO = 'Je ne peux pas créer d’images pour le moment. Par contre, je peux t’aider avec tes notes, tes cours, des quiz ou des résumés. Et le bouton + de l’éditeur de notes te permet d’ajouter un tableau, une forme, un diagramme ou un graphique.'
 
@@ -45,17 +33,19 @@ export default function Assistant() {
   const courses = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
   const convs = useLoad(listConversations, [])
   const { error, setError, run } = useAction()
-  const [thinking, setThinking] = useState(false)
-  const cancelled = useRef(false)
+  // L'état du chat vit hors de la page (lib/chatstate) : quitter l'Assistant n'arrête pas la réponse, on la retrouve en revenant.
+  const [thinking, setThinking] = useChat('thinking')
+  const mounted = useRef(true)
+  const hiddenRef = useRef(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const beforeDict = useRef('')
-  const [courseId, setCourseId] = useState('')
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMsg[]>([])
+  const [courseId, setCourseId] = useChat('courseId')
+  const [conversationId, setConversationId] = useChat('conversationId')
+  const [messages, setMessages] = useChat('messages')
   // TP en préparation dans le chat, et message en cours de modification (index dans la liste).
-  const [tp, setTp] = useState<TpDraft | null>(null)
+  const [tp, setTp] = useChat('tp')
   const [editing, setEditing] = useState<number | null>(null)
-  const [acting, setActing] = useState(false)
+  const [acting, setActing] = useChat('acting')
   const tpJob = useTpJob(tp?.courseId ?? '')
   const announced = useRef('')
   const [text, setText] = useState('')
@@ -77,6 +67,15 @@ export default function Assistant() {
   const [kb, setKb] = useState(false)
 
   useEffect(() => () => { dict.current?.stop() }, [])
+  // Page quittée : la demande en cours continue dans lib/chatstate. En revenant (ou en rouvrant l'appli), on retrouve la réponse dans l'historique.
+  useEffect(() => {
+    mounted.current = true
+    const back = () => { if (document.hidden) { hiddenRef.current = true } else if (!getChat().thinking) void recoverChat(() => convs.reload()) }
+    document.addEventListener('visibilitychange', back)
+    void recoverChat(() => convs.reload())
+    return () => { mounted.current = false; document.removeEventListener('visibilitychange', back) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => { void fetchPoints().then(setPts).catch(() => { /* hors connexion : pas de solde */ }) }, [])
   // Une action lancée depuis le chat (cours, quiz, TP…) met le solde à jour ailleurs que dans la réponse du chat.
   useEffect(() => {
@@ -220,7 +219,8 @@ export default function Assistant() {
     setText('')
     setAttach(null)
     setEditing(null)
-    cancelled.current = false
+    const gen = ++chatRun.gen // une réponse qui arrive après « stop » ou après un autre envoi est ignorée
+    hiddenRef.current = false
     const userMsg: ChatMsg = { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '', raw: prompt, att: joined ?? undefined }
     // Memo ne crée pas d'images : il le dit tout de suite, sans appeler le serveur (rien n'est consommé).
     if (!joined && !wasEditing && isImageRequest(prompt)) {
@@ -230,13 +230,20 @@ export default function Assistant() {
     setMessages([...base, userMsg])
     if (wasEditing) setTp(tpNow)
     setThinking(true)
+    markPending(conversationId, base.filter((m) => !m.local).length) // si l'appli est fermée avant la réponse, on la retrouvera dans l'historique
     const r = await run(() => askAI({
       task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text, editFrom,
       pending: pendingState(tpNow, base.map((m) => m.fact).filter((f): f is string => !!f)) || undefined
     }))
     // Si l'étudiant a appuyé sur stop pendant ce temps, la réponse est simplement ignorée.
-    if (cancelled.current) return
-    if (!r) { setThinking(false); return }
+    if (gen !== chatRun.gen) return
+    if (!r) {
+      setThinking(false)
+      // L'appli était en veille pendant l'envoi : la réponse est peut-être déjà enregistrée, on la cherche dans l'historique.
+      if (hiddenRef.current) { setError(null); void recoverChat(() => convs.reload()) } else clearPending()
+      return
+    }
+    clearPending()
     if ('points' in r && r.points !== undefined) setPts(r.points)
     setConversationId(r.conversationId)
     setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
@@ -256,7 +263,7 @@ export default function Assistant() {
       fact: first, tpSnap: out.tp
     }])
   }
-  function stopThinking() { cancelled.current = true; setThinking(false); setActing(false); setError(null) }
+  function stopThinking() { chatRun.gen++; clearPending(); setThinking(false); setActing(false); setError(null) }
   function submit(e: FormEvent) { e.preventDefault(); void send(text) }
   function onKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
     // Sur ordinateur : Entrée envoie, Maj+Entrée saute une ligne. Sur téléphone : Entrée saute une ligne.
@@ -265,9 +272,9 @@ export default function Assistant() {
 
   async function openConv(id: string) {
     const msgs = await run(() => listMessages(id))
-    if (msgs) { setConversationId(id); setMessages(msgs); setTp(null); setEditing(null); setSheet(null) }
+    if (msgs) { chatRun.gen++; clearPending(); setThinking(false); setActing(false); setConversationId(id); setMessages(msgs); setTp(null); setEditing(null); setSheet(null) }
   }
-  function fresh() { setConversationId(null); setMessages([]); setTp(null); setEditing(null); setError(null); setSheet(null) }
+  function fresh() { chatRun.gen++; clearPending(); setThinking(false); setActing(false); setConversationId(null); setMessages([]); setTp(null); setEditing(null); setError(null); setSheet(null) }
 
   const courseName = (courses.data ?? []).find((c) => c.id === courseId)?.title
 

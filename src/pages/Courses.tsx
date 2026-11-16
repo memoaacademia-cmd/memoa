@@ -278,9 +278,23 @@ export function NewCourse() {
   )
 }
 
+/** Miniature de la page de garde du cours (même style que le PDF : Émeraude, ou doré en Premium), à la place de la petite icône de livre. */
+function CourseCoverThumb({ title, premium }: { title: string; premium: boolean }) {
+  const look = COVER_TEMPLATES[effectiveTemplate(premium ? 'premium' : 'emeraude', premium, 'emeraude')]
+  const style = { '--cv-main': `rgb(${look.main.join(',')})`, '--cv-acc': `rgb(${look.accent.join(',')})` } as CSSProperties
+  return (
+    <span className={`cc-thumb cv-${look.frame}${look.band === 'filled' ? ' cv-filled' : ''}`} style={style} aria-hidden="true">
+      <span className="cc-brand">MEMOA</span>
+      <span className="cc-rule" />
+      <span className="cc-band"><span className="cc-title">{title}</span></span>
+    </span>
+  )
+}
+
 /* Sac à dos : liste de lignes, un bouton « Nouveau cours », corbeille repliable de 30 jours. */
 export function Backpack() {
   const { user } = useAuth()
+  const isPrem = usePremium()
   const { data, loading, error, reload } = useLoad(() => listCourses(user?.id ?? ''), [user?.id])
   const trash = useLoad(listTrashedCourses, [])
   const { busy, error: actionError, run } = useAction()
@@ -327,7 +341,7 @@ export function Backpack() {
         <>
           <RowGroup tour="courses-list">
             {shown.length ? shown.map((c) => (
-              <Row key={c.id} icon="book" title={c.title} sub={`${c.notes_count} ${c.notes_count > 1 ? 'notes' : 'note'}`} to={`/sac/${c.id}`} />
+              <Row key={c.id} iconNode={<CourseCoverThumb title={c.title} premium={isPrem} />} title={c.title} sub={`${c.notes_count} ${c.notes_count > 1 ? 'notes' : 'note'}`} to={`/sac/${c.id}`} />
             )) : <div className="rg-empty">Aucun cours ne correspond.</div>}
           </RowGroup>
         </>
