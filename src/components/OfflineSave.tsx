@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BottomSheet, ErrorBox, Icon, PillButton, PillInput, Row, RowGroup } from './ui'
 import { useAuth } from '../lib/auth'
+import { syncReviews } from '../lib/review'
 import { enqueueNote, offlineCourses, pendingCount, syncOutboxLocked, type CachedCourse, type OutboxItem } from '../lib/outbox'
 
 /** Proposé quand l'étudiant appuie sur « Créer » SANS réseau : (a) nouveau cours à partir de la note, (b) ajout à un cours existant. Les deux marchent hors connexion. */
@@ -83,6 +84,7 @@ export function OutboxSync() {
     let alive = true
     const refresh = async () => { const n = await pendingCount(uid); if (alive) setLeft(n) }
     const go = async () => {
+      void syncReviews(uid) // résultats de révision faits sans réseau
       const r = await syncOutboxLocked(uid).catch(() => null)
       if (!alive) return
       if (r) {

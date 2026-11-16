@@ -37,7 +37,7 @@ export async function collectMyData(userId: string, email: string): Promise<Row>
   if (!isConfigured || !supabase) {
     return { ...base, mode: 'démo (données du navigateur)', donnees: loadDemo(), brouillons: drafts }
   }
-  const [profile, courses, notes, favs, activity, conversations, messages, payments, docs] = await Promise.all([
+  const [profile, courses, notes, favs, activity, conversations, messages, payments, docs, cartes] = await Promise.all([
     all('profiles', '*', 'created_at', (q) => q.eq('id', userId)),
     all('courses', 'id,title,created_at,deleted_at', 'created_at'),
     all('notes', 'id,course_id,title,content,source,created_at', 'created_at'),
@@ -46,7 +46,8 @@ export async function collectMyData(userId: string, email: string): Promise<Row>
     all('ai_conversations', 'id,title,created_at', 'created_at'),
     all('ai_messages', 'id,conversation_id,role,content,created_at', 'created_at'),
     all('payments', 'amount,currency,status,provider,created_at', 'created_at'),
-    all('library_documents', 'id,title,doc_type,course_title,promotion,status,created_at', 'created_at', (q) => q.eq('owner_id', userId))
+    all('library_documents', 'id,title,doc_type,course_title,promotion,status,created_at', 'created_at', (q) => q.eq('owner_id', userId)),
+    all('review_cards', 'id,course_id,question,answer,box,due_date,last_review,created_at', 'created_at')
   ])
   // Titres des documents mis en favoris.
   const ids = favs.map((f) => String(f.document_id))
@@ -66,7 +67,8 @@ export async function collectMyData(userId: string, email: string): Promise<Row>
     mes_documents_librairie: docs,
     jours_actifs: activity.map((a) => a.day),
     conversations_assistant: conversations.map((c) => ({ ...c, messages: messages.filter((m) => m.conversation_id === c.id) })),
-    paiements: payments
+    paiements: payments,
+    cartes_de_revision: cartes
   }
 }
 

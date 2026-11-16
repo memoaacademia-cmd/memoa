@@ -689,17 +689,24 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
   if (!error) return data as T
   let msg = fallback
   let limit = false
+  let code = ''
   const ctx = (error as { context?: Response }).context
-  // Rapport d'erreur : seulement les vraies pannes (serveur en erreur, réponse illisible), pas les refus normaux (points épuisés, demande invalide).
-  if ((!ctx && navigator.onLine !== false) || (ctx && ctx.status >= 500)) reportError(String((error as Error).message ?? 'échec'), `fn:${name}:${ctx?.status ?? 'réseau'}`)
   if (ctx && typeof ctx.json === 'function') {
     try {
       const j = await ctx.json()
       if (j && typeof j.error === 'string') msg = j.error
       if (j && j.code === 'premium_required') limit = true
+      if (j && typeof j.code === 'string') code = j.code
     } catch {
       /* corps illisible : on garde le message générique */
     }
+  }
+  if (code === 'ai_busy' || code === 'ai_disabled' || code === 'image_unavailable') {
+    // IA saturée ou coupée : ce n'est pas un plantage de l'appli, on le compte à part (aucun point n'a été retiré).
+    track('ai_unavailable', { code })
+  } else if ((!ctx && navigator.onLine !== false) || (ctx && ctx.status >= 500)) {
+    // Rapport d'erreur : seulement les vraies pannes (serveur en erreur, réponse illisible), pas les refus normaux (points épuisés, demande invalide).
+    reportError(String((error as Error).message ?? 'échec'), `fn:${name}:${ctx?.status ?? 'réseau'}`)
   }
   throw limit ? new LimitError(msg) : new Error(msg)
 }
@@ -731,6 +738,8 @@ export interface AiResult {
   points?: PointsInfo | null
   /** Session de TP ouverte (ou réutilisée) par le serveur : à renvoyer avec les demandes suivantes du même TP. */
   tpSession?: string
+  /** Présent quand l'étudiant avait demandé le web mais que la recherche n'a pas eu lieu (coupée ou plafond atteint). Pour le chat, la phrase est déjà dans la réponse. */
+  webNotice?: string
 }
 
 /** Solde de points de l'étudiant, sans rien consommer. null = essai ou Premium (rien à afficher). */
@@ -779,9 +788,39 @@ export async function askAI(args: {
   }
   const res = await invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
   trackAi(args)
+  if (res.webNotice) {
+    track('web_search_skipped', { task: args.task })
+    window.dispatchEvent(new CustomEvent('memoa-notice', { detail: res.webNotice }))
+  }
   // Tout l'appli (Accueil, Assistant) affiche le nouveau solde tout de suite.
   if (res.points !== undefined) window.dispatchEvent(new CustomEvent('memoa-points', { detail: res.points }))
   return res
+}
+
+/** Memo crée une image (Premium). Le serveur vérifie l'abonnement, le plafond du jour et enregistre l'image ; l'historique garde un repère [[image:chemin]]. */
+export async function askImage(args: { prompt: string; conversationId?: string | null }): Promise<{ reply: string; conversationId: string | null }> {
+  if (!isConfigured) {
+    await new Promise((r) => setTimeout(r, 600))
+    return { reply: "Mode démo : la création d'images n'est pas disponible.", conversationId: args.conversationId ?? null }
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour créer une image, il faut une connexion internet.')
+  track('image_requested')
+  try {
+    const r = await invoke<{ reply: string; conversationId: string | null }>('bright-worker', { task: 'image', prompt: args.prompt, conversationId: args.conversationId ?? null }, "Memo n'arrive pas à créer d'image pour le moment. Réessaie dans quelques minutes.")
+    track('image_created')
+    return { reply: r.reply, conversationId: r.conversationId ?? null }
+  } catch (e) {
+    const m = e instanceof Error ? e.message : ''
+    track(/réservé à Premium/.test(m) ? 'image_denied' : /tes \d+ images/.test(m) ? 'image_limit_reached' : 'image_failed')
+    throw e
+  }
+}
+
+/** Adresse temporaire (1 h) d'une image créée par Memo. `download` = nom du fichier : l'adresse télécharge au lieu d'afficher. */
+export async function imageUrl(path: string, download?: string): Promise<string> {
+  const { data, error } = await sb().storage.from('ai-images').createSignedUrl(path, download ? 300 : 3600, download ? { download } : undefined)
+  if (error || !data?.signedUrl) throw new Error('Image indisponible.')
+  return data.signedUrl
 }
 
 /** Envoie un fichier audio au serveur et reçoit le texte de ce qui y est dit. */

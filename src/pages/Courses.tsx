@@ -7,6 +7,7 @@ import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, Pil
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { isDue, useCards } from '../lib/review'
 import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
@@ -514,6 +515,7 @@ export function CourseDetail() {
   const [pdfPrompt, setPdfPrompt] = useState(params.get('pdf') === '1')
   const { drafts, now, reload: reloadDrafts } = useDrafts(user?.id)
   const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string; n: number; seen: string[] } | null>(null)
+  const courseCards = useCards(user?.id).filter((c) => c.course_id === id)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
   const reading = useVoice() !== null
@@ -821,6 +823,7 @@ export function CourseDetail() {
 
       <RowGroup label="Outils">
         <Row tour="course-modify" icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
+        <Row tour="course-cards" icon="copy" title="Cartes de révision" sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} à réviser · ${courseCards.length} au total` : 'Memo crée des cartes à partir de tes notes'} to={`/revision/${id}`} />
         <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
         {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
         <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />

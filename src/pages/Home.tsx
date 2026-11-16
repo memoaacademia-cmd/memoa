@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { firstNameOf } from '../lib/names'
 import { currentStreak, lastWeek, memoMood } from '../lib/streak'
 import { usePoints } from '../lib/points'
+import { isDue, useCards } from '../lib/review'
 import { useAvatar } from '../lib/avatar'
 import { usePlan } from '../lib/plan'
 import { usePref } from '../lib/prefs'
@@ -33,6 +34,7 @@ export default function Home() {
   const promoTitle = plan.state === 'expired' ? 'Retrouve Premium' : (pts && pts.left <= 0) ? 'Plus de points aujourd’hui ?' : 'Plus d’IA avec Premium'
   const promoSub = plan.state === 'expired' ? <>Ton abonnement est terminé · <Price cur="USD" /></> : (pts && pts.left <= 0) ? 'Premium te laisse continuer sans attendre minuit' : <>Sans compte à rebours de points · <Price cur="USD" /></>
   const mood = memoMood(days)
+  const dueCount = useCards(uid || undefined).filter((c) => isDue(c)).length
   const avatarSrc = useAvatar(profile?.avatar_url)
   const first = firstNameOf(profile) || 'toi'
   const list = courses.data ?? []
@@ -96,6 +98,14 @@ export default function Home() {
             <span>{last.notes_count} {last.notes_count > 1 ? 'notes' : 'note'}</span>
           </div>
           <span className="hm-play" aria-hidden="true"><Icon name="play" size={20} /></span>
+        </Link>
+      )}
+
+      {dueCount > 0 && (
+        <Link to="/revision" className="hm-review" data-tour="home-review">
+          <span className="hm-promo-ico" aria-hidden="true"><Icon name="quiz" size={18} stroke={2} /></span>
+          <span className="hm-promo-txt"><strong>À réviser aujourd’hui : {dueCount} {dueCount > 1 ? 'cartes' : 'carte'}</strong><span>Quelques minutes suffisent, même sans connexion</span></span>
+          <Icon name="chevright" size={18} />
         </Link>
       )}
 

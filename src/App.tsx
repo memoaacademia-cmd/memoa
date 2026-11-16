@@ -8,6 +8,7 @@ import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } 
 import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import { NotifStep, TrialStep } from './pages/Welcome'
 import Home from './pages/Home'
+import Review from './pages/Review'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
@@ -142,6 +143,8 @@ export default function App() {
             <Route path="/cours" element={<NewCourse />} />
             <Route path="/sac" element={<Backpack />} />
             <Route path="/sac/:id" element={<CourseDetail />} />
+            <Route path="/revision" element={<Review />} />
+            <Route path="/revision/:courseId" element={<Review />} />
             <Route path="/tp/:id" element={<TpAssistant />} />
             <Route path="/librairie" element={<Library />} />
             <Route path="/assistant" element={<Assistant />} />

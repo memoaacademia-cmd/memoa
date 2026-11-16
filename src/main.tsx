@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
+import NoticeBar from './components/NoticeBar'
 import { installTracking } from './lib/track'
 import { getPref } from './lib/prefs'
 import './styles.css'
@@ -22,6 +23,7 @@ if (framed && /[?&]paiement=retour/.test(window.location.search)) {
     <StrictMode>
       <ErrorBoundary>
         <App />
+        <NoticeBar />
       </ErrorBoundary>
     </StrictMode>
   )
