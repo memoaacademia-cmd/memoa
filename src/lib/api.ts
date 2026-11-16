@@ -741,6 +741,8 @@ export interface AiResult {
   tpSession?: string
   /** Présent quand l'étudiant avait demandé le web mais que la recherche n'a pas eu lieu (coupée ou plafond atteint). Pour le chat, la phrase est déjà dans la réponse. */
   webNotice?: string
+  /** Chat : action demandée par Memo (créer un cours, quiz, TP…), déjà vérifiée par le serveur. Exécutée par src/lib/chatActions.ts. */
+  action?: Record<string, unknown> | null
 }
 
 /** Solde de points de l'étudiant, sans rien consommer. null = essai ou Premium (rien à afficher). */
@@ -770,6 +772,10 @@ export async function askAI(args: {
   tpSession?: string | null
   /** Cartes de révision préparées automatiquement : gratuites, une fois par cours et par jour (le serveur vérifie). */
   auto?: boolean
+  /** Chat : état des actions en cours (plan de TP en attente, résultats des actions). Simple donnée pour Memo. */
+  pending?: string
+  /** Chat : identifiant du message envoyé que l'étudiant modifie. Ce message et la suite sont remplacés. */
+  editFrom?: string | null
 }): Promise<AiResult> {
   if (!isConfigured) {
     await new Promise((r) => setTimeout(r, 600))

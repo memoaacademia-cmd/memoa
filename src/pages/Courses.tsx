@@ -370,9 +370,9 @@ function saveBlob(name: string, blob: Blob) {
 
 /* Un cours du sac à dos : un grand bouton « Ajouter une note », la liste des outils, puis les notes. */
 /* ------------------------------ Quiz ------------------------------ */
-interface QuizQ { q: string; opts: string[]; ans: number; why: string }
+export interface QuizQ { q: string; opts: string[]; ans: number; why: string }
 
-const QUIZ_PROMPT = `Fais-moi un quiz de 5 questions à choix multiples (4 choix chacune) sur ce cours. Réponds UNIQUEMENT dans ce format exact, sans introduction, sans conclusion, sans astérisques, avec une ligne vide entre les questions :
+export const QUIZ_PROMPT = `Fais-moi un quiz de 5 questions à choix multiples (4 choix chacune) sur ce cours. Réponds UNIQUEMENT dans ce format exact, sans introduction, sans conclusion, sans astérisques, avec une ligne vide entre les questions :
 QUESTION: la question
 A) premier choix
 B) deuxième choix
@@ -382,7 +382,7 @@ REPONSE: la lettre de la bonne réponse
 EXPLICATION: une phrase courte tirée de mes notes`
 
 /** Découpe la réponse de l'IA en questions. Si le format n'est pas respecté, la liste est vide et on affiche le texte tel quel. */
-function parseQuiz(text: string): QuizQ[] {
+export function parseQuiz(text: string): QuizQ[] {
   const clean = text.replace(/\*\*/g, '').replace(/\r/g, '')
   const blocks = clean.split(/(?:^|\n)\s*(?:QUESTION|Question)\s*\d*\s*[:.)-]/).slice(1)
   const out: QuizQ[] = []
@@ -1118,7 +1118,7 @@ export function TpAssistant() {
   const stepText = writing ? job?.step ?? '' : step
   useEffect(() => {
     const p = loadProgress(id)
-    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
+    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); if (p.pages) setPagesWanted(String(p.pages)); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
   // L'avancement en direct (si on revient sur la page pendant la rédaction).
@@ -1131,7 +1131,7 @@ export function TpAssistant() {
   }, [job?.result, id])
   useEffect(() => { if (job?.error && !job.running) { setError(job.error); dismissTpError(id) } }, [job?.error, job?.running, id])
   function persist(nextPlan: string | null, t: Record<number, string>) {
-    if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now() })
+    if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum() })
   }
   function cancelWrite() {
     if (!window.confirm('Annuler la rédaction ? Les parties déjà rédigées seront effacées. Ton plan est gardé et tu ne repaies rien.')) return
@@ -1147,7 +1147,7 @@ export function TpAssistant() {
     const planNow = plan
     startTpJob({
       courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts, pages: pagesNum(),
-      onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now() }) }
+      onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum() }) }
     })
   }
 

@@ -87,7 +87,7 @@ async function run(id: string) {
       stopMode.delete(id)
       if (mode === 'cancel') {
         // Annulation : on efface les parties rédigées, mais on garde le plan et la session déjà payée.
-        saveProgress({ courseId: id, title: a.title, brief: a.brief, plan: a.plan, session: a.session, texts: {}, at: Date.now() })
+        saveProgress({ courseId: id, title: a.title, brief: a.brief, plan: a.plan, session: a.session, texts: {}, at: Date.now(), pages: a.pages })
         set(id, { running: false, step: '', texts: {}, result: null, error: null, interrupted: false, paused: false })
       } else {
         set(id, { running: false, step: '', interrupted: false, paused: true })

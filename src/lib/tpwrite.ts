@@ -75,7 +75,7 @@ export function missingParts(parts: TpPart[], texts: Record<number, string>, rel
 export const assemble = (parts: TpPart[], texts: Record<number, string>) => cleanTpText(parts.map((p) => (texts[p.n] ?? '').trim()).filter(Boolean).join('\n\n'))
 
 const KEY = (courseId: string) => `memoa-tp-progress:${courseId}`
-export interface TpProgress { courseId: string; title: string; brief: string; plan: string; session: string | null; texts: Record<number, string>; at: number }
+export interface TpProgress { courseId: string; title: string; brief: string; plan: string; session: string | null; texts: Record<number, string>; at: number; /** Nombre de pages voulu (sans page de garde). */ pages?: number }
 export function loadProgress(courseId: string): TpProgress | null {
   try {
     const p = JSON.parse(localStorage.getItem(KEY(courseId)) ?? 'null') as TpProgress | null

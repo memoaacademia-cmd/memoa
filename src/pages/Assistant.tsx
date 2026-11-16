@@ -6,6 +6,8 @@ import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spin
 import { askAI, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
+import { pendingState, runChatAction, type TpDraft } from '../lib/chatActions'
+import { useTpJob } from '../lib/tpjob'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -13,6 +15,21 @@ import type { Message } from '../lib/types'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
+
+/** Message du chat : en plus d'un message normal, un message « local » est écrit par l'appli (résultat d'une action, refus d'image) et n'est pas dans l'historique du serveur. */
+type ChatMsg = Message & {
+  local?: boolean
+  link?: { to: string; label: string }
+  /** Texte tapé (sans le nom du fichier joint) et fichier joint : pour pouvoir modifier le message. */
+  raw?: string
+  att?: { name: string; text: string }
+  /** Ce que l'action a fait (une ligne, sans contenu de notes) : renvoyé à Memo pour qu'il s'en souvienne. */
+  fact?: string
+  /** État du TP après cette action (sert à revenir en arrière quand on modifie un message plus haut). */
+  tpSnap?: TpDraft | null
+}
+
+const IMAGE_NO = 'Je ne peux pas créer d’images pour le moment. Par contre, je peux t’aider avec tes notes, tes cours, des quiz ou des résumés. Et le bouton + de l’éditeur de notes te permet d’ajouter un tableau, une forme, un diagramme ou un graphique.'
 
 /** « 6 h 59 » : temps restant avant minuit (heure de Kinshasa), quand les 20 points reviennent. */
 function countdown(ms: number): string {
@@ -29,13 +46,18 @@ export default function Assistant() {
   const convs = useLoad(listConversations, [])
   const { error, setError, run } = useAction()
   const [thinking, setThinking] = useState(false)
-  const [drawing, setDrawing] = useState(false) // Memo crée une image (Premium)
   const cancelled = useRef(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const beforeDict = useRef('')
   const [courseId, setCourseId] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMsg[]>([])
+  // TP en préparation dans le chat, et message en cours de modification (index dans la liste).
+  const [tp, setTp] = useState<TpDraft | null>(null)
+  const [editing, setEditing] = useState<number | null>(null)
+  const [acting, setActing] = useState(false)
+  const tpJob = useTpJob(tp?.courseId ?? '')
+  const announced = useRef('')
   const [text, setText] = useState('')
   const [listening, setListening] = useState(false)
   const [web, setWeb] = useState(false) // éteinte par défaut : l'étudiant l'active quand il en a besoin
@@ -56,6 +78,24 @@ export default function Assistant() {
 
   useEffect(() => () => { dict.current?.stop() }, [])
   useEffect(() => { void fetchPoints().then(setPts).catch(() => { /* hors connexion : pas de solde */ }) }, [])
+  // Une action lancée depuis le chat (cours, quiz, TP…) met le solde à jour ailleurs que dans la réponse du chat.
+  useEffect(() => {
+    const on = (e: Event) => setPts((e as CustomEvent<PointsInfo | null>).detail ?? null)
+    window.addEventListener('memoa-points', on)
+    return () => window.removeEventListener('memoa-points', on)
+  }, [])
+  // Le TP lancé depuis le chat est prêt (ou a échoué) alors que l'étudiant est toujours sur cette page : Memo le dit ici.
+  useEffect(() => {
+    if (!tp?.writing || !tpJob) return
+    if (tpJob.result !== null && announced.current !== tp.courseId + ':ok') {
+      announced.current = tp.courseId + ':ok'
+      setMessages((m) => [...m, { id: 'x' + Date.now(), role: 'assistant', local: true, created_at: '', content: `Ton TP « ${tp.title} » est prêt ! Va dans le cours « ${tp.courseTitle} » › Assistant TP : tu le trouveras déjà rédigé, prêt à télécharger en PDF avec sa page de garde.`, link: { to: `/tp/${tp.courseId}`, label: 'Ouvrir l’Assistant TP' }, fact: `TP « ${tp.title} » rédigé : prêt dans l'Assistant TP du cours.`, tpSnap: null }])
+      setTp(null)
+    } else if (tpJob.error && !tpJob.running && announced.current !== tp.courseId + ':err') {
+      announced.current = tp.courseId + ':err'
+      setMessages((m) => [...m, { id: 'x' + Date.now(), role: 'assistant', local: true, created_at: '', content: `La rédaction de ton TP « ${tp.title} » s’est arrêtée : ${tpJob.error} Ouvre l’Assistant TP du cours pour la reprendre, sans point en plus.`, link: { to: `/tp/${tp.courseId}`, label: 'Ouvrir l’Assistant TP' } }])
+    }
+  }, [tp, tpJob])
   // À zéro : le compte à rebours avance chaque seconde ; à la fin, on relit le solde (les 20 points sont revenus).
   const resetMs = pts?.resetAt ? new Date(pts.resetAt).getTime() : 0
   useEffect(() => {
@@ -135,7 +175,7 @@ export default function Assistant() {
     setReading('')
     if (t === undefined) return
     if (t.length < 10) return setError("Je n'ai pas pu lire de texte dans ce fichier. Essaie une photo plus nette ou un PDF non scanné.")
-    setAttach({ name: f.name || 'photo', text: t.slice(0, 6500) })
+    setAttach({ name: f.name || 'photo', text: t.slice(0, 20000) })
   }
   function readAloud(m: Message) {
     if (speakingId === m.id) { stopSpeaking(); return }
@@ -146,34 +186,77 @@ export default function Assistant() {
     try { await navigator.clipboard.writeText(plainMessage(m.content)); setCopied(m.id); window.setTimeout(() => setCopied(''), 1500) } catch { /* copie refusée : rien à faire */ }
   }
 
+  /** Touche le crayon : le message revient dans le champ ; en envoyant, il remplace ce message et tout ce qui le suit. */
+  function startEdit(i: number) {
+    const m = messages[i]
+    if (!m || m.role !== 'user' || thinking) return
+    setEditing(i)
+    setText(m.raw ?? m.content)
+    setAttach(m.att ?? null)
+    setError(null)
+    window.setTimeout(() => taRef.current?.focus(), 0)
+  }
+  function cancelEdit() { setEditing(null); setText(''); setAttach(null) }
+
   async function send(question: string) {
     const prompt = question.trim()
     if (!prompt || thinking) return
     if (listening) stopMic()
-    setText('')
     const joined = attach
+    // Modification d'un message déjà envoyé : on repart de ce point. Le serveur remplace ce message et la suite (et compte un nouveau message).
+    const wasEditing = editing !== null
+    const base = editing !== null ? messages.slice(0, editing) : messages
+    let tpNow = tp
+    let editFrom: string | null = null
+    if (editing !== null) {
+      tpNow = [...base].reverse().find((m) => m.tpSnap !== undefined)?.tpSnap ?? null
+      if (conversationId) {
+        const nth = base.filter((m) => m.role === 'user' && !m.local).length
+        const rows = await run(() => listMessages(conversationId))
+        if (rows === undefined) return
+        editFrom = rows.filter((m) => m.role === 'user')[nth]?.id ?? null
+      }
+    }
+    setText('')
     setAttach(null)
+    setEditing(null)
     cancelled.current = false
-    setMessages((m) => [...m, { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '' }])
+    const userMsg: ChatMsg = { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '', raw: prompt, att: joined ?? undefined }
+    // Memo ne crée pas d'images : il le dit tout de suite, sans appeler le serveur (rien n'est consommé).
+    if (!joined && !wasEditing && isImageRequest(prompt)) {
+      setMessages([...base, { ...userMsg, local: true }, { id: 'a' + Date.now(), role: 'assistant', local: true, created_at: '', content: IMAGE_NO }])
+      return
+    }
+    setMessages([...base, userMsg])
+    if (wasEditing) setTp(tpNow)
     setThinking(true)
-    // « dessine-moi… » : tâche image (le serveur réserve cette fonction à Premium et refuse les autres comptes avec une explication).
-    // Création d'images désactivée (abandonnée) : « dessine-moi… » part comme un message normal. Pour la remettre : `!joined && isImageRequest(prompt)`.
-    const wantsImage = false as boolean
-    void isImageRequest
-    setDrawing(wantsImage)
-    const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
+    const r = await run(() => askAI({
+      task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text, editFrom,
+      pending: pendingState(tpNow, base.map((m) => m.fact).filter((f): f is string => !!f)) || undefined
+    }))
     // Si l'étudiant a appuyé sur stop pendant ce temps, la réponse est simplement ignorée.
     if (cancelled.current) return
+    if (!r) { setThinking(false); return }
+    if ('points' in r && r.points !== undefined) setPts(r.points)
+    setConversationId(r.conversationId)
+    setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
+    convs.reload()
+    if (!r.action || !user) { setThinking(false); return }
+    // Memo demande une action (créer un cours, quiz, TP…) : elle est exécutée ici, avec ses propres points ; le résultat est dit dans le chat.
+    setActing(true)
+    const out = await runChatAction(r.action, { userId: user.id, courses: courses.data ?? [], courseId, attachment: joined?.text, message: prompt, tp: tpNow })
+    setActing(false)
     setThinking(false)
-    setDrawing(false)
-    if (r) {
-      if ('points' in r && r.points !== undefined) setPts(r.points)
-      setConversationId(r.conversationId)
-      setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
-      convs.reload()
-    }
+    if (out.tp !== undefined) setTp(out.tp)
+    if (out.reload) courses.reload()
+    const first = out.text.split('\n')[0].slice(0, 160)
+    setMessages((m) => [...m, {
+      id: 'x' + Date.now(), role: 'assistant', local: true, created_at: '', content: out.text,
+      link: out.link ?? (out.premium ? { to: '/premium', label: 'Voir Premium' } : undefined),
+      fact: first, tpSnap: out.tp
+    }])
   }
-  function stopThinking() { cancelled.current = true; setThinking(false); setDrawing(false); setError(null) }
+  function stopThinking() { cancelled.current = true; setThinking(false); setActing(false); setError(null) }
   function submit(e: FormEvent) { e.preventDefault(); void send(text) }
   function onKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
     // Sur ordinateur : Entrée envoie, Maj+Entrée saute une ligne. Sur téléphone : Entrée saute une ligne.
@@ -182,9 +265,9 @@ export default function Assistant() {
 
   async function openConv(id: string) {
     const msgs = await run(() => listMessages(id))
-    if (msgs) { setConversationId(id); setMessages(msgs); setSheet(null) }
+    if (msgs) { setConversationId(id); setMessages(msgs); setTp(null); setEditing(null); setSheet(null) }
   }
-  function fresh() { setConversationId(null); setMessages([]); setError(null); setSheet(null) }
+  function fresh() { setConversationId(null); setMessages([]); setTp(null); setEditing(null); setError(null); setSheet(null) }
 
   const courseName = (courses.data ?? []).find((c) => c.id === courseId)?.title
 
@@ -210,28 +293,39 @@ export default function Assistant() {
             <span className="hm-memo-av" style={{ width: 72, height: 72 }}><MemoAvatar animal={profile?.memo_animal ?? null} size={50} /></span>
             <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong>
             <span className="muted">{courseId ? 'Je m’appuie sur les notes de ce cours.' : 'Choisis un cours pour que je m’appuie sur tes notes, ou pose-moi une question libre.'}</span>
+            <span className="muted" style={{ fontSize: 13 }}>Je peux aussi créer un cours, ajouter une note, faire un quiz ou un résumé, et préparer un TP : demande-moi ici.</span>
             {!!courseId && <div className="as-pills" style={{ justifyContent: 'center' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => void send(s)}>{s}</button>)}</div>}
           </div>
         )}
-        {messages.map((m) => m.role === 'user' ? (
-          <div key={m.id} className="as-user">{m.content}</div>
+        {messages.map((m, i) => m.role === 'user' ? (
+          <div key={m.id} className="as-user-wrap">
+            {!thinking && <button type="button" className="as-edit" onClick={() => startEdit(i)} aria-label="Modifier ce message"><Icon name="pencil" size={16} /></button>}
+            <div className="as-user">{m.content}</div>
+          </div>
         ) : (
           <div key={m.id} className="as-ai">
             {(() => {
               const img = parseImageMessage(m.content)
               return img ? <><ChatImage path={img.path} />{img.text && <RichText text={img.text} />}</> : <RichText text={m.content} />
             })()}
+            {m.link && <Link to={m.link.to} className="pill-btn sm as-link">{m.link.label}</Link>}
             <div className="as-acts">
               <button type="button" className="speak-btn" style={{ margin: 0 }} onClick={() => void copy(m)} aria-label="Copier la réponse"><Icon name={copied === m.id ? 'check' : 'copy'} size={18} /></button>
               {canSpeak() && <button type="button" className={'speak-btn' + (speakingId === m.id ? ' on' : '')} style={{ margin: 0 }} onClick={() => readAloud(m)} aria-label={speakingId === m.id ? 'Arrêter la lecture' : 'Écouter la réponse'} aria-pressed={speakingId === m.id}><Icon name={speakingId === m.id ? 'stop' : 'speaker'} size={18} /></button>}
             </div>
           </div>
         ))}
-        {thinking && <div className="as-ai muted">{drawing ? `${profile?.memo_name || 'Memo'} dessine ton image…` : 'Réflexion…'}</div>}
+        {thinking && <div className="as-ai muted">{acting ? `${profile?.memo_name || 'Memo'} s’en occupe…` : 'Réflexion…'}</div>}
       </div>
 
       <form className="as-comp" onSubmit={submit}>
         <ErrorBox message={error} />
+        {editing !== null && (
+          <div className="as-editing" role="status">
+            <span>Tu modifies ton message : {profile?.memo_name || 'Memo'} repart de ce point. Cela compte comme un nouveau message.</span>
+            <button type="button" className="link" style={{ textDecoration: 'none' }} onClick={cancelEdit}>Annuler</button>
+          </div>
+        )}
         {(attach || reading) && (
           <div>
             {reading ? <span className="muted">{reading}</span> : attach && <span className="attach-chip"><Icon name="pdf" size={16} /><span>{attach.name}</span><button type="button" className="link" style={{ textDecoration: 'none' }} onClick={() => setAttach(null)} aria-label="Retirer le fichier joint"><Icon name="close" size={16} /></button></span>}
@@ -245,7 +339,7 @@ export default function Assistant() {
             className="as-ta"
             rows={1}
             placeholder={listening ? 'Je t’écoute…' : 'Pose ta question à Memo'}
-            maxLength={6000}
+            maxLength={40000}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKey}
