@@ -143,10 +143,10 @@ export function Me() {
   )
 }
 
-function SwitchRow({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
+function SwitchRow({ label, on, set, sub }: { label: string; on: boolean; set: (v: boolean) => void; sub?: string }) {
   return (
     <div className="rg-row" style={{ cursor: 'default' }}>
-      <span className="rg-body"><span className="rg-title" id={'sw-' + label}>{label}</span></span>
+      <span className="rg-body"><span className="rg-title" id={'sw-' + label}>{label}</span>{sub && <span className="rg-sub">{sub}</span>}</span>
       <button type="button" role="switch" aria-checked={on} aria-labelledby={'sw-' + label} className="switch" onClick={() => set(!on)} />
     </div>
   )
@@ -238,7 +238,7 @@ export function Settings() {
       {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
 
       <RowGroup label="Notifications">
-        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications « Le savais-tu ? »" on={pushOn} set={(v) => void togglePush(v)} />}
+        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications" sub="« Le savais-tu ? », rappels d’examens, interros et TP, brouillons" on={pushOn} set={(v) => void togglePush(v)} />}
       </RowGroup>
       {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
 
