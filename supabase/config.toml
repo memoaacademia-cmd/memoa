@@ -19,3 +19,7 @@ verify_jwt = false
 # Le rattrapage des paiements est lancé par la planification de Supabase (CRON_SECRET vérifié dans le code).
 [functions.payments-reconcile]
 verify_jwt = false
+
+# Le rappel des cartes de révision est lancé par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.cards-reminder-push]
+verify_jwt = false
