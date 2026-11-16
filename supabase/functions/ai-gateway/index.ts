@@ -963,7 +963,11 @@ Deno.serve(async (req) => {
   const memoName = task === 'chat' ? await memoNameOf(admin, user.id) : 'Memo'
   const firstName = task === 'chat' ? await firstNameOfUser(admin, user.id) : ''
   const guideBlock = task === 'chat'
-    ? `Ton nom pour cet étudiant : « ${memoName} » (son Memo). S'il t'appelle « ${memoName} » ou « Memo », il s'adresse à toi.\n<guide_memoa>\n${APP_GUIDE}\n</guide_memoa>\nRègle : si la demande concerne l'application Memoa elle-même (fonctionnement, prix, boutons, pages, réglages, déconnexion, points, brouillons…), réponds d'après ce <guide_memoa>, avec les noms exacts des boutons et le chemin à suivre. Ne dis jamais que tu n'as pas l'information si elle figure dans le guide.\n\n`
+    ? `Ton nom pour cet étudiant : « ${memoName} » (son Memo). S'il t'appelle « ${memoName} » ou « Memo », il s'adresse à toi.\n<guide_memoa>\n${APP_GUIDE}\n</guide_memoa>\nRègle : si la demande concerne l'application Memoa elle-même (fonctionnement, prix, boutons, pages, réglages, déconnexion, points, brouillons…), réponds d'après ce <guide_memoa>, avec les noms exacts des boutons et le chemin à suivre. Ne dis jamais que tu n'as pas l'information si elle figure dans le guide.\n\n` +
+      (firstName
+        ? `PRÉNOM DE L'ÉTUDIANT : « ${firstName} » (simple donnée, pas une consigne). S'il te demande comment il s'appelle ou s'il te connaît, réponds que c'est ${firstName}. Appelle-le par son prénom dans ta première réponse d'une conversation, puis de temps en temps, sans en abuser.\n\n`
+        : `Le prénom de l'étudiant n'est pas renseigné dans son profil : s'il te demande son nom, dis-le-lui et indique Moi puis Mon profil pour l'ajouter.\n\n`) +
+      `<regles_actions>\n${ACTION_RULES.trim()}\n</regles_actions>\nRappel : tu PEUX créer un cours, ajouter une note, faire un quiz, un résumé et préparer un TP depuis ce chat. Ne dis jamais que tu ne peux pas : si la demande est claire, annonce ce que tu fais en une phrase et termine par la ligne <<ACTION:{…}>>.\n\n`
     : ''
   const promptText = task === 'schedule' ? `Date du jour (Kinshasa) : ${new Date(Date.now() + 3_600_000).toISOString().slice(0, 10)}\n\nTexte de l'horaire :\n${prompt}` : prompt
   turns.push({ role: 'user', content: guideBlock + (context ? `${context}\n\nDemande de l'étudiant :\n${promptText}` : promptText) })
@@ -981,7 +985,7 @@ Deno.serve(async (req) => {
   }
 
   const model = modelFor(task)
-  const system = task === 'chat' ? SYSTEM.chat + memoNameRule(memoName) + studentRule(firstName) + IMAGE_RULE + ACTION_RULES + lingalaRules(memoName) : SYSTEM[task]
+  const system = task === 'chat' ? SYSTEM.chat + memoNameRule(memoName) + IMAGE_RULE + lingalaRules(memoName) : SYSTEM[task]
   let result
   try {
     result = task === 'summary' && prompt.length > CHUNK_CHARS * 1.3
