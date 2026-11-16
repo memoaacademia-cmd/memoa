@@ -18,6 +18,7 @@ import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
 import Tours from './pages/Tours'
 import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
+import AutoCards from './components/AutoCards'
 import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
@@ -89,6 +90,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
       {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
       <OutboxSync />
+      <AutoCards />
       <TourProvider>
         <Outlet />
         <MiniPlayer />

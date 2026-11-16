@@ -71,11 +71,20 @@ export default function Review() {
         <div className="rv-progress" role="status" aria-label={`Carte ${i + 1} sur ${session.length}`}>
           <i style={{ width: `${(i / session.length) * 100}%` }} />
         </div>
-        <span className="muted">{c.course_title} · carte {i + 1} sur {session.length}</span>
-        <section className="card rv-card" aria-live="polite">
-          <strong className="h2" style={{ margin: 0 }}>{c.question}</strong>
-          {shown && <p className="rv-answer">{c.answer}</p>}
-        </section>
+        <span className="muted rv-meta">{c.course_title} · carte {i + 1} sur {session.length}</span>
+        <div className={'rv-flip' + (shown ? ' on' : '')} key={c.id}>
+          <button type="button" className="rv-flip-in" onClick={() => setShown((v) => !v)} aria-label={shown ? 'Revoir la question' : 'Retourner la carte pour voir la réponse'}>
+            <span className="rv-face rv-front" aria-hidden={shown}>
+              <small>QUESTION</small>
+              <strong>{c.question}</strong>
+              <em>Touche la carte pour la retourner</em>
+            </span>
+            <span className="rv-face rv-back" aria-hidden={!shown}>
+              <small>RÉPONSE</small>
+              <strong>{c.answer}</strong>
+            </span>
+          </button>
+        </div>
         {!shown ? (
           <PillButton size="lg" onClick={() => setShown(true)}>Voir la réponse</PillButton>
         ) : (
@@ -95,10 +104,16 @@ export default function Review() {
     return (
       <main className="page">
         <PageHead to={back} title="Séance terminée" />
-        <section className="card rv-card">
-          <strong className="h2" style={{ margin: 0 }}>Bravo, {session.length} {session.length > 1 ? 'cartes revues' : 'carte revue'}</strong>
-          <span>{knew} {knew > 1 ? 'savaient' : 'savais'} · {again} à revoir</span>
-          <span className="muted">Les cartes à revoir reviennent demain ; celles que tu connais reviennent plus tard, de plus en plus espacées.</span>
+        <section className="card rv-done">
+          <span className="rv-badge" aria-hidden="true"><Icon name="check" size={34} stroke={2.6} /></span>
+          <strong className="h2" style={{ margin: 0 }}>{knew === session.length ? 'Sans faute, bravo !' : knew * 2 >= session.length ? 'Beau travail !' : 'Bien joué, tu as fait le plus dur !'}</strong>
+          <span>{session.length} {session.length > 1 ? 'cartes revues' : 'carte revue'} aujourd’hui.</span>
+          <div className="rv-stats">
+            <div><b>{knew}</b><span>{knew > 1 ? 'je savais' : 'je savais'}</span></div>
+            <div><b>{again}</b><span>à revoir</span></div>
+          </div>
+          <span className="rv-flame"><Icon name="flame" size={16} /> Ta série du jour est validée.</span>
+          <span className="muted">{again > 0 ? `Les ${again} cartes à revoir reviennent demain. ` : ''}Celles que tu connais reviennent plus tard, de plus en plus espacées : c’est comme ça qu’on retient longtemps.</span>
         </section>
         {left > 0 && <PillButton size="lg" onClick={start}>Continuer ({left} {left > 1 ? 'cartes restantes' : 'carte restante'})</PillButton>}
         <PillButton size="lg" variant={left > 0 ? 'outline' : 'solid'} to={back}>{courseId ? 'Retour au cours' : 'Retour à l’accueil'}</PillButton>

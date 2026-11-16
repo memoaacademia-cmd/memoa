@@ -178,14 +178,14 @@ function parseLoose(text: string): { question: string; answer: string }[] {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
-/** Memo crée des cartes à partir des notes du cours (coûte comme un quiz : 1 point ; Premium et essai : rien à compter). Renvoie le nombre de cartes ajoutées. */
-export async function generateCards(uid: string, courseId: string, memo = 'Memo'): Promise<number> {
+/** Memo crée des cartes à partir des notes du cours (à la demande : 1 point comme un quiz, Premium et essai : rien à compter ; en automatique : gratuit, une fois par cours et par jour). Renvoie le nombre de cartes ajoutées. */
+export async function generateCards(uid: string, courseId: string, memo = 'Memo', opts: { auto?: boolean } = {}): Promise<number> {
   if (!isConfigured || !supabase) throw new Error("Les cartes de révision ne sont pas disponibles en mode démo.")
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour créer des cartes, il faut une connexion internet.')
   const existing = cachedCards(uid).filter((c) => c.course_id === courseId)
   const avoid = existing.slice(-40).map((c) => `- ${c.question}`).join('\n')
   const prompt = 'Crée des cartes de révision (question et réponse courte) à partir des notes de ce cours.' + (avoid ? `\n\nQuestions DÉJÀ existantes, ne les repose pas :\n${avoid}` : '')
-  const r = await askAI({ task: 'cards', courseId, prompt })
+  const r = await askAI({ task: 'cards', courseId, prompt, auto: opts.auto === true })
   const known = new Set(existing.map((c) => norm(c.question)))
   const fresh = parseCards(r.reply).filter((c) => !known.has(norm(c.question)))
   if (!fresh.length) throw new Error(`${memo} n'a pas réussi à préparer de cartes cette fois. Réessaie (ou ajoute d'abord des notes à ce cours).`)
@@ -194,7 +194,7 @@ export async function generateCards(uid: string, courseId: string, memo = 'Memo'
   const added = ((data ?? []) as unknown as Raw[]).map(fromRaw).filter((c): c is Card => !!c)
   write(CACHE(uid), [...cachedCards(uid), ...added])
   changed()
-  track('cards_generated', { count: added.length })
+  track(opts.auto ? 'cards_auto_generated' : 'cards_generated', { count: added.length })
   return added.length
 }
 

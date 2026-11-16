@@ -767,6 +767,8 @@ export async function askAI(args: {
   purpose?: 'course'
   /** Session de TP déjà payée (renvoyée par le serveur après le plan) : les ajustements et la rédaction ne coûtent plus rien. */
   tpSession?: string | null
+  /** Cartes de révision préparées automatiquement : gratuites, une fois par cours et par jour (le serveur vérifie). */
+  auto?: boolean
 }): Promise<AiResult> {
   if (!isConfigured) {
     await new Promise((r) => setTimeout(r, 600))

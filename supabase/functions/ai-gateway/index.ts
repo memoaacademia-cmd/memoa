@@ -71,6 +71,8 @@ const WEB_PER_USER_DAY = num('WEB_SEARCH_PER_USER_PER_DAY', 10)
 const WEB_GLOBAL_DAY = num('WEB_SEARCH_GLOBAL_PER_DAY', 300)
 // Images (tâche 9) : réservées à Premium. IMAGE_MODEL = nom du modèle d'image chez OmniRoute (jamais écrit en dur). IMAGE_DAILY_LIMIT = images par jour et par étudiant Premium.
 const IMAGE_DAILY_LIMIT = num('IMAGE_DAILY_LIMIT', 10)
+// Cartes automatiques : gratuites (0 point), UNE génération par cours et par jour, et un plafond par étudiant (AUTO_CARDS_PER_USER_PER_DAY). AUTO_CARDS_ENABLED=false les coupe.
+const AUTO_CARDS_PER_USER_DAY = num('AUTO_CARDS_PER_USER_PER_DAY', 6)
 const IMAGE_PREMIUM_MSG = 'Créer des images est réservé à Premium. Passe à Premium et Memo dessinera pour toi.'
 const IMAGE_BUSY_MSG = "Memo n'arrive pas à créer d'image pour le moment. Réessaie dans quelques minutes."
 const AI_OFF_MSG = 'Memo fait une petite pause pour le moment. Réessaie un peu plus tard.'
@@ -792,6 +794,22 @@ Deno.serve(async (req) => {
     cost = (chatsToday ?? 0) % 2 === 0 ? CHAT_PAID : 0
   }
 
+  // Cartes AUTOMATIQUES (ouverture de l'appli, sans demande de l'étudiant) : 0 point, mais strictement limitées côté serveur.
+  let autoCards = false
+  if (task === 'cards' && body.auto === true) {
+    if (!courseId) return json(req, 400, { error: 'Cours inconnu.' })
+    if (!flagOn('AUTO_CARDS_ENABLED')) return json(req, 403, { error: 'Les cartes automatiques sont coupées pour le moment.', code: 'auto_off' })
+    const sinceAuto = new Date(kinDayStart(Date.now())).toISOString()
+    const [{ count: forCourse, error: eA }, { count: forUser, error: eB }] = await Promise.all([
+      admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('kind', 'cards_auto').eq('user_id', user.id).eq('detail', courseId).gte('created_at', sinceAuto),
+      admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('kind', 'cards_auto').eq('user_id', user.id).gte('created_at', sinceAuto)
+    ])
+    if (eA || eB) return json(req, 503, { error: AI_BUSY_MSG, code: 'ai_busy' })
+    if ((forCourse ?? 0) >= 1 || (forUser ?? 0) >= AUTO_CARDS_PER_USER_DAY) return json(req, 429, { error: 'Les cartes automatiques de ce cours sont déjà faites pour aujourd’hui.', code: 'auto_limit' })
+    autoCards = true
+    cost = 0
+  }
+
   const denied = await checkAccess(admin, user.id, task, st, cost)
   if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
   // ---- Contexte du cours : lu avec les droits de l'étudiant (RLS) → impossible de lire le cours d'un autre ----
@@ -892,6 +910,7 @@ Deno.serve(async (req) => {
 
   // ---- Enregistrement (service_role : les étudiants ne peuvent pas écrire ces tables) ----
   await admin.from('ai_usage').update({ model: result.model || model, tokens_in: result.tokensIn, tokens_out: result.tokensOut }).eq('id', held.id)
+  if (autoCards) await aiLog(admin, { user_id: user.id, kind: 'cards_auto', task, model: result.model || model, detail: courseId ?? undefined }) // compté seulement après un succès
   if (task === 'chat') {
     if (!convId) {
       const { data: created } = await admin.from('ai_conversations').insert({ user_id: user.id, title: prompt.slice(0, 60) }).select('id').single()
