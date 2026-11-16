@@ -8,6 +8,7 @@ import { firstNameOf } from '../lib/names'
 import { currentStreak, lastWeek, memoMood } from '../lib/streak'
 import { usePoints } from '../lib/points'
 import { isDue, useCards } from '../lib/review'
+import { daysUntil, fmtDate, nextExam, shortCountdown, useExams } from '../lib/exams'
 import { useAvatar } from '../lib/avatar'
 import { usePlan } from '../lib/plan'
 import { usePref } from '../lib/prefs'
@@ -34,6 +35,7 @@ export default function Home() {
   const promoTitle = plan.state === 'expired' ? 'Retrouve Premium' : (pts && pts.left <= 0) ? 'Plus de points aujourd’hui ?' : 'Plus d’IA avec Premium'
   const promoSub = plan.state === 'expired' ? <>Ton abonnement est terminé · <Price cur="USD" /></> : (pts && pts.left <= 0) ? 'Premium te laisse continuer sans attendre minuit' : <>Sans compte à rebours de points · <Price cur="USD" /></>
   const mood = memoMood(days)
+  const exam = nextExam(useExams(uid || undefined).exams)
   const dueCount = useCards(uid || undefined).filter((c) => isDue(c)).length
   const avatarSrc = useAvatar(profile?.avatar_url)
   const first = firstNameOf(profile) || 'toi'
@@ -106,6 +108,14 @@ export default function Home() {
           <span className="hm-promo-ico" aria-hidden="true"><Icon name="quiz" size={18} stroke={2} /></span>
           <span className="hm-promo-txt"><strong>À réviser aujourd’hui : {dueCount} {dueCount > 1 ? 'cartes' : 'carte'}</strong><span>Quelques minutes suffisent, même sans connexion</span></span>
           <Icon name="chevright" size={18} />
+        </Link>
+      )}
+
+      {exam && daysUntil(exam.exam_date) <= 120 && (
+        <Link to="/examens" className="hm-exam" data-tour="home-exam" aria-label={`Prochain examen : ${exam.title}, ${fmtDate(exam.exam_date)}`}>
+          <Icon name="clock" size={16} />
+          <span><b>{exam.title}</b> · {fmtDate(exam.exam_date)}</span>
+          <span className="hm-exam-n">{shortCountdown(daysUntil(exam.exam_date))}</span>
         </Link>
       )}
 

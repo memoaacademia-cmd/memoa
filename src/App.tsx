@@ -9,6 +9,8 @@ import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import { NotifStep, TrialStep } from './pages/Welcome'
 import Home from './pages/Home'
 import Review from './pages/Review'
+import Exams from './pages/Exams'
+import ScheduleImport from './pages/ScheduleImport'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
@@ -146,6 +148,8 @@ export default function App() {
             <Route path="/sac" element={<Backpack />} />
             <Route path="/sac/:id" element={<CourseDetail />} />
             <Route path="/revision" element={<Review />} />
+            <Route path="/examens" element={<Exams />} />
+            <Route path="/examens/horaire" element={<ScheduleImport />} />
             <Route path="/revision/:courseId" element={<Review />} />
             <Route path="/tp/:id" element={<TpAssistant />} />
             <Route path="/librairie" element={<Library />} />

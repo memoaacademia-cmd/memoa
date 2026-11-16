@@ -8,6 +8,7 @@ import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } fro
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isDue, useCards } from '../lib/review'
+import ExamRow from '../components/ExamRow'
 import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
@@ -780,7 +781,7 @@ export function CourseDetail() {
   }
 
   async function revise() {
-    if (!notes.data?.length) return setError("Ajoute d'abord une note pour pouvoir réviser.")
+    if (!notes.data?.length) return setError("Ajoute d'abord une note pour lancer un quiz.")
     const r = await run(() => askAI({ task: 'quiz', courseId: id, prompt: QUIZ_PROMPT }))
     if (r) { const qs = parseQuiz(r.reply); setQuiz({ qs, raw: r.reply, n: 1, seen: qs.map((x) => x.q) }) }
   }
@@ -819,12 +820,13 @@ export function CourseDetail() {
 
       <PillButton size="lg" onClick={openSheet} tour="course-add"><Icon name="plus" size={22} stroke={2.4} />Ajouter une note</PillButton>
 
-      {!online && <span className="muted" role="status" style={{ padding: '0 4px' }}>Sans connexion : tu peux lire ton cours (« Lire le PDF ») et l’écouter tel quel. Résumé, révision, TP et téléchargement reviennent avec le réseau.</span>}
+      {!online && <span className="muted" role="status" style={{ padding: '0 4px' }}>Sans connexion : tu peux lire ton cours (« Lire le PDF ») et l’écouter tel quel. Résumé, quiz, TP et téléchargement reviennent avec le réseau.</span>}
 
       <RowGroup label="Outils">
         <Row tour="course-modify" icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
         <Row tour="course-cards" icon="copy" title="Cartes de révision" sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} à réviser · ${courseCards.length} au total` : `${profile?.memo_name || 'Memo'} crée des cartes à partir de tes notes`} to={`/revision/${id}`} />
-        <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Réviser'} sub={online ? 'Un quiz sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
+        <ExamRow courseId={id} courseTitle={course.data.title} />
+        <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Quiz'} sub={online ? 'Des questions à choix multiples sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
         {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
         <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
         <Row icon="download" title="Télécharger" sub={online ? 'Enregistrer en PDF' : 'Besoin du réseau'} onClick={() => void pdf('save')} disabled={!all.length || busy || !online} />

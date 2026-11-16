@@ -124,6 +124,7 @@ export function Me() {
 
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
+        <Row tour="me-exams" icon="clock" title="Mes examens" sub="Dates, rappels et horaire" to="/examens" />
         <Row tour="me-memo" iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
         <Row tour="me-settings" icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
       </RowGroup>

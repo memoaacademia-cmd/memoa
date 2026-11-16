@@ -37,12 +37,19 @@ export function nextState(box: number, knew: boolean, today = kinToday()): { box
 
 export const isDue = (c: Pick<Card, 'due_date'>, today = kinToday()) => c.due_date <= today
 
-/** Cartes à réviser, les plus en retard d'abord ; un peu de hasard entre cartes du même jour. */
-export function dueCards(cards: Card[], courseId?: string | null, today = kinToday()): Card[] {
-  return cards
-    .filter((c) => isDue(c, today) && (!courseId || c.course_id === courseId))
+/** Cartes à réviser, COURS PAR COURS : on finit toutes les cartes d'un cours avant de passer au suivant (jamais de mélange).
+ *  Ordre des cours : d'abord ceux qui ont une échéance proche (examen, interrogation ou remise de TP ; priority = jours restants, le plus proche en tête),
+ *  puis les autres, le cours le plus en retard d'abord. Dans un cours : les plus en retard d'abord, un peu de hasard entre cartes du même jour. */
+export function dueCards(cards: Card[], courseId?: string | null, today = kinToday(), priority: Record<string, number> = {}): Card[] {
+  const due = cards.filter((c) => isDue(c, today) && (!courseId || c.course_id === courseId))
+  const oldest = new Map<string, string>() // plus ancienne date d'échéance par cours
+  for (const c of due) if (!oldest.has(c.course_id) || c.due_date < oldest.get(c.course_id)!) oldest.set(c.course_id, c.due_date)
+  const rank = (id: string) => (priority[id] === undefined ? 1e6 : priority[id])
+  const order = [...oldest.keys()].sort((x, y) => rank(x) - rank(y) || (oldest.get(x)! < oldest.get(y)! ? -1 : oldest.get(x)! > oldest.get(y)! ? 1 : x < y ? -1 : 1))
+  const pos = new Map(order.map((id, k) => [id, k]))
+  return due
     .map((c) => ({ c, r: Math.random() }))
-    .sort((a, b) => (a.c.due_date < b.c.due_date ? -1 : a.c.due_date > b.c.due_date ? 1 : a.r - b.r))
+    .sort((a, b) => pos.get(a.c.course_id)! - pos.get(b.c.course_id)! || (a.c.due_date < b.c.due_date ? -1 : a.c.due_date > b.c.due_date ? 1 : a.r - b.r))
     .map((x) => x.c)
 }
 

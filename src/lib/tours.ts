@@ -73,7 +73,7 @@ export const TOURS: TourDef[] = [
     steps: [
       { target: 'course-add', tag: 'Ajouter une note', icon: 'plus', text: 'Écris, dicte, photographie ou importe un document : chaque note est rangée dans ce cours.' },
       { target: 'course-modify', tag: 'Modifier', icon: 'pencil', text: 'Relis et corrige ton cours avant de le mettre en PDF.' },
-      { target: 'course-revise', tag: 'Réviser', icon: 'quiz', text: 'Je te pose un quiz tiré de tes propres notes, avec la correction. Il faut une connexion.' },
+      { target: 'course-revise', tag: 'Quiz', icon: 'quiz', text: 'Je te pose un quiz à choix multiples tiré de tes propres notes, avec la correction. Il faut une connexion.' },
       { target: 'course-listen', tag: 'Écouter', icon: 'headphones', text: 'Je te lis ton cours à voix haute : pratique dans le bus ou en marchant.' },
       { target: 'course-pdf', tag: 'Lire le PDF', icon: 'pdf', text: 'Ouvre ton cours mis en page, prêt à relire. Tu peux aussi le télécharger juste en dessous.' },
       { target: 'course-tp', tag: 'Assistant TP', icon: 'book', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec ta page de garde.' }

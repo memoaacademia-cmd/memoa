@@ -5,6 +5,8 @@ import { useAuth } from '../lib/auth'
 import { useOnline } from '../lib/online'
 import { answerCard, dueCards, generateCards, isDue, markReviewDay, MAX_PER_SESSION, useCardList, type Card } from '../lib/review'
 import { track } from '../lib/track'
+import { downloadBlob, makeReviewCardImage, shareReviewCard } from '../lib/cardimage'
+import { countdownLabel, daysUntil, KIND_LABEL, priorityByCourse, upcoming, useExams } from '../lib/exams'
 
 /** Cartes de révision : « À réviser aujourd’hui » (toutes les cours) ou celles d’un cours (/revision/:courseId). Marche sans connexion avec les cartes déjà créées. */
 export default function Review() {
@@ -15,6 +17,8 @@ export default function Review() {
   const online = useOnline()
   const { cards, ready } = useCardList(uid)
   const { busy, error, setError, run } = useAction()
+  const { exams } = useExams(uid || undefined)
+  const prio = priorityByCourse(exams)
   const [session, setSession] = useState<Card[] | null>(null)
   const [i, setI] = useState(0)
   const [shown, setShown] = useState(false)
@@ -27,11 +31,15 @@ export default function Review() {
   const due = mine.filter((c) => isDue(c))
   const courseTitle = courseId ? mine[0]?.course_title : undefined
   const back = courseId ? `/sac/${courseId}` : '/'
+  // Examen proche parmi les cours qui ont des cartes à réviser : leurs cartes passent en premier.
+  const urgent = due.filter((c) => prio[c.course_id] !== undefined).sort((a, b) => prio[a.course_id] - prio[b.course_id])[0]
+
+  const urgentLabel = urgent ? KIND_LABEL[upcoming(exams).find((e) => e.course_id === urgent.course_id && daysUntil(e.exam_date) === prio[urgent.course_id])?.kind ?? 'exam'] : ''
 
   function start() {
-    const list = dueCards(cards, courseId).slice(0, MAX_PER_SESSION)
+    const list = dueCards(cards, courseId, undefined, prio).slice(0, MAX_PER_SESSION)
     if (!list.length) return
-    setSession(list); setI(0); setShown(false); setKnew(0); setAgain(0); setFirst(true)
+    setSession(list); setShareMsg(null); setI(0); setShown(false); setKnew(0); setAgain(0); setFirst(true)
     track('cards_session_started', { count: list.length, scope: courseId ? 'cours' : 'tout' })
   }
 
@@ -46,7 +54,23 @@ export default function Review() {
     if (i + 1 >= session.length) {
       track('cards_session_done', { count: session.length, knew: k })
       setI(session.length)
-    } else { setI(i + 1); setShown(false) }
+    } else { setI(i + 1); setShown(false); setShareMsg(null) }
+  }
+
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
+  /** « share » : partage direct (WhatsApp…) ; « save » : image enregistrée dans le téléphone. */
+  async function exportCard(c: Card, mode: 'share' | 'save') {
+    setShareMsg(null)
+    try {
+      const blob = await makeReviewCardImage(c, memo)
+      if (mode === 'save') { downloadBlob(blob, 'carte-memoa.png'); setShareMsg('Carte enregistrée : tu la retrouves dans tes téléchargements ou ta galerie.') } else {
+        const r = await shareReviewCard(blob, `${c.course_title} — carte de révision Memoa`)
+        if (r === 'saved') setShareMsg('Le partage direct n’est pas possible ici : la carte a été enregistrée, partage-la depuis ta galerie.')
+      }
+      track('card_exported', { mode })
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setShareMsg((e as Error).message)
+    }
   }
 
   async function generate() {
@@ -93,6 +117,11 @@ export default function Review() {
             <PillButton size="lg" onClick={() => void answer(true)}><Icon name="check" size={20} stroke={2.4} />Je savais</PillButton>
           </div>
         )}
+        <div className="rv-actions">
+          <PillButton variant="outline" onClick={() => void exportCard(c, 'share')}><Icon name="upload" size={18} />Partager</PillButton>
+          <PillButton variant="outline" onClick={() => void exportCard(c, 'save')}><Icon name="download" size={18} />Enregistrer</PillButton>
+        </div>
+        {shareMsg && <span className="muted" role="status">{shareMsg}</span>}
         {!online && <span className="muted" role="status">Sans connexion : tes réponses sont gardées et envoyées au retour du réseau.</span>}
       </main>
     )
@@ -100,7 +129,7 @@ export default function Review() {
 
   // ---- Séance terminée ----
   if (session) {
-    const left = dueCards(cards, courseId).length
+    const left = dueCards(cards, courseId, undefined, prio).length
     return (
       <main className="page">
         <PageHead to={back} title="Séance terminée" />
@@ -126,6 +155,7 @@ export default function Review() {
     <main className="page">
       <PageHead to={back} title={courseTitle ? `Cartes · ${courseTitle}` : 'À réviser aujourd’hui'} />
       <ErrorBox message={error} />
+      {urgent && !session && <div className="notice" role="status">{urgentLabel} {countdownLabel(prio[urgent.course_id]).toLowerCase()} : on révise « {urgent.course_title} » en premier, et on finit ses cartes avant de passer à un autre cours.</div>}
       {made !== null && <div className="notice" role="status">{made} {made > 1 ? 'nouvelles cartes sont prêtes' : 'nouvelle carte est prête'}.</div>}
       {!ready && !mine.length ? <Spinner label="Chargement de tes cartes…" /> : due.length > 0 ? (
         <>
