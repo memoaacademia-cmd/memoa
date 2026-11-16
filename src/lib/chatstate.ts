@@ -27,8 +27,16 @@ interface ChatState {
   tp: TpDraft | null
   thinking: boolean
   acting: boolean
+  /** Ce que l'étudiant est en train d'écrire (pas encore envoyé), le fichier joint, la recherche web et le message en cours de modification. */
+  draft: string
+  attach: { name: string; text: string } | null
+  web: boolean
+  editing: number | null
+  /** À qui appartient cet état : si un autre compte se connecte sur le même appareil, tout est remis à zéro. */
+  owner: string | null
 }
-let state: ChatState = { messages: [], conversationId: null, courseId: '', tp: null, thinking: false, acting: false }
+const EMPTY: ChatState = { messages: [], conversationId: null, courseId: '', tp: null, thinking: false, acting: false, draft: '', attach: null, web: false, editing: null, owner: null }
+let state: ChatState = EMPTY
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 
@@ -37,6 +45,11 @@ export function setChat(patch: Partial<ChatState>) {
   listeners.forEach((l) => l())
 }
 export const getChat = () => state
+/** Remet le chat à zéro (autre compte connecté). */
+export function resetChat(owner: string | null) {
+  chatRun.gen++
+  setChat({ ...EMPTY, owner })
+}
 
 type Setter<T> = (v: T | ((prev: T) => T)) => void
 const setters: Partial<Record<keyof ChatState, Setter<never>>> = {}

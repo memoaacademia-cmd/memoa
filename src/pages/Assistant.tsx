@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as Reac
 import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import ChatImage from '../components/ChatImage'
-import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { askAI, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
+import { BottomSheet, ErrorBox, Icon, MemoAvatar, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
+import { askAI, fetchPoints, listConversations, listCourses, listMessages, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
 import { pendingState, runChatAction, type TpDraft } from '../lib/chatActions'
 import { useTpJob } from '../lib/tpjob'
-import { chatRun, clearPending, markPending, recoverChat, useChat, getChat, type ChatMsg } from '../lib/chatstate'
+import { chatRun, clearPending, markPending, recoverChat, resetChat, setChat, useChat, getChat, type ChatMsg } from '../lib/chatstate'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -44,18 +44,16 @@ export default function Assistant() {
   const [messages, setMessages] = useChat('messages')
   // TP en préparation dans le chat, et message en cours de modification (index dans la liste).
   const [tp, setTp] = useChat('tp')
-  const [editing, setEditing] = useState<number | null>(null)
+  const [editing, setEditing] = useChat('editing')
   const [acting, setActing] = useChat('acting')
   const tpJob = useTpJob(tp?.courseId ?? '')
   const announced = useRef('')
-  const [text, setText] = useState('')
+  const [text, setText] = useChat('draft')
   const [listening, setListening] = useState(false)
-  const [web, setWeb] = useState(false) // éteinte par défaut : l'étudiant l'active quand il en a besoin
-  const [attach, setAttach] = useState<{ name: string; text: string } | null>(null)
+  const [web, setWeb] = useChat('web') // éteinte par défaut : l'étudiant l'active quand il en a besoin
+  const [attach, setAttach] = useChat('attach')
   const [reading, setReading] = useState('')
-  const [sheet, setSheet] = useState<null | 'menu' | 'course' | 'plus' | 'search'>(null)
-  const [q, setQ] = useState('')
-  const [hits, setHits] = useState<NoteHit[] | null>(null)
+  const [sheet, setSheet] = useState<null | 'menu' | 'course' | 'plus'>(null)
   const [copied, setCopied] = useState('')
   const photoRef = useRef<HTMLInputElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
@@ -67,6 +65,13 @@ export default function Assistant() {
   const [kb, setKb] = useState(false)
 
   useEffect(() => () => { dict.current?.stop() }, [])
+  // Le chat reste en mémoire tant que l'appli est ouverte (même en arrière-plan). Si un autre compte se connecte sur cet appareil, on repart de zéro.
+  useEffect(() => {
+    if (!user) return
+    const owner = getChat().owner
+    if (owner === null) setChat({ owner: user.id })
+    else if (owner !== user.id) resetChat(user.id)
+  }, [user?.id])
   // Page quittée : la demande en cours continue dans lib/chatstate. En revenant (ou en rouvrant l'appli), on retrouve la réponse dans l'historique.
   useEffect(() => {
     mounted.current = true
@@ -124,18 +129,6 @@ export default function Assistant() {
     const el = msgsRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, thinking])
-
-  // Recherche dans les notes (loupe).
-  useEffect(() => {
-    if (sheet !== 'search') return
-    const term = q.trim()
-    if (term.length < 2 || !user) { setHits(null); return }
-    let alive = true
-    const t = window.setTimeout(() => {
-      searchNotes(user.id, term).then((r) => { if (alive) setHits(r) }).catch(() => { if (alive) setHits([]) })
-    }, 250)
-    return () => { alive = false; window.clearTimeout(t) }
-  }, [q, sheet, user])
 
   function startMic() {
     setError(null)
@@ -291,7 +284,7 @@ export default function Assistant() {
             </span>
           )}
         </span>
-        <button type="button" className="icon-btn round" onClick={() => { setQ(''); setHits(null); setSheet('search') }} aria-label="Chercher dans mes notes"><Icon name="search" /></button>
+        <button type="button" className="icon-btn round" onClick={fresh} aria-label="Nouvelle conversation"><Icon name="newchat" /></button>
       </div>
 
       <div className="as-msgs" ref={msgsRef} aria-live="polite">
@@ -415,18 +408,6 @@ export default function Assistant() {
           <Row icon="photo" title="Photo ou appareil" sub="Je lis le texte de l’image" onClick={() => { setSheet(null); photoRef.current?.click() }} />
           <Row icon="pdf" title="Document" sub="PDF ou texte" onClick={() => { setSheet(null); docRef.current?.click() }} />
         </RowGroup>
-      </BottomSheet>
-
-      <BottomSheet open={sheet === 'search'} onClose={() => setSheet(null)} title="Chercher dans mes notes">
-        <PillInput type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Un mot, un titre…" aria-label="Chercher dans mes notes" autoFocus />
-        {hits !== null && (
-          hits.length ? (
-            <RowGroup>
-              {hits.map((h) => <Row key={h.id} icon="text" title={h.title || 'Note'} sub={h.snippet} to={`/sac/${h.course_id}`} />)}
-            </RowGroup>
-          ) : <div className="rg-empty">Aucune note ne correspond.</div>
-        )}
-        <Link to="/sac" className="link" style={{ alignSelf: 'center', textDecoration: 'none', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>Voir tous mes cours</Link>
       </BottomSheet>
     </main>
   )

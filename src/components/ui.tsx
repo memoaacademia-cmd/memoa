@@ -48,6 +48,7 @@ const ICONS: Record<string, string> = {
   book: 'M4 5 H10 A2 2 0 0 1 12 7 V20 A2 2 0 0 0 10 18 H4 Z M20 5 H14 A2 2 0 0 0 12 7 V20 A2 2 0 0 1 14 18 H20 Z',
   shelf: 'M4 4 H8 V20 H4 Z M10 4 H14 V20 H10 Z M16 5.5 L20 4.5 L22.5 19 L18.5 20 Z',
   chat: 'M4 5 H20 V16 H11 L6 20 V16 H4 Z',
+  newchat: 'M4 5 H20 V16 H11 L6 20 V16 H4 Z M12 7.5 V13.5 M9 10.5 H15',
   user: 'M12 4 A4 4 0 1 0 12 12 A4 4 0 1 0 12 4 M4 20 C4 16 8 14 12 14 C16 14 20 16 20 20',
   back: 'M15 5 L8 12 L15 19',
   send: 'M5 12 L19 5 L15 19 L12 13 Z',
