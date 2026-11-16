@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import ChatImage from '../components/ChatImage'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { askAI, askImage, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
+import { askAI, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
 import { readPhotoText } from '../lib/ocr'
@@ -161,7 +161,7 @@ export default function Assistant() {
     const wantsImage = false as boolean
     void isImageRequest
     setDrawing(wantsImage)
-    const r = await run(() => wantsImage ? askImage({ prompt, conversationId }) : askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
+    const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
     // Si l'étudiant a appuyé sur stop pendant ce temps, la réponse est simplement ignorée.
     if (cancelled.current) return
     setThinking(false)
