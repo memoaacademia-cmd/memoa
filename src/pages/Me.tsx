@@ -238,7 +238,7 @@ export function Settings() {
       {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
 
       <RowGroup label="Notifications">
-        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications" sub="« Le savais-tu ? », rappels d’examens, interros et TP, brouillons" on={pushOn} set={(v) => void togglePush(v)} />}
+        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications" sub="« Le savais-tu ? », rappels d’examens, interros et TP, brouillons, cartes de révision" on={pushOn} set={(v) => void togglePush(v)} />}
       </RowGroup>
       {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
 
