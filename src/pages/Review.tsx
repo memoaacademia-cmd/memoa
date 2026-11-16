@@ -62,7 +62,7 @@ export default function Review() {
   async function exportCard(c: Card, mode: 'share' | 'save') {
     setShareMsg(null)
     try {
-      const blob = await makeReviewCardImage(c, memo)
+      const blob = await makeReviewCardImage(c, memo, profile?.memo_animal ?? null)
       if (mode === 'save') { downloadBlob(blob, 'carte-memoa.png'); setShareMsg('Carte enregistrée : tu la retrouves dans tes téléchargements ou ta galerie.') } else {
         const r = await shareReviewCard(blob, `${c.course_title} — carte de révision Memoa`)
         if (r === 'saved') setShareMsg('Le partage direct n’est pas possible ici : la carte a été enregistrée, partage-la depuis ta galerie.')
