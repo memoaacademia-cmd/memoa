@@ -4,6 +4,7 @@ import { Icon, Logo } from '../components/ui'
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
+  userChoice?: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
 function Step({ n, children }: { n: number; children: ReactNode }) {
@@ -40,7 +41,11 @@ export default function Install() {
   const [shareNote, setShareNote] = useState('')
   const stepsRef = useRef<HTMLDivElement | null>(null)
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
-  const isIos = /iPhone|iPad|iPod/i.test(ua)
+  // iPad récent : il se présente comme un Mac, mais il a un écran tactile.
+  const macTouch = typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+  const isIos = /iPhone|iPad|iPod/i.test(ua) || macTouch
+  const iosSafari = isIos && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|FBAN|FBAV|Instagram|Line\/|MicroMessenger|GSA\//i.test(ua)
+  const device = /iPad/i.test(ua) || (macTouch && !/iPhone/i.test(ua)) ? 'IPAD' : 'IPHONE'
   const isAndroid = /Android/i.test(ua)
   const standalone = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true)
 
@@ -57,7 +62,11 @@ export default function Install() {
 
   async function install() {
     if (!ev) return
-    try { await ev.prompt() } catch { /* annulé */ }
+    try {
+      await ev.prompt()
+      const c = await ev.userChoice
+      if (c && c.outcome === 'dismissed') setNote('Installation annulée. Touche de nouveau le bouton, ou suis les étapes ci-dessous.')
+    } catch { /* annulé */ }
     setEv(null)
   }
 
@@ -65,7 +74,8 @@ export default function Install() {
   async function installNow() {
     setNote('')
     if (ev) return install()
-    if (isIos) setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
+    if (isIos && !iosSafari) setNote('Tu n’es pas dans Safari. Ouvre ce lien dans Safari (menu ⋯ ou icône boussole, puis « Ouvrir dans Safari »), puis suis les étapes ci-dessous.')
+    else if (isIos) setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
     else setNote('Ton navigateur ne propose pas l’installation directe ici. Ouvre cette page dans Chrome, ou suis les étapes ci-dessous.')
     setHl(true)
     stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -122,7 +132,7 @@ export default function Install() {
         <span className="blob b1" /><span className="blob b2" />
         <span style={{ width: 110, height: 110, borderRadius: 28, background: '#0b5d54', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 22px rgba(14,26,43,.28)', position: 'relative' }} className="notif-mock-app"><Logo size={68} /></span>
       </div>
-      <span className="badge" style={{ alignSelf: 'flex-start', letterSpacing: '.04em', padding: '6px 12px' }}>DÉTECTÉ : {isIos ? 'IPHONE · SAFARI' : isAndroid ? 'ANDROID · CHROME' : 'ORDINATEUR'}</span>
+      <span className="badge" style={{ alignSelf: 'flex-start', letterSpacing: '.04em', padding: '6px 12px' }}>DÉTECTÉ : {isIos ? `${device} · ${iosSafari ? 'SAFARI' : 'PAS SAFARI'}` : isAndroid ? 'ANDROID · CHROME' : 'ORDINATEUR'}</span>
       <h1 className="h1 big" style={{ margin: 0 }}>Installe Memoa</h1>
       <p className="lead" style={{ margin: 0 }}>Elle s’ouvre comme une vraie application, même quand la connexion est lente.</p>
       <div style={{ display: 'flex', gap: 10 }}>

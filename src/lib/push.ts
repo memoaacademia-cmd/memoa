@@ -14,7 +14,7 @@ export function pushSupported(): boolean {
 
 /** Sur iPhone, les notifications n'existent que si Memoa est installée sur l'écran d'accueil. */
 export function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 }
 export function isInstalled(): boolean {
   return window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true

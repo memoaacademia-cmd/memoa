@@ -194,7 +194,10 @@ export function useAction() {
 /** Charge des données au montage et lorsque `deps` change. */
 /** Message clair quand le réseau est coupé ou instable (au lieu de « Failed to fetch »). */
 function friendlyError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e)
+  const o = (e && typeof e === 'object' ? e : {}) as { message?: unknown; msg?: unknown }
+  let msg = e instanceof Error ? e.message : typeof e === 'string' ? e : String(o.message ?? o.msg ?? '')
+  msg = msg.trim()
+  if (!msg || msg === '{}' || msg === '[object Object]') msg = 'Une erreur est survenue. Réessaie dans un instant.'
   if (typeof navigator !== 'undefined' && !navigator.onLine) return 'Pas de connexion : ça se mettra à jour dès que le réseau revient.'
   if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) return 'Connexion instable : réessaie dans un instant.'
   return msg

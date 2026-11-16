@@ -7,15 +7,20 @@ import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const cleanPhone = (v: string) => v.replace(/[^0-9]/g, '').replace(/^243/, '').replace(/^0/, '')
+const PHONE_RE = /^[89][0-9]{8}$/
+const PHONE_MSG = 'Entre ton numéro à 9 chiffres, qui commence par 8 ou 9 (sans le +243).'
 
 /* Champ mot de passe avec bouton œil : un appui montre le mot de passe, un autre appui le recache. */
 function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   const [shown, setShown] = useState(false)
   return (
     <div style={{ position: 'relative', width: '100%' }}>
-      <input {...props} className={className} type={shown ? 'text' : 'password'} style={{ ...props.style, paddingRight: 56 }} />
+      <input autoCapitalize="off" autoCorrect="off" spellCheck={false} {...props} className={className} type={shown ? 'text' : 'password'} style={{ ...props.style, paddingRight: 56 }} />
       <button
         type="button"
+        // iPhone : sans ceci, le premier appui ferme le clavier, la page bouge et le clic est perdu.
+        onPointerDown={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => setShown((v) => !v)}
         aria-label={shown ? 'Cacher le mot de passe' : 'Afficher le mot de passe'}
         aria-pressed={shown}
@@ -126,7 +131,7 @@ export function Signup() {
     const mail = email.trim().toLowerCase()
     if (!EMAIL_RE.test(mail)) return setError('Entre une adresse email valide.')
     const tel = cleanPhone(phone)
-    if (!/^[0-9]{9}$/.test(tel)) return setError('Entre ton numéro à 9 chiffres (sans le +243).')
+    if (!PHONE_RE.test(tel)) return setError(PHONE_MSG)
     if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
     if (!accepted) return setError(MUST_ACCEPT)
     const res = await run(() => signUp(mail, password, '+243' + tel))
@@ -219,7 +224,7 @@ export function GoogleNext() {
     if (!onlyPhone && password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
     if (!onlyPhone && password !== confirm) return setError('Les deux mots de passe ne sont pas identiques.')
     const tel = cleanPhone(phone)
-    if (!/^[0-9]{9}$/.test(tel)) return setError('Entre ton numéro à 9 chiffres (sans le +243).')
+    if (!PHONE_RE.test(tel)) return setError(PHONE_MSG)
     const ok = await run(async () => {
       await setPasswordAndPhone(onlyPhone ? null : password, '+243' + tel)
       // On relit le compte AVANT de continuer : sinon l'ancienne information (« mot de passe manquant ») nous ramènerait ici.
@@ -238,13 +243,13 @@ export function GoogleNext() {
           <>
         <div className="field">
           <label htmlFor="mdp">Crée un mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <div className="bar" aria-hidden="true"><i style={{ width: st.pct + '%', background: st.pct < 50 ? '#b3261e' : st.pct < 75 ? '#f2a33a' : '#0b5d54' }} /></div>
           <span className="muted">{password ? st.label : '8 caractères minimum.'}</span>
         </div>
         <div className="field">
           <label htmlFor="mdp2">Confirme le mot de passe</label>
-          <input id="mdp2" className="input" type="password" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <PasswordField id="mdp2" className="input" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
           </>
         )}
@@ -305,7 +310,8 @@ export function Confirmation({ email }: { email: string }) {
       {sent && <div className="notice">Email renvoyé. Pense à regarder dans les courriers indésirables.</div>}
       <ErrorBox message={error} />
       <button className="btn ghost" type="button" onClick={() => void refresh()}>J'ai confirmé mon email</button>
-      <p className="muted" style={{ textAlign: 'center' }}>Après confirmation, tu reviens ici et on continue.</p>
+      <Link className="btn ghost" to="/connexion" replace>Déjà confirmé ? Se connecter</Link>
+      <p className="muted" style={{ textAlign: 'center' }}>Si le lien s’est ouvert dans un autre navigateur, reviens ici et connecte-toi avec ton email et ton mot de passe.</p>
     </main>
   )
 }
@@ -392,13 +398,13 @@ export function NewPassword() {
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div className="field">
           <label htmlFor="mdp">Nouveau mot de passe</label>
-          <input id="mdp" className="input" type="password" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <div className="bar" aria-hidden="true"><i style={{ width: st.pct + '%', background: st.pct < 50 ? '#b3261e' : st.pct < 75 ? '#f2a33a' : '#0b5d54' }} /></div>
           <span className="muted">{password ? st.label : '8 caractères minimum.'}</span>
         </div>
         <div className="field">
           <label htmlFor="mdp2">Confirme le mot de passe</label>
-          <input id="mdp2" className="input" type="password" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <PasswordField id="mdp2" className="input" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
         <ErrorBox message={error} />
         <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>

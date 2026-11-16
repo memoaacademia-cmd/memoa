@@ -30,16 +30,38 @@ const fail = (m: string): never => {
   throw new Error(m)
 }
 
+/** Extrait un texte lisible de n'importe quelle erreur (Error, objet Supabase, JSON brut, chaîne). Jamais « {} » ni « [object Object] ». */
+function rawMessage(e: unknown): string {
+  const o = (e && typeof e === 'object' ? e : {}) as { message?: unknown; msg?: unknown; error_description?: unknown; error?: unknown }
+  let m = e instanceof Error ? e.message : typeof e === 'string' ? e : String(o.message ?? o.msg ?? o.error_description ?? o.error ?? '')
+  m = (m ?? '').trim()
+  if (m.startsWith('{') || m.startsWith('[')) {
+    try {
+      const j = JSON.parse(m) as Record<string, unknown>
+      m = String(j?.message ?? j?.msg ?? j?.error_description ?? j?.error ?? '').trim()
+    } catch {
+      m = ''
+    }
+  }
+  return m === '[object Object]' ? '' : m
+}
+
 /** Traduit les erreurs Supabase les plus courantes en messages clairs pour l'étudiant. */
 export function friendlyError(e: unknown): string {
-  const m = e instanceof Error ? e.message : String(e)
+  const m = rawMessage(e)
+  const name = (e as { name?: string } | null)?.name ?? ''
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return 'Pas de connexion : réessaie dès que le réseau revient.'
   if (/Invalid login credentials/i.test(m)) return 'Email ou mot de passe incorrect.'
   if (/Email not confirmed/i.test(m)) return "Ton email n'est pas encore confirmé. Ouvre le message de confirmation."
-  if (/already registered|already been registered/i.test(m)) return 'Un compte existe déjà avec cet email. Connecte-toi.'
-  if (/Password should be at least/i.test(m)) return 'Le mot de passe doit contenir au moins 8 caractères.'
-  if (/rate limit|too many/i.test(m)) return 'Trop de tentatives. Réessaie dans quelques minutes.'
-  if (/Failed to fetch|NetworkError/i.test(m)) return 'Connexion impossible. Vérifie ton réseau et réessaie.'
-  return m
+  if (/already registered|already been registered|already exists/i.test(m)) return 'Un compte existe déjà avec cet email. Connecte-toi.'
+  if (/Password should be at least|weak.?password|Password should contain/i.test(m)) return 'Mot de passe trop faible : 8 caractères minimum, avec des lettres et des chiffres.'
+  if (/rate limit|too many|over_email_send_rate_limit|security purposes/i.test(m)) return 'Trop de tentatives. Réessaie dans quelques minutes.'
+  if (/Unable to validate email|invalid format|email address .* is invalid/i.test(m)) return 'Cette adresse email n’est pas valide.'
+  if (/Signups? not allowed/i.test(m)) return 'Les inscriptions sont fermées pour le moment.'
+  if (/Error sending (confirmation|recovery|magic)|sending .* email/i.test(m)) return 'Impossible d’envoyer l’email pour le moment. Réessaie dans quelques minutes.'
+  if (/Database error/i.test(m)) return 'Un problème est survenu de notre côté. Réessaie dans un instant.'
+  if (/Failed to fetch|NetworkError|Load failed|network request failed|timeout|timed out/i.test(m) || /RetryableFetch/i.test(name)) return 'Connexion instable : réessaie dans un instant.'
+  return m || 'Une erreur est survenue. Réessaie dans un instant.'
 }
 
 /* ------------------------------ AUTH ------------------------------ */
@@ -146,6 +168,10 @@ export async function signUp(email: string, password: string, phone: string): Pr
     options: { emailRedirectTo: window.location.origin + window.location.pathname, data: { phone } }
   })
   if (error) throw error
+  // Email déjà inscrit : avec la confirmation par email, Supabase ne renvoie AUCUNE erreur mais une liste d'identités vide.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) fail('Un compte existe déjà avec cet email. Connecte-toi.')
+  // Session déjà ouverte : on garde l'étudiant en mémoire pour que la suite ne le renvoie jamais vers la connexion si le réseau est lent.
+  if (data.session && data.user) writeUserCache({ id: data.user.id, email, phone, needsPassword: false, passwordSet: true })
   return { needsConfirmation: !data.session }
 }
 

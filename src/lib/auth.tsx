@@ -112,7 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         writeRecovery(false)
         setRecovery(false)
       }
-      void refresh()
+      // Jamais d'appel Supabase directement dans ce rappel (blocage connu) : on laisse le rappel se terminer d'abord.
+      window.setTimeout(() => void refresh(), 0)
     })
     return () => {
       window.removeEventListener('online', onOnline)

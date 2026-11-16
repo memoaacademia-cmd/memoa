@@ -1,6 +1,6 @@
 // Service worker de Memoa : rend le site installable et garde la coquille de l'application pour s'ouvrir même sans réseau.
 // Les données (cours, notes, IA) ne sont JAMAIS mises en cache ici : elles viennent toujours du serveur.
-const CACHE = 'memoa-shell-v2'
+const CACHE = 'memoa-shell-v3'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (e) => {
@@ -35,8 +35,8 @@ self.addEventListener('fetch', (e) => {
       (self.navigator && self.navigator.onLine === false ? fromCache() : Promise.resolve(null)).then((hit) => {
         if (hit) return hit
         const net = fetch(req).then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(req, copy))
+          // On ne garde que les pages réussies : jamais une page 404/500 comme copie de secours.
+          if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)) }
           return res
         })
         const slow = new Promise((resolve) => setTimeout(() => fromCache().then(resolve), 3000))
