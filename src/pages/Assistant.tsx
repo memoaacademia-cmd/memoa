@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
+import ChatImage from '../components/ChatImage'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { askAI, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
+import { askAI, askImage, fetchPoints, listConversations, listCourses, listMessages, searchNotes, type NoteHit, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -27,6 +29,7 @@ export default function Assistant() {
   const convs = useLoad(listConversations, [])
   const { error, setError, run } = useAction()
   const [thinking, setThinking] = useState(false)
+  const [drawing, setDrawing] = useState(false) // Memo crée une image (Premium)
   const cancelled = useRef(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const beforeDict = useRef('')
@@ -136,11 +139,11 @@ export default function Assistant() {
   }
   function readAloud(m: Message) {
     if (speakingId === m.id) { stopSpeaking(); return }
-    if (!speak(m.content, undefined, { label: `Réponse de ${profile?.memo_name || 'Memo'}`, id: m.id }))
+    if (!speak(plainMessage(m.content), undefined, { label: `Réponse de ${profile?.memo_name || 'Memo'}`, id: m.id }))
       setError("La lecture à voix haute n'est pas disponible sur ce navigateur.")
   }
   async function copy(m: Message) {
-    try { await navigator.clipboard.writeText(m.content); setCopied(m.id); window.setTimeout(() => setCopied(''), 1500) } catch { /* copie refusée : rien à faire */ }
+    try { await navigator.clipboard.writeText(plainMessage(m.content)); setCopied(m.id); window.setTimeout(() => setCopied(''), 1500) } catch { /* copie refusée : rien à faire */ }
   }
 
   async function send(question: string) {
@@ -153,18 +156,24 @@ export default function Assistant() {
     cancelled.current = false
     setMessages((m) => [...m, { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '' }])
     setThinking(true)
-    const r = await run(() => askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
+    // « dessine-moi… » : tâche image (le serveur réserve cette fonction à Premium et refuse les autres comptes avec une explication).
+    // Création d'images désactivée (abandonnée) : « dessine-moi… » part comme un message normal. Pour la remettre : `!joined && isImageRequest(prompt)`.
+    const wantsImage = false as boolean
+    void isImageRequest
+    setDrawing(wantsImage)
+    const r = await run(() => wantsImage ? askImage({ prompt, conversationId }) : askAI({ task: 'chat', prompt, courseId: courseId || null, conversationId, web, attachment: joined?.text }))
     // Si l'étudiant a appuyé sur stop pendant ce temps, la réponse est simplement ignorée.
     if (cancelled.current) return
     setThinking(false)
+    setDrawing(false)
     if (r) {
-      if (r.points !== undefined) setPts(r.points)
+      if ('points' in r && r.points !== undefined) setPts(r.points)
       setConversationId(r.conversationId)
       setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: r.reply, created_at: '' }])
       convs.reload()
     }
   }
-  function stopThinking() { cancelled.current = true; setThinking(false); setError(null) }
+  function stopThinking() { cancelled.current = true; setThinking(false); setDrawing(false); setError(null) }
   function submit(e: FormEvent) { e.preventDefault(); void send(text) }
   function onKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
     // Sur ordinateur : Entrée envoie, Maj+Entrée saute une ligne. Sur téléphone : Entrée saute une ligne.
@@ -208,14 +217,17 @@ export default function Assistant() {
           <div key={m.id} className="as-user">{m.content}</div>
         ) : (
           <div key={m.id} className="as-ai">
-            <RichText text={m.content} />
+            {(() => {
+              const img = parseImageMessage(m.content)
+              return img ? <><ChatImage path={img.path} />{img.text && <RichText text={img.text} />}</> : <RichText text={m.content} />
+            })()}
             <div className="as-acts">
               <button type="button" className="speak-btn" style={{ margin: 0 }} onClick={() => void copy(m)} aria-label="Copier la réponse"><Icon name={copied === m.id ? 'check' : 'copy'} size={18} /></button>
               {canSpeak() && <button type="button" className={'speak-btn' + (speakingId === m.id ? ' on' : '')} style={{ margin: 0 }} onClick={() => readAloud(m)} aria-label={speakingId === m.id ? 'Arrêter la lecture' : 'Écouter la réponse'} aria-pressed={speakingId === m.id}><Icon name={speakingId === m.id ? 'stop' : 'speaker'} size={18} /></button>}
             </div>
           </div>
         ))}
-        {thinking && <div className="as-ai muted">Réflexion…</div>}
+        {thinking && <div className="as-ai muted">{drawing ? `${profile?.memo_name || 'Memo'} dessine ton image…` : 'Réflexion…'}</div>}
       </div>
 
       <form className="as-comp" onSubmit={submit}>
