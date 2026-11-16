@@ -571,7 +571,10 @@ export async function publishDoc(
   }
   // Déposé « en vérification » : c'est le SERVEUR (tâche review_doc) qui le publie s'il est correct, ou le refuse. Sans cette vérification, il reste invisible des autres.
   const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'pending' }).select('id').single()
-  if (error) throw error
+  if (error) {
+    if (file_path) await sb().storage.from('library').remove([file_path]).catch(() => { /* le fichier orphelin sera retiré plus tard */ }) // le document n'a pas été créé (ex. plafond de 30) : on ne garde pas le fichier déposé
+    throw error
+  }
   track('library_publish', { type: input.doc_type, pdf: !!file })
   return (data as { id: string }).id
 }
