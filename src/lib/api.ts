@@ -60,7 +60,10 @@ export function friendlyError(e: unknown): string {
   if (/Signups? not allowed/i.test(m)) return 'Les inscriptions sont fermées pour le moment.'
   if (/Error sending (confirmation|recovery|magic)|sending .* email/i.test(m)) return 'Impossible d’envoyer l’email pour le moment. Réessaie dans quelques minutes.'
   if (/Database error/i.test(m)) return 'Un problème est survenu de notre côté. Réessaie dans un instant.'
-  if (/Failed to fetch|NetworkError|Load failed|network request failed|timeout|timed out/i.test(m) || /RetryableFetch/i.test(name)) return 'Connexion instable : réessaie dans un instant.'
+  const status = Number((e as { status?: number } | null)?.status ?? 0)
+  // Le téléphone est en ligne mais le serveur répond une erreur 5xx : ce n'est PAS la connexion de l'étudiant.
+  if (status >= 500) return `Le serveur ne répond pas bien pour le moment (erreur ${status}). Réessaie dans quelques minutes.`
+  if (/Failed to fetch|NetworkError|Load failed|network request failed|timeout|timed out/i.test(m) || /RetryableFetch/i.test(name)) return 'Impossible de joindre le serveur. Vérifie ta connexion et réessaie.'
   return m || 'Une erreur est survenue. Réessaie dans un instant.'
 }
 
@@ -212,6 +215,18 @@ export async function resendConfirmation(email: string): Promise<void> {
   if (!isConfigured) return
   const { error } = await sb().auth.resend({ type: 'signup', email })
   if (error) throw error
+}
+
+/** Valide le code reçu par email (remplace le lien : sur iPhone, le lien s'ouvre dans Safari et pas dans l'appli installée). */
+export async function verifySignupCode(email: string, code: string): Promise<void> {
+  if (!isConfigured) return
+  const token = code.replace(/\s/g, '')
+  const { data, error } = await sb().auth.verifyOtp({ email: email.trim(), token, type: 'signup' })
+  if (error) {
+    if (/expired|invalid|otp|token/i.test(error.message)) fail('Code incorrect ou expiré. Vérifie les chiffres ou demande un nouvel email.')
+    throw error
+  }
+  if (data.user) writeUserCache({ id: data.user.id, email: data.user.email ?? email, phone: (data.user.user_metadata?.phone as string | undefined) ?? null, needsPassword: false, passwordSet: true })
 }
 
 /** Envoie le lien de réinitialisation. Ne révèle pas si l'email a un compte (réponse identique). */

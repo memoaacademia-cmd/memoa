@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'r
 import { takeDeletedNotice } from '../lib/account'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
-import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword } from '../lib/api'
+import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword, verifySignupCode } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -15,7 +15,8 @@ function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInp
   const [shown, setShown] = useState(false)
   return (
     <div style={{ position: 'relative', width: '100%' }}>
-      <input autoCapitalize="off" autoCorrect="off" spellCheck={false} {...props} className={className} type={shown ? 'text' : 'password'} style={{ ...props.style, paddingRight: 56 }} />
+      {/* key : on recrée le champ à chaque bascule. Sur iPhone, changer seulement `type` sur un champ actif laisse le texte masqué. */}
+      <input key={shown ? 'text' : 'password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} {...props} className={className} type={shown ? 'text' : 'password'} style={{ ...props.style, paddingRight: 56 }} />
       <button
         type="button"
         // iPhone : sans ceci, le premier appui ferme le clavier, la page bouge et le clic est perdu.
@@ -271,6 +272,8 @@ export function Confirmation({ email }: { email: string }) {
   const { busy, error, run } = useAction()
   const [wait, setWait] = useState(45)
   const [sent, setSent] = useState(false)
+  const [mail, setMail] = useState(email)
+  const [code, setCode] = useState('')
 
   useEffect(() => {
     if (wait <= 0) return
@@ -284,13 +287,25 @@ export function Confirmation({ email }: { email: string }) {
 
   async function resend() {
     const ok = await run(async () => {
-      await resendConfirmation(email)
+      await resendConfirmation(mail.trim())
       return true
     })
     if (ok) {
       setSent(true)
       setWait(45)
     }
+  }
+
+  async function validate(e: FormEvent) {
+    e.preventDefault()
+    if (!mail.trim()) return
+    if (!/^[0-9]{6}$/.test(code)) return
+    const ok = await run(async () => {
+      await verifySignupCode(mail, code)
+      await refresh()
+      return true
+    })
+    if (ok) nav('/inscription', { replace: true })
   }
 
   return (
@@ -301,8 +316,21 @@ export function Confirmation({ email }: { email: string }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
         <h1 className="h1 big" style={{ margin: 0 }}>Vérifie ta boîte mail</h1>
-        <p className="lead">{email ? `Nous avons envoyé un lien de confirmation à ${email}.` : 'Nous avons envoyé un lien de confirmation à ton adresse.'}</p>
+        <p className="lead">{mail ? `Nous avons envoyé un code à ${mail}. Tape-le ici : tu restes dans l'application.` : 'Nous avons envoyé un code à ton adresse. Tape-le ici : tu restes dans l\u2019application.'}</p>
       </div>
+      <form onSubmit={validate} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {!email && <PillInput type="email" autoComplete="email" placeholder="Ton email" value={mail} onChange={(e) => setMail(e.target.value)} />}
+        <PillInput
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="Code reçu par email"
+          maxLength={6}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+          style={{ textAlign: 'center', letterSpacing: 6, fontSize: 22 }}
+        />
+        <PillButton type="submit" size="lg" disabled={busy || code.length !== 6 || !mail.trim()}>{busy ? 'Vérification…' : 'Valider le code'}</PillButton>
+      </form>
       <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
       <button className="btn ghost" type="button" disabled={wait > 0 || busy} onClick={resend}>
         {wait > 0 ? `Renvoyer l'email (${wait} s)` : "Renvoyer l'email"}
