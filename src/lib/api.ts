@@ -867,8 +867,8 @@ export async function listPayments(): Promise<Payment[]> {
   return data as Payment[]
 }
 
-export const PRICES = { USD: 4.99, CDF: 11000 } as const // affichage seulement : le serveur fixe le vrai montant
-export const PRICE_LABEL = { USD: '4,99 USD', CDF: '11 000 FC' } as const
+export const PRICES = { USD: 4.5, CDF: 11000 } as const // affichage seulement : le serveur fixe le vrai montant
+export const PRICE_LABEL = { USD: '4,50 USD', CDF: '11 000 FC' } as const
 
 /** Démarre un paiement Chariow : le serveur crée la vente (identité et prix côté serveur, rien n'est choisi par le navigateur)
  *  et renvoie l'adresse de la page de paiement sécurisée, où l'on redirige l'étudiant. */

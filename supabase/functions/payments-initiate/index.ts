@@ -43,7 +43,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 // ---------- Outils Chariow (dupliqués dans les 3 fonctions de paiement : l'éditeur du tableau de bord n'a pas de dossier partagé) ----------
 const CHARIOW_API = 'https://api.chariow.com/v1'
-const PRICE_USD = 4.99 // prix du produit Chariow, en USD. Doit être identique au prix configuré dans Chariow.
+const PRICE_USD = 4.5 // prix du produit Chariow, en USD (11 000 FC). Doit être identique au prix configuré dans Chariow.
+const PRICE_CDF = 11000 // même prix si Chariow renvoie la vente dans la devise locale
 
 /** Lit une vente chez Chariow. null = vente inconnue (404). Lève une erreur si Chariow est injoignable (→ réessai plus tard). */
 async function getSale(id: string): Promise<Record<string, any> | null> {
@@ -69,7 +70,9 @@ function judgeSale(s: Record<string, any>): { ok: true; amount: number; currency
   // amount = prix du produit (dans la devise du produit), même si le client paie dans une autre devise.
   const amount = Number(s.amount?.value ?? s.amount)
   const currency = String(s.amount?.currency ?? '')
-  if (!Number.isFinite(amount) || Math.abs(amount - PRICE_USD) > 0.011 || currency !== 'USD') return { ok: false, reason: `montant:${amount} ${currency}` }
+  const okUsd = currency === 'USD' && Math.abs(amount - PRICE_USD) <= 0.011
+  const okCdf = currency === 'CDF' && Math.abs(amount - PRICE_CDF) <= 1
+  if (!Number.isFinite(amount) || !(okUsd || okCdf)) return { ok: false, reason: `montant:${amount} ${currency}` }
   return { ok: true, amount, currency }
 }
 
@@ -97,7 +100,7 @@ async function verifyAndApply(admin: SupabaseClient, saleId: string, hintUser?: 
 //   { action: 'start' } : crée la vente chez Chariow et renvoie l'adresse de la page de paiement { url }.
 //   { action: 'check' } : « J'ai payé » → revérifie ses paiements en attente directement chez Chariow (sans attendre le webhook)
 //                         et renvoie { active, expires_at }.
-// Le MONTANT n'est jamais fourni par le navigateur : le prix est celui du produit Chariow (4,99 USD), revérifié à la confirmation.
+// Le MONTANT n'est jamais fourni par le navigateur : le prix est celui du produit Chariow (4,50 USD), revérifié à la confirmation.
 //
 // Secrets Supabase attendus (jamais dans le code) :
 //   CHARIOW_API_KEY           clé secrète Chariow (sk_…)

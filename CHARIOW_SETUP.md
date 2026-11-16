@@ -3,19 +3,19 @@
 Modèle : **1 paiement = 30 jours de Premium**. Chariow n'a pas d'abonnement automatique (rien dans la doc) : chaque mois l'étudiant repaie, les rappels d'expiration (7 j, 2 j, fin) existent déjà.
 
 ## Parcours étudiant
-Bouton « S'abonner · 4,99 USD » → page de paiement Chariow (email, nom et numéro déjà transmis depuis son compte) → retour automatique dans l'app → « Activation en cours… » → Premium actif.
+Bouton « S'abonner · 4,50 USD » → page de paiement Chariow (email, nom et numéro déjà transmis depuis son compte) → retour automatique dans l'app → « Activation en cours… » → Premium actif.
 Si l'étudiant ferme l'onglet : le webhook active quand même, sinon le bouton « J'ai payé · Vérifier mon paiement », sinon le cron (≤ 10 min).
 
 ## Sécurité (ce qui est appliqué)
 - `user_id` = JWT, jamais le navigateur ; le montant n'est jamais envoyé par le navigateur.
 - Webhook : signature HMAC-SHA256 du corps brut (`x-chariow-signature`), comparaison en temps constant, 401 sinon.
-- Le contenu du webhook n'est PAS cru : la vente est relue chez Chariow (statut `completed`/`settled`, bon produit, 4,99 USD) avant toute activation.
+- Le contenu du webhook n'est PAS cru : la vente est relue chez Chariow (statut `completed`/`settled`, bon produit, 4,50 USD) avant toute activation.
 - Activation atomique et idempotente en SQL (`apply_chariow_payment`) : un rejeu ne prolonge jamais deux fois ; réservée au `service_role`.
 - Tout événement est journalisé dans `payment_events` ; la vente complète dans `payments.raw`.
 - 2xx pour doublons/tests/refus définitifs ; 5xx seulement pour panne temporaire (Chariow réessaie : +10 s, +100 s, +17 min, +2 h47, puis **désactive le Pulse** → le cron de rattrapage est indispensable).
 
 ## 1. Chariow (dashboard)
-1. **Produit** : Products › Add product › **Licenses**. Nom « Memoa Premium (30 jours) », prix unique **4,99 USD**, génération automatique de clés, validité 30 jours (indicatif : l'app ne s'en sert pas). **Publier** le produit (non publié = erreur 404). Noter son **ID public** (`prd_…`).
+1. **Produit** : Products › Add product › **Licenses**. Nom « Memoa Premium (30 jours) », prix unique **4,50 USD**, génération automatique de clés, validité 30 jours (indicatif : l'app ne s'en sert pas). **Publier** le produit (non publié = erreur 404). Noter son **ID public** (`prd_…`).
    - Il faut un produit *Licence* : les autres types (téléchargeable, cours) refusent un 2ᵉ achat tant que l'accès est actif, donc pas de renouvellement.
 2. **Clé API** : Settings › Developer › API Keys › Create. Permissions : création de checkout **et** lecture des ventes. Copier la clé `sk_…` (affichée une seule fois).
 3. **Pulse** (webhook) : créer un Pulse, URL = `https://<REF-PROJET>.supabase.co/functions/v1/<ADRESSE-DE-payments-webhook>`, événement **successful sale**, limité à ce produit. Copier le secret `whsec_…` (onglet Overview du Pulse). Pas de `?token=` : la signature HMAC suffit et est documentée.
@@ -35,7 +35,7 @@ Si l'étudiant ferme l'onglet : le webhook active quand même, sinon le bouton �
 | # | Test | Résultat attendu |
 |---|---|---|
 | 1 | Bouton « Test » du Pulse dans Chariow | 200 ; ligne `payment_events` avec `outcome = test` ; aucune activation |
-| 2 | Achat réel de 4,99 USD avec TON compte | retour dans l'app, « Activation en cours… », puis Premium actif ~30 jours ; `payments.status = paid`, `raw` rempli |
+| 2 | Achat réel de 4,50 USD avec TON compte | retour dans l'app, « Activation en cours… », puis Premium actif ~30 jours ; `payments.status = paid`, `raw` rempli |
 | 3 | Dans Chariow, **rejouer** la livraison du Pulse | 200 ; `payment_events.outcome = duplicate` ; date de fin inchangée |
 | 4 | Payer avec un autre email que celui du compte (modifier l'email sur la page de paiement) | activé quand même (lien par l'identifiant de vente) |
 | 5 | Payer puis fermer l'onglet avant le retour | activé par le webhook ; sinon « Vérifier mon paiement » |
@@ -46,7 +46,7 @@ Si l'étudiant ferme l'onglet : le webhook active quand même, sinon le bouton �
 | 10 | Appel du webhook avec une mauvaise signature (curl) | 401 |
 
 ## 4. HYPOTHÈSES À VALIDER avec le tout premier paiement (regarder `payments.raw` et `payment_events`)
-- `GET /v1/sales/{id}` renvoie bien `status = completed`, `product.id`, `amount.value` (4.99 et non 499) et `amount.currency = USD`. Sinon le paiement est refusé avec `outcome = rejected:…` — le texte indique quoi corriger dans `judgeSale()`.
+- `GET /v1/sales/{id}` renvoie bien `status = completed`, `product.id`, `amount.value` (4.50 et non 450) et `amount.currency = USD`. Sinon le paiement est refusé avec `outcome = rejected:…` — le texte indique quoi corriger dans `judgeSale()`.
 - Un **code promo** ou une conversion de devise change le montant → refus volontaire (`rejected:montant`). À assouplir si vous voulez des promotions.
 - L'ID produit du payload (`product.id`) est celui de `CHARIOW_PRODUCT_ID`.
 - La clé API a les bonnes permissions (sinon 403 dans les logs de `swift-worker`).

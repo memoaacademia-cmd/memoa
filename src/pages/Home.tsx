@@ -91,6 +91,14 @@ export default function Home() {
           ))}</div>
         : <div className="muted" role="status">Aucune note ne correspond.</div>)}
 
+      {courses.data && list.length === 0 && (
+        <section className="hm-first" aria-label="Premier cours" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 18, borderRadius: 24, background: 'var(--surface)', border: '1px solid var(--line)' }}>
+          <strong style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Commence par ton premier cours</strong>
+          <span className="muted">Ajoute une note, dicte ou envoie un PDF : {memoName} la met en forme pour toi.</span>
+          <Link to="/cours" className="pill-btn lg" data-tour="home-first-course">Crée ton premier cours</Link>
+        </section>
+      )}
+
       {last && (
         <Link to={`/sac/${last.id}`} className="hm-resume" data-tour="home-resume">
           <Spine color={COURSE_COLORS[0]} />
