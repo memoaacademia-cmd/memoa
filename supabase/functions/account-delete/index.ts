@@ -84,7 +84,7 @@ async function purgeFolder(admin: Admin, bucket: string, uid: string, keep: Set<
 
 const LEFTOVER_TABLES: [string, string][] = [
   ['profiles', 'id'], ['courses', 'user_id'], ['notes', 'user_id'], ['activity_days', 'user_id'], ['ai_conversations', 'user_id'], ['ai_messages', 'user_id'],
-  ['ai_usage', 'user_id'], ['ai_log', 'user_id'], ['review_cards', 'user_id'], ['subscriptions', 'user_id'], ['feedback', 'user_id'], ['push_subscriptions', 'user_id'], ['drafts_expiry', 'user_id'],
+  ['ai_usage', 'user_id'], ['ai_log', 'user_id'], ['review_cards', 'user_id'], ['exams', 'user_id'], ['exam_prefs', 'user_id'], ['subscriptions', 'user_id'], ['feedback', 'user_id'], ['push_subscriptions', 'user_id'], ['drafts_expiry', 'user_id'],
   ['expiry_notices', 'user_id'], ['lingala_uses', 'user_id'], ['tp_sessions', 'user_id'], ['library_favorites', 'user_id'], ['library_reports', 'user_id'],
   ['app_events', 'user_id'], ['app_errors', 'user_id'], ['payments', 'user_id'], ['library_documents', 'owner_id']
 ]

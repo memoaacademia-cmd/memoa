@@ -56,8 +56,8 @@ export async function phoneHash(phoneDigits: string): Promise<string | null> {
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 
-type Task = 'chat' | 'structure_notes' | 'quiz' | 'cards' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
-const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'cards', 'tp_plan', 'tp_write', 'tp_section', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
+type Task = 'chat' | 'structure_notes' | 'quiz' | 'cards' | 'schedule' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
+const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'cards', 'schedule', 'tp_plan', 'tp_write', 'tp_section', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
 
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
@@ -105,7 +105,7 @@ const CHAT_PAID = 1 // chat : 1 point tous les 2 messages (voir plus bas)
 const COURSE_POINTS = 15 // génération complète d'un cours, quelle que soit la méthode (notes, consignes seules…)
 const NOTE_POINTS = 15 // créer ou ajouter une note dans un cours : 15 points FIXES, jamais selon la longueur
 const TP_POINTS = 10 // un TP complet (plan + ajustements + rédaction) : payé UNE seule fois, à l'ouverture de la « session de TP »
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, cards: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, cards: 1, schedule: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
 const LENGTH_TASKS: string[] = ['structure_notes', 'summary', 'enrich_note']
 const PAGE_CHARS = 1500 // une page environ
 /** « course » = création d'un cours (appelé par l'écran Nouveau cours, sans cours existant) : 15 points au total, tout compris. */
@@ -211,7 +211,7 @@ const refund = async (admin: ReturnType<typeof adminClient>, id: number) => { aw
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
 const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_section' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
-const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : t === 'cards' ? 2048 : 1536)
+const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : t === 'cards' || t === 'schedule' ? 2048 : 1536)
 
 const BASE =
   "Tu es Memo, le compagnon d'étude d'un étudiant universitaire en République démocratique du Congo. " +
@@ -322,14 +322,14 @@ Memoa : compagnon d'étude pour les étudiants de la RDC. On y écrit ses cours,
 Barre du bas : Accueil, Cours, Librairie, Assistant, Moi.
 - Accueil : salutation, recherche dans tes notes, « Reprendre » (dernier cours), « Tes cours », ta série de jours (petite flamme avec son chiffre, sur la ligne de Memo), ton solde de points en haut à droite (éclair), et la carte « Le savais-tu ? » (touche-la pour la dérouler). Le petit rond en haut à droite ouvre « Moi ».
 - Cours : « Mes cours » = tous tes cours rangés (gros bouton « Nouveau cours » pour en créer un ; petite loupe à côté du titre pour chercher un cours). Nouveau cours : donne un titre, écris ou dicte tes notes (micro), ajoute une photo, un PDF, un audio ou une vidéo avec le bouton +, enregistre ta voix, et « Guider l'IA » (facultatif) pour donner des consignes. Si tu n'écris que des consignes, l'IA rédige le cours. Bouton globe « recherche web » possible (éteint par défaut ; l'étudiant l'allume quand il en a besoin). Les corbeilles gardent un cours supprimé un temps avant effacement.
-- Page d'un cours : « Ajouter une note », « Modifier » (rouvre le titre et le texte), « Réviser » (quiz de 5 questions ; « Quiz suivant » en donne d'autres), « Écouter » (lecture à voix haute, résumé possible), « Lire le PDF », « Télécharger » (PDF du cours), « Assistant TP », « Supprimer ce cours ». Quand une lecture est en cours, une bande flottante en bas de l'écran propose Pause / Reprendre (le bouton à côté de « Arrêter »). La lecture se met en pause si on quitte l'application ou verrouille l'écran, et se reprend en revenant (la lecture en arrière-plan n'existe pas encore).
+- Page d'un cours : « Ajouter une note », « Modifier » (rouvre le titre et le texte), « Quiz » (5 questions à choix multiples ; « Quiz suivant » en donne d'autres), « Cartes de révision » (cartes question / réponse ; Memo fait réviser un cours à la fois et passe d'abord les cours qui ont un examen, une interrogation ou une remise de TP proche), « Examen, interro ou TP » (date à retenir pour les rappels), « Écouter » (lecture à voix haute, résumé possible), « Lire le PDF », « Télécharger » (PDF du cours), « Assistant TP », « Supprimer ce cours ». Quand une lecture est en cours, une bande flottante en bas de l'écran propose Pause / Reprendre (le bouton à côté de « Arrêter »). La lecture se met en pause si on quitte l'application ou verrouille l'écran, et se reprend en revenant (la lecture en arrière-plan n'existe pas encore).
 - Assistant TP : donne le titre et l'énoncé (texte, photo ou PDF), Memo propose un plan ; tu peux l'ajuster, puis « Valider et rédiger le TP ». Tu peux choisir le nombre de pages du travail (sans la page de garde) : le PDF est vérifié et la mise en page ajustée pour avoir exactement ce nombre. Le PDF a une page de garde (université, faculté, département, titre, ton nom, année) avec plusieurs modèles au choix, puis « Télécharger le PDF du TP ». Relis toujours et vérifie les sources citées. La rédaction continue même si on change de page dans Memoa ; si on quitte l'application, elle reprend toute seule au retour (garde l'écran allumé pendant la rédaction ; une notification prévient quand le TP est prêt si elles sont autorisées). Le travail déjà rédigé est gardé 24 h sur le téléphone.
 - Librairie : documents partagés par des étudiants. Filtre par faculté et promotion, recherche, favoris (étoile), « Voir » ou « Télécharger », « Publier » pour partager le sien, « Signaler » pour un document gênant.
 - Assistant (ce chat) : en bas, le champ de message ; icône + (joindre photo ou document), icône livre (choisir un cours comme contexte), icône globe (recherche web), micro (dicter), flèche (envoyer), carré (arrêter), haut-parleur sous une réponse (écouter). L'historique des conversations est dans le menu du haut ; on peut chercher dans ses notes.
 - Moi : photo et nom, séries et chiffres, carte Premium, « Mon profil » (modifier université, faculté, promotion…), « Mon Memo » (changer d'animal et de nom), « Réglages » (notifications, thème clair/sombre, langue, déconnexion), aide, signaler un problème, donner son avis, confidentialité, conditions, à propos.
 - Premium (Moi, puis la carte Premium) : 4,99 USD ou 11 000 FC pour 30 jours, payé par Orange Money, Airtel Money ou M-Pesa. Après paiement, l'abonnement s'active ; on voit sa date de fin. Memoa prévient 7 jours, 2 jours avant et le jour de la fin.
 - Essai et points : 5 jours d'IA complète offerts à l'inscription (un essai par numéro). Ensuite 20 points gratuits PAR JOUR : ils reviennent à 20 chaque jour à minuit (heure de Kinshasa), les points non utilisés ne se cumulent pas. Créer un cours avec l'IA coûte 15 points (quelle que soit la méthode) ; créer ou ajouter une note coûte aussi 15 points fixes, quelle que soit sa longueur (3 points de plus si elle vient d'un audio) ; un TP complet 10 points au total (plan, ajustements et rédaction compris) ; deux questions au chat 1 point ; une révision (un quiz) 1 ; un résumé de notes 4 à 20 selon la longueur. Le solde est affiché dans l'Assistant et sur l'Accueil. Premium enlève cette limite.
-- Brouillons : dans l'écran d'écriture, le bouton « Brouillon » garde ta note 72 h sur le téléphone, même sans connexion. Les brouillons apparaissent dans l'onglet Cours, section « Brouillons en attente », avec un compte à rebours ; quand le réseau revient, on ouvre le brouillon et on touche « Générer le PDF ». Sans PDF au bout de 72 h, le brouillon est supprimé. Sans connexion, un cours déjà ouvert se lit quand même : « Lire le PDF » et « Écouter » (« Lire tel quel ») marchent, mais le résumé, « Réviser », « Assistant TP » et « Télécharger » ont besoin du réseau. Dans l'écran d'écriture, l'info « Sans connexion » est repliée en une ligne : on la touche pour la dérouler.
+- Brouillons : dans l'écran d'écriture, le bouton « Brouillon » garde ta note 72 h sur le téléphone, même sans connexion. Les brouillons apparaissent dans l'onglet Cours, section « Brouillons en attente », avec un compte à rebours ; quand le réseau revient, on ouvre le brouillon et on touche « Générer le PDF ». Sans PDF au bout de 72 h, le brouillon est supprimé. Sans connexion, un cours déjà ouvert se lit quand même : « Lire le PDF » et « Écouter » (« Lire tel quel ») marchent, mais le résumé, « Quiz », « Assistant TP » et « Télécharger » ont besoin du réseau. Dans l'écran d'écriture, l'info « Sans connexion » est repliée en une ligne : on la touche pour la dérouler.
 - Compte : inscription par e-mail ou Google ; avec Google il faut créer un mot de passe et ajouter son numéro de téléphone, car c'est ce qui sert à se reconnecter. Installer l'app : page « Installer » (ajouter à l'écran d'accueil).
 Réponses types : « C'est quoi Memoa ? » → compagnon d'étude (ci-dessus). « Où je change mon Memo ? » → Moi, puis Mon Memo. « Comment télécharger mon cours ? » → ouvre le cours, bouton Télécharger.
 `
@@ -342,6 +342,17 @@ const SYSTEM: Record<Task, string> = {
   structure_notes:
     BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
+  schedule:
+    BASE + " On te donne le texte (souvent mal lu par un OCR, donc parfois désordonné, colonnes mélangées) d'un horaire de l'université. Repère UNIQUEMENT les évaluations : examens, interrogations, partiels, sessions, défenses, remises de travaux (TP), pas les cours ordinaires. " +
+    "Réponds par UN SEUL tableau JSON, sans aucun texte autour ni balises de code : [{\"matiere\":\"nom du cours\",\"type\":\"exam, interro ou tp\",\"date\":\"AAAA-MM-JJ\",\"heure\":\"HH:MM ou vide\",\"salle\":\"salle ou vide\",\"groupe\":\"groupe ou vide\"}]. " +
+    "Format habituel des horaires congolais : un tableau avec les colonnes N°, JOURS ET DATES (ex. « SAMEDI 24/10/2026 », jour/mois/année : 24/10/2026 devient 2026-10-24), HEURES (ex. « 08h30-10h30 » : prends l'heure de DÉBUT, ici 08:30), EXAMENS/TITULAIRES, MODE D'EXAMINATION, OBSERVATION. " +
+    "Un même jour peut avoir plusieurs lignes (matin et après-midi) : une ligne du tableau = un objet, avec la date de son jour (la date n'est écrite qu'une fois pour le jour entier, applique-la à toutes ses lignes). " +
+    "Sous le nom de chaque matière figure souvent « PROF. NOM » : c'est l'enseignant (titulaire), PAS la matière, ne le mets pas dans « matiere ». Garde les sigles tels quels (DIP, O.C.J, etc.) sans les développer. " +
+    "Les phrases comme « NB : il est strictement interdit d'entrer avec le téléphone… », l'adresse, « Fait à Kinshasa », le nom du doyen et les tampons ne sont PAS des examens. " +
+    "Si le document contient plusieurs tableaux (ex. « L1 LMD A » puis « L1 LMD B », ou plusieurs promotions/groupes), mets le nom du groupe dans « groupe » (ex. « L1 LMD A ») pour chaque ligne ; sinon laisse vide. " +
+    "« type » : « exam » par défaut ; « interro » si c'est une interrogation ; « tp » si c'est une remise de travail. " +
+    "La date du jour est donnée au début de la demande : si l'année manque, prends la prochaine date possible à partir d'aujourd'hui. " +
+    "N'invente RIEN : si une date est illisible ou ambiguë, laisse « date » vide ; si l'heure ou la salle manque, laisse vide. S'il n'y a aucune évaluation, réponds [].",
   cards:
     BASE + " Crée des CARTES DE RÉVISION à partir du matériel du cours : 10 cartes au plus (moins s'il y a peu de matière). Chaque carte = une question précise et une réponse courte (25 mots au maximum) sur une notion importante : définition, étape, date, distinction, formule. " +
     "Les questions sont variées et se comprennent seules (jamais « selon le texte »). Appuie-toi uniquement sur le matériel du cours. " +
@@ -872,7 +883,8 @@ Deno.serve(async (req) => {
   const guideBlock = task === 'chat'
     ? `Ton nom pour cet étudiant : « ${memoName} » (son Memo). S'il t'appelle « ${memoName} » ou « Memo », il s'adresse à toi.\n<guide_memoa>\n${APP_GUIDE}\n</guide_memoa>\nRègle : si la demande concerne l'application Memoa elle-même (fonctionnement, prix, boutons, pages, réglages, déconnexion, points, brouillons…), réponds d'après ce <guide_memoa>, avec les noms exacts des boutons et le chemin à suivre. Ne dis jamais que tu n'as pas l'information si elle figure dans le guide.\n\n`
     : ''
-  turns.push({ role: 'user', content: guideBlock + (context ? `${context}\n\nDemande de l'étudiant :\n${prompt}` : prompt) })
+  const promptText = task === 'schedule' ? `Date du jour (Kinshasa) : ${new Date(Date.now() + 3_600_000).toISOString().slice(0, 10)}\n\nTexte de l'horaire :\n${prompt}` : prompt
+  turns.push({ role: 'user', content: guideBlock + (context ? `${context}\n\nDemande de l'étudiant :\n${promptText}` : promptText) })
 
   // ---- Réservation atomique des points AVANT d'appeler l'IA (rendus si l'IA échoue) : des appels simultanés ne peuvent pas dépasser le solde ----
   const held = await reserve(admin, user.id, task, cost, st)
