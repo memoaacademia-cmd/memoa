@@ -9,7 +9,7 @@ import webpush from 'npm:web-push@3.6.7'
 const VAPID_PUBLIC_KEY = 'BFSlSc6xPsaWeTvtbl7chIzW2mlhTSyEa1Z1XCkoC3Zx-QveBK_ygbfEZGWQKDgSt01GYbQ5Tbp2zah7E-eaZhs'
 
 // Carte du jour : même règle que dans l'application (jour de Kinshasa, pas de 97).
-const FACTS_URL = 'https://memoaacademia-cmd.github.io/memoa/facts-titles.json'
+const FACTS_URL = 'https://app.memoaacademia.com/facts-titles.json'
 function gcd(a: number, b: number): number { return b ? gcd(b, a % b) : a }
 async function todayCard(): Promise<{ t: string } | null> {
   try {
