@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import RichText from '../components/RichText'
+import { protectBlocks, toAiText } from '../lib/blocks'
 import DictateButton from '../components/Dictate'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
 import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad, WebToggle } from '../components/ui'
@@ -198,9 +199,16 @@ export function NewCourse() {
       } else if (structured) {
         setStep('Mise en forme de tes notes…')
         try {
-          if (structured.length > 7500) throw new Error('trop long pour la mise en forme IA')
-          const r = await askAI({ task: 'structure_notes', purpose: 'course', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${structured}` : structured })
-          if (r.reply.trim()) structured = r.reply.trim()
+          // Tableaux, graphiques, formes et schémas : remplacés par un repère pendant la mise en forme, puis remis en place.
+          const prot = protectBlocks(structured)
+          const toSend = prot.text
+          if (toSend.length > 7500) throw new Error('trop long pour la mise en forme IA')
+          const keep = prot.count ? `\n\n(Les lignes §BLOC1§, §BLOC2§… sont des tableaux ou des schémas : recopie-les telles quelles, chacune sur sa ligne, à leur place.)` : ''
+          const r = await askAI({ task: 'structure_notes', purpose: 'course', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${toSend}${keep}` : toSend + keep })
+          if (r.reply.trim()) {
+            const back = prot.count ? prot.restore(r.reply.trim()) : r.reply.trim()
+            if (back) structured = back.trim() // sinon l'IA a perdu un bloc : on garde ton texte tel quel
+          }
         } catch (e) {
           if (e instanceof LimitError) throw e
           /* l'IA est facultative ici : on garde le texte tel quel plutôt que de perdre la note */
@@ -256,7 +264,7 @@ export function NewCourse() {
         bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { if (!isOnline() && pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
 
-      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} />
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} body={content} onBody={setContent} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
       {user && (
         <OfflineSaveSheet
@@ -679,7 +687,7 @@ export function CourseDetail() {
     let text = (course.data?.title ?? '') + '. ' + full
     setSummary(null)
     if (summarize) {
-      const r = await run(() => askAI({ task: 'summary', prompt: full.slice(0, 60000) }))
+      const r = await run(() => askAI({ task: 'summary', prompt: toAiText(full).slice(0, 60000) }))
       if (!r) return
       text = stripAiNoise(r.reply)
       setSummary(text)
@@ -726,7 +734,7 @@ export function CourseDetail() {
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     let content = base
     if (guide) {
-      const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${base || '(aucun)'}` }))
+      const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${toAiText(base) || '(aucun)'}` }))
       if (!r) return
       const extra = stripAiNoise(r.reply).trim()
       content = base ? `${base}\n\nComplément de Memo :\n${extra}` : extra
@@ -957,7 +965,7 @@ export function CourseDetail() {
         </div>
       )}
 
-      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} onVideo={() => videoRef.current?.click()} />
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} onVideo={() => videoRef.current?.click()} body={noteText} onBody={setNoteText} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )

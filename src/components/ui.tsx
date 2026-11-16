@@ -84,6 +84,11 @@ const ICONS: Record<string, string> = {
   trash: 'M5 7 H19 M9 7 V4 H15 V7 M7 7 L8 20 H16 L17 7',
   menu: 'M4 7 H20 M4 12 H20 M4 17 H20',
   copy: 'M9 9 H20 V20 H9 Z M5 15 V4 H16',
+  table: 'M4 5 H20 V19 H4 Z M4 10 H20 M4 14.5 H20 M10 5 V19',
+  shapes: 'M4 4 H11 V11 H4 Z M17 13 A4 4 0 1 0 17 21 A4 4 0 1 0 17 13',
+  diagram: 'M3 4 H10 V9 H3 Z M14 15 H21 V20 H14 Z M6.5 9 V12 H17.5 V15',
+  chart: 'M4 20 H20 M7 20 V12 M12 20 V6 M17 20 V10',
+  more: 'M12 6 V6.01 M12 12 V12.01 M12 18 V18.01',
   info: 'M12 3 A9 9 0 1 0 12 21 A9 9 0 1 0 12 3 M12 11 V16 M12 7.8 V8'
 }
 

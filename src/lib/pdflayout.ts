@@ -2,6 +2,8 @@
 // Il transforme un texte en pages positionnées (mm), SANS dessiner. pdf.ts dessine ensuite ces pages avec jsPDF.
 // La mesure du texte est fournie par l'appelant (jsPDF en production), donc le moteur compte les pages avec les vraies largeurs.
 
+import { isFigLine, lineToFig, figScene, type Fig, type Scene } from './blocks'
+
 export const PAGE_W = 210
 export const PAGE_H = 297
 const PT = 0.3528 // 1 point en mm
@@ -33,6 +35,7 @@ export type Block =
   | { t: 'p'; text: string }
   | { t: 'li'; marker: string; text: string; level: number }
   | { t: 'table'; rows: string[][]; header: boolean }
+  | { t: 'fig'; fig: Fig }
 
 export type Color = number | [number, number, number]
 export type Item =
@@ -40,6 +43,7 @@ export type Item =
   | { k: 'rect'; x: number; y: number; w: number; h: number; fill: [number, number, number] }
   | { k: 'line'; x1: number; y1: number; x2: number; y2: number; w: number; color: Color }
   | { k: 'dot'; x: number; y: number; r: number; color: Color }
+  | { k: 'fig'; x: number; y: number; w: number; h: number; scene: Scene }
 export interface Page { items: Item[]; fill: number }
 
 // ---------------------------------------------------------------- lecture du texte
@@ -59,6 +63,8 @@ export function parseBlocks(text: string, shift = 0, san: (s: string) => string 
     const raw = lines[i]
     const t = raw.trim()
     if (!t) continue
+    // graphique, forme ou schéma (une ligne [[...]])
+    if (isFigLine(t)) { const fg = lineToFig(t); if (fg) { out.push({ t: 'fig', fig: fg }); continue } }
     // tableau
     if (isRow(t)) {
       const rows: string[][] = []
@@ -94,7 +100,7 @@ export function parseBlocks(text: string, shift = 0, san: (s: string) => string 
     if ((m = /^(\d+[.)]|[a-z][.)])\s+(.*)$/.exec(t))) { out.push({ t: 'li', marker: m[1], text: san(m[2]), level: indent }); continue }
     out.push({ t: 'p', text: san(t) })
   }
-  return out.filter((b) => b.t === 'table' || ('text' in b && b.text.trim()))
+  return out.filter((b) => b.t === 'table' || b.t === 'fig' || ('text' in b && b.text.trim()))
 }
 
 // ---------------------------------------------------------------- paramètres de mise en page
@@ -184,6 +190,12 @@ export function paginate(blocks: Block[], p: Params, m0: Measure): Page[] {
     if (b.t === 'li') return wrap(b.text, textW - 7 - b.level * 6, p.font, false, m)
     return []
   }
+  /** Taille d'une figure sur la page (mm) : 120 mm de large au plus, centrée. */
+  const figBox = (b: Extract<Block, { t: 'fig' }>) => {
+    const scene = figScene(b.fig)
+    const w = Math.min(textW, 120)
+    return { scene, w, h: (scene.h * w) / scene.w, x: p.ml + (textW - w) / 2 }
+  }
 
   // Table : largeurs de colonnes et hauteurs de lignes
   const tableFont = () => Math.max(8.5, p.font - 2.2)
@@ -244,6 +256,7 @@ export function paginate(blocks: Block[], p: Params, m0: Measure): Page[] {
       const lt = layoutTable(b)
       return lt.rows[0].h + (lt.rows[1] ? lt.rows[1].h : 0)
     }
+    if (b.t === 'fig') return figBox(b).h
     const n = linesOf(b).length
     const own = (n <= 3 ? n : 2) * lh(p.font) // 2-3 lignes ne se coupent pas : il faut alors toutes les lignes
     return b.t !== 'li' && /:\s*$/.test(b.text) && n <= 2 ? n * lh(p.font) + p.para + keepNeed(idx + 1) : own
@@ -299,6 +312,14 @@ export function paginate(blocks: Block[], p: Params, m0: Measure): Page[] {
       return
     }
 
+    if (b.t === 'fig') {
+      const fb = figBox(b)
+      if (!atTop() && y + fb.h > limit) newPage()
+      cur.items.push({ k: 'fig', x: fb.x, y, w: fb.w, h: fb.h, scene: fb.scene })
+      y += fb.h + p.para + 1
+      return
+    }
+
     // paragraphe ou élément de liste
     const li = b.t === 'li' ? b : null
     const indent = li ? 7 + li.level * 6 : 0
@@ -340,7 +361,7 @@ export function paginate(blocks: Block[], p: Params, m0: Measure): Page[] {
   pages.forEach((pg) => {
     let bottom = top
     for (const it of pg.items) {
-      const yy = it.k === 'text' ? it.y + 1.5 : it.k === 'rect' ? it.y + it.h : it.k === 'line' ? it.y2 : it.y
+      const yy = it.k === 'text' ? it.y + 1.5 : it.k === 'rect' || it.k === 'fig' ? it.y + it.h : it.k === 'line' ? it.y2 : it.y
       if (yy > bottom) bottom = yy
     }
     pg.fill = Math.max(0, Math.min(1, (bottom - top) / usable))

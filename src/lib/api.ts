@@ -3,6 +3,7 @@
 //  - Démo (localStorage) quand les clés Supabase sont absentes.
 // Les pages n'appellent QUE ce fichier : changer de backend ne touche pas à l'interface.
 import { cacheCourses } from './outbox'
+import { toAiText } from './blocks'
 import { isConfigured, supabase } from './supabase'
 import { loadDemo, saveDemo, uid } from './demo'
 import { shrinkImage } from './image'
@@ -466,7 +467,7 @@ export async function searchNotes(userId: string, query: string): Promise<NoteHi
     return loadDemo().notes
       .filter((n) => n.title.toLowerCase().includes(needle) || n.content.toLowerCase().includes(needle))
       .slice(0, 8)
-      .map((n) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(n.content, q) }))
+      .map((n) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(toAiText(n.content), q) }))
   }
   void userId
   const { data, error } = await sb()
@@ -476,7 +477,7 @@ export async function searchNotes(userId: string, query: string): Promise<NoteHi
     .order('created_at', { ascending: false })
     .limit(8)
   if (error) throw error
-  return (data ?? []).map((n: any) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(n.content ?? '', q) }))
+  return (data ?? []).map((n: any) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(toAiText(n.content ?? ''), q) }))
 }
 
 export async function addNote(userId: string, courseId: string, title: string, content: string, source = 'texte'): Promise<Note> {

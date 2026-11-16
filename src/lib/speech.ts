@@ -1,6 +1,7 @@
 // Dictée vocale et lecture à voix haute : tout se fait avec le navigateur du téléphone, sans serveur ni coût.
 import { useSyncExternalStore } from 'react'
 import { track } from './track'
+import { toSpeechText } from './blocks'
 
 /** Lecture en cours (une seule à la fois). Partagée par toute l'application : le mini-lecteur la montre sur tous les écrans. */
 export interface Voice {
@@ -110,7 +111,7 @@ export function startDictation(onText: (t: string) => void, onEnd: (error?: stri
 }
 
 function plain(text: string): string {
-  return text.replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim()
+  return toSpeechText(text).replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 // Lecture morceau par morceau : on garde la position pour pouvoir mettre en pause et reprendre.

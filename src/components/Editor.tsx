@@ -1,9 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BottomSheet, Icon, MemoAvatar, PillButton, Row, RowGroup } from './ui'
 import { useAuth } from '../lib/auth'
+import { track } from '../lib/track'
+import { joinSegments, insertBlock, lineToFig, replaceBlock, splitSegments, type Fig } from '../lib/blocks'
+import { AutoText, BLOCK_ROWS, BlockSheet, FigBlock, TableBlock, type BlockKind } from './Blocks'
 
 /* Écran d'écriture plein écran, style Notes : sans cadre, titre grand, texte qui occupe la page.
    Utilisé par « Ajouter une note » (CourseDetail) et, au bloc 2, par « Nouveau cours » (NewCourse). */
+
+/** Dernière position du curseur dans la note (zone de texte + caractère) : sert à insérer un bloc là où l'étudiant écrivait. */
+let caret: { seg: number; pos: number } | null = null
 
 export function EditorScreen(p: {
   backLabel: string
@@ -34,6 +40,13 @@ export function EditorScreen(p: {
 }) {
   const [guideOpen, setGuideOpen] = useState(false)
   const { profile } = useAuth()
+  // Tableaux, graphiques, formes et schémas : la note reste du texte ; on la découpe en zones de texte et en blocs pour l'affichage.
+  const segs = splitSegments(p.body)
+  const flow = segs.some((x) => x.k !== 'text')
+  const [editing, setEditing] = useState<{ seg: number; fig: Fig } | null>(null)
+  useEffect(() => { caret = null; return () => { caret = null } }, [])
+  const setSeg = (i: number, lines: string[]) => p.onBody(joinSegments(segs.map((x, k) => (k === i ? ({ k: 'text', lines } as typeof x) : x))))
+  const lastIsBlock = segs.length > 0 && segs[segs.length - 1].k !== 'text'
   const memoName = profile?.memo_name || 'Memo'
   const [hintOpen, setHintOpen] = useState(false)
   // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
@@ -92,7 +105,37 @@ export function EditorScreen(p: {
           aria-label={p.titlePlaceholder}
         />
         {p.dateText && <span className="ed-date">{p.dateText}</span>}
-        <textarea data-tour="editor-body" className="ed-body" placeholder={p.bodyPlaceholder} value={p.body} onChange={(e) => p.onBody(e.target.value)} aria-label="Texte" />
+        {!flow ? (
+          <textarea
+            data-tour="editor-body" className="ed-body" placeholder={p.bodyPlaceholder} value={p.body} onChange={(e) => { caret = { seg: 0, pos: e.target.selectionStart ?? 0 }; p.onBody(e.target.value) }} aria-label="Texte"
+            onSelect={(e) => { caret = { seg: 0, pos: e.currentTarget.selectionStart ?? 0 } }}
+            onClick={(e) => { caret = { seg: 0, pos: e.currentTarget.selectionStart ?? 0 } }}
+          />
+        ) : (
+          <div className="ed-flow" data-tour="editor-body">
+            {segs.map((x, i) => {
+              if (x.k === 'text') {
+                const last = i === segs.length - 1
+                return <AutoText key={last ? 'last-text' : 't' + i} className={i === 0 ? 'ed-body' : ''} value={x.lines.join('\n')} onChange={(v) => setSeg(i, v.split('\n'))} onSelect={(pos) => { caret = { seg: i, pos } }} />
+              }
+              if (x.k === 'table') return <TableBlock key={'b' + i} lines={x.lines} onChange={(l) => p.onBody(replaceBlock(p.body, i, l))} />
+              return x.fig
+                ? <FigBlock key={'b' + i} fig={x.fig} onEdit={() => setEditing({ seg: i, fig: x.fig as Fig })} onDelete={() => p.onBody(replaceBlock(p.body, i, []))} />
+                : null
+            })}
+            {lastIsBlock && <AutoText key="last-text" value="" onChange={(v) => p.onBody(p.body + '\n' + v)} onSelect={(pos) => { caret = { seg: segs.length, pos } }} />}
+          </div>
+        )}
+        {editing && (
+          <BlockSheet
+            open
+            kind={editing.fig.t as BlockKind}
+            initial={editing.fig}
+            onClose={() => setEditing(null)}
+            onSave={(lines) => { if (lineToFig(lines[0])) { p.onBody(replaceBlock(p.body, editing.seg, lines)); track(editing.fig.t + '_edited') } setEditing(null) }}
+            onDelete={() => { p.onBody(replaceBlock(p.body, editing.seg, [])); setEditing(null) }}
+          />
+        )}
       </div>
 
       <div className="ed-extra">
@@ -138,21 +181,41 @@ export function EditorBar({ onPhoto, onDictate, dictating, dictateDisabled, onRe
       <button type="button" className="ed-chip" onClick={onPhoto}><Icon name="photo" size={18} />Photo</button>
       <button type="button" className={'ed-chip ed-mic' + (dictating ? ' on' : '')} onClick={onDictate} disabled={dictateDisabled} aria-pressed={dictating} aria-label={dictating ? 'Arrêter la dictée' : 'Dicter'}><Icon name="mic" size={20} /></button>
       <button type="button" className="ed-chip" onClick={onRecord} disabled={recordDisabled}><Icon name="audio" size={18} />Enregistrer</button>
-      <button type="button" className="ed-plus" onClick={onPlus} aria-label="Ajouter un document"><Icon name="plus" size={24} stroke={2.3} /></button>
+      <button type="button" data-tour="editor-plus" className="ed-plus" onClick={onPlus} aria-label="Ajouter : tableau, graphique, document…"><Icon name="plus" size={24} stroke={2.3} /></button>
     </div>
   )
 }
 
-/** Feuille « Ajouter un document » : PDF, Audio, Vidéo. */
-export function AddDocSheet({ open, onClose, maxMb, onPdf, onAudio, onVideo }: { open: boolean; onClose: () => void; maxMb: number; onPdf: () => void; onAudio: () => void; onVideo: () => void }) {
+/** Feuille « Ajouter » : d'abord les blocs (Tableau, Graphique, Formes, Diagramme), puis les documents (PDF, Audio, Vidéo).
+ *  Pour insérer des blocs, passe `body` et `onBody` (le texte de la note) : le bloc est écrit à la position du curseur. */
+export function AddDocSheet({ open, onClose, maxMb, onPdf, onAudio, onVideo, body, onBody }: { open: boolean; onClose: () => void; maxMb: number; onPdf: () => void; onAudio: () => void; onVideo: () => void; body?: string; onBody?: (v: string) => void }) {
+  const [kind, setKind] = useState<BlockKind | null>(null)
+  const canInsert = typeof body === 'string' && !!onBody
+  function save(lines: string[]) {
+    if (!canInsert || !kind) return
+    const segs = splitSegments(body as string)
+    const at = caret && segs[caret.seg]?.k === 'text' ? caret : undefined
+    onBody!(insertBlock(body as string, lines, at))
+    track(kind + '_inserted')
+    caret = null
+    setKind(null)
+  }
   return (
-    <BottomSheet open={open} onClose={onClose} title="Ajouter un document">
-      <RowGroup>
-        <Row icon="pdf" title="PDF" sub="Je lis le texte de ton cours" onClick={() => { onClose(); onPdf() }} />
-        <Row icon="audio" title="Audio" sub={`MP3, M4A, WAV · ${maxMb} Mo maximum`} onClick={() => { onClose(); onAudio() }} />
-        <Row icon="video" title="Vidéo" sub="Je garde la voix et je la transcris" onClick={() => { onClose(); onVideo() }} />
-      </RowGroup>
-    </BottomSheet>
+    <>
+      <BottomSheet open={open} onClose={onClose} title={canInsert ? 'Ajouter' : 'Ajouter un document'}>
+        {canInsert && (
+          <RowGroup label="Insérer dans la note" tour="editor-blocks">
+            {BLOCK_ROWS.map((r) => <Row key={r.kind} icon={r.icon} title={r.title} sub={r.sub} onClick={() => { onClose(); setKind(r.kind) }} />)}
+          </RowGroup>
+        )}
+        <RowGroup label={canInsert ? 'Ajouter un document' : undefined}>
+          <Row icon="pdf" title="PDF" sub="Je lis le texte de ton cours" onClick={() => { onClose(); onPdf() }} />
+          <Row icon="audio" title="Audio" sub={`MP3, M4A, WAV · ${maxMb} Mo maximum`} onClick={() => { onClose(); onAudio() }} />
+          <Row icon="video" title="Vidéo" sub="Je garde la voix et je la transcris" onClick={() => { onClose(); onVideo() }} />
+        </RowGroup>
+      </BottomSheet>
+      {kind && <BlockSheet open kind={kind} onClose={() => setKind(null)} onSave={save} />}
+    </>
   )
 }
 

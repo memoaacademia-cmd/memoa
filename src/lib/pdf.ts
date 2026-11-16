@@ -4,6 +4,7 @@ import type { Note } from './types'
 
 import { sanitize, parseBlocks, layoutDocument, audit, PAGE_W, PAGE_H, type Block, type Page, type Measure, type Params } from './pdflayout'
 import { cleanDocText, cleanTpText } from './tpclean'
+import { splitSegments } from './blocks'
 
 const clean = sanitize
 
@@ -79,7 +80,29 @@ function drawPages(doc: Doc, pages: Page[]) {
         doc.text(it.s, it.x, it.y)
       } else if (it.k === 'rect') { col(it.fill, 'fill'); doc.rect(it.x, it.y, it.w, it.h, 'F') }
       else if (it.k === 'line') { col(it.color, 'draw'); doc.setLineWidth(it.w); doc.line(it.x1, it.y1, it.x2, it.y2) }
+      else if (it.k === 'fig') drawFigure(doc, it)
       else { col(it.color, 'fill'); doc.circle(it.x, it.y, it.r, 'F') }
+    }
+  }
+}
+
+/** Dessine une figure (graphique, forme, schéma) en vectoriel à partir de la scène partagée avec l'écran : rien à télécharger, marche hors ligne. */
+function drawFigure(doc: Doc, it: Extract<Page['items'][number], { k: 'fig' }>) {
+  const s = it.w / it.scene.w
+  const rgb = (c: string): [number, number, number] => (c === 'ink' ? [30, 30, 30] : [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)])
+  for (const pr of it.scene.prims) {
+    if (pr.p === 'rect') { const [r, g, b] = rgb(pr.fill); doc.setFillColor(r, g, b); doc.roundedRect(it.x + pr.x * s, it.y + pr.y * s, pr.w * s, pr.h * s, pr.r * s, pr.r * s, 'F') }
+    else if (pr.p === 'ellipse') { const [r, g, b] = rgb(pr.fill); doc.setFillColor(r, g, b); doc.ellipse(it.x + pr.cx * s, it.y + pr.cy * s, pr.rx * s, pr.ry * s, 'F') }
+    else if (pr.p === 'poly') {
+      const [r, g, b] = rgb(pr.fill); doc.setFillColor(r, g, b); doc.setDrawColor(r, g, b); doc.setLineWidth(0.1)
+      const pts = pr.pts.map(([x, y]) => [it.x + x * s, it.y + y * s] as [number, number])
+      const segs = pts.slice(1).map((q, i) => [q[0] - pts[i][0], q[1] - pts[i][1]])
+      doc.lines(segs, pts[0][0], pts[0][1], [1, 1], 'FD', true)
+    } else if (pr.p === 'line') { const [r, g, b] = rgb(pr.color); doc.setDrawColor(r, g, b); doc.setLineWidth(pr.w * s); doc.line(it.x + pr.x1 * s, it.y + pr.y1 * s, it.x + pr.x2 * s, it.y + pr.y2 * s) }
+    else {
+      const [r, g, b] = rgb(pr.color)
+      doc.setTextColor(r, g, b); doc.setFont('helvetica', pr.bold ? 'bold' : 'normal'); doc.setFontSize((pr.size * s) / 0.3528)
+      doc.text(sanitize(pr.s), it.x + pr.x * s, it.y + pr.y * s, { align: pr.anchor === 'middle' ? 'center' : pr.anchor === 'end' ? 'right' : 'left' })
     }
   }
 }
@@ -152,6 +175,19 @@ export interface CoursePdfOptions {
   template?: CoverTemplate
 }
 
+/** Nettoie le texte d'une note SANS toucher aux lignes de graphique, forme ou schéma (le nettoyage les prendrait pour des champs vides). */
+function cleanKeepingFigures(content: string): string {
+  if (!content.includes('[[')) return cleanDocText(content)
+  const out: string[] = []
+  let buf: string[] = []
+  const flush = () => { if (buf.length) { out.push(cleanDocText(buf.join('\n'))); buf = [] } }
+  for (const seg of splitSegments(content)) {
+    if (seg.k === 'fig') { flush(); out.push(seg.lines[0]) } else buf.push(...seg.lines)
+  }
+  flush()
+  return out.join('\n')
+}
+
 export async function buildCoursePdf(title: string, author: string, notes: Note[], kind = 'NOTES DE COURS', opts: CoursePdfOptions = {}): Promise<Blob> {
   const { jsPDF } = await import('jspdf')
   JsPdfClass = jsPDF as unknown as new (o: object) => Doc
@@ -163,7 +199,7 @@ export async function buildCoursePdf(title: string, author: string, notes: Note[
   const blocks: Block[] = []
   notes.forEach((n, i) => {
     blocks.push({ t: 'title', text: clean(n.title || `Note ${i + 1}`) })
-    blocks.push(...parseBlocks(cleanDocText(n.content), 1))
+    blocks.push(...parseBlocks(cleanKeepingFigures(n.content), 1))
   })
   const { params } = buildBody(doc, blocks, null)
   footers(doc, title, params, opts.premium ? look.accent : 215)
