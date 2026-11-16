@@ -138,14 +138,22 @@ export async function markReviewDay(uid: string): Promise<void> {
 /* ------------------------------ génération par Memo ------------------------------ */
 /** « Q: … / R: … » → cartes. Tolère les variantes (« Question : », « Réponse : », réponses sur plusieurs lignes). */
 export function parseCards(text: string): { question: string; answer: string }[] {
+  const strict = parseStrict(text)
+  return strict.length ? strict : parseLoose(text)
+}
+
+/** Enlève puces et numérotation en début de ligne (« - », « • », « 1. », « 2) »). */
+const unbullet = (l: string) => l.replace(/^(?:[-*•–—]+|\d+\s*[.)])\s*/, '').trim()
+
+function parseStrict(text: string): { question: string; answer: string }[] {
   const out: { question: string; answer: string }[] = []
   let q: string | null = null
   let a: string | null = null
   const flush = () => { if (q && a) out.push({ question: q.trim().slice(0, 400), answer: a.trim().slice(0, 800) }); q = null; a = null }
-  for (const raw of text.replace(/\*\*/g, '').split(/\r?\n/)) {
-    const line = raw.trim()
+  for (const raw of text.replace(/\*\*|__|`/g, '').split(/\r?\n/)) {
+    const line = unbullet(raw.trim())
     const mq = /^(?:Q|Question)\s*\d*\s*[:.)-]\s*(.+)$/i.exec(line)
-    const ma = /^(?:R|Réponse|Reponse)\s*[:.)-]\s*(.+)$/i.exec(line)
+    const ma = /^(?:R|Réponse|Reponse)\s*\d*\s*[:.)-]\s*(.+)$/i.exec(line)
     if (mq) { flush(); q = mq[1]; continue }
     if (ma && q !== null) { a = ma[1]; continue }
     if (!line) { if (q && a) flush(); continue }
@@ -156,10 +164,22 @@ export function parseCards(text: string): { question: string; answer: string }[]
   return out.filter((c) => c.question.length >= 3 && c.answer.length >= 1)
 }
 
+/** Plan B si le modèle n'a pas respecté « Q: / R: » : une ligne qui finit par « ? » = question, la ligne suivante = réponse. */
+function parseLoose(text: string): { question: string; answer: string }[] {
+  const out: { question: string; answer: string }[] = []
+  const lines = text.replace(/\*\*|__|`/g, '').split(/\r?\n/).map((l) => unbullet(l.trim())).filter(Boolean)
+  for (let k = 0; k < lines.length - 1; k++) {
+    if (!/[?？]\s*$/.test(lines[k])) continue
+    const ans = lines[k + 1].replace(/^(?:R|Réponse|Reponse)\s*\d*\s*[:.)-]\s*/i, '')
+    if (ans && !/[?？]\s*$/.test(ans)) { out.push({ question: lines[k].replace(/^(?:Q|Question)\s*\d*\s*[:.)-]\s*/i, '').slice(0, 400), answer: ans.slice(0, 800) }); k++ }
+  }
+  return out.filter((c) => c.question.length >= 3 && c.answer.length >= 1)
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
 /** Memo crée des cartes à partir des notes du cours (coûte comme un quiz : 1 point ; Premium et essai : rien à compter). Renvoie le nombre de cartes ajoutées. */
-export async function generateCards(uid: string, courseId: string): Promise<number> {
+export async function generateCards(uid: string, courseId: string, memo = 'Memo'): Promise<number> {
   if (!isConfigured || !supabase) throw new Error("Les cartes de révision ne sont pas disponibles en mode démo.")
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour créer des cartes, il faut une connexion internet.')
   const existing = cachedCards(uid).filter((c) => c.course_id === courseId)
@@ -168,7 +188,7 @@ export async function generateCards(uid: string, courseId: string): Promise<numb
   const r = await askAI({ task: 'cards', courseId, prompt })
   const known = new Set(existing.map((c) => norm(c.question)))
   const fresh = parseCards(r.reply).filter((c) => !known.has(norm(c.question)))
-  if (!fresh.length) throw new Error("Memo n'a pas réussi à préparer de cartes cette fois. Réessaie (ou ajoute d'abord des notes à ce cours).")
+  if (!fresh.length) throw new Error(`${memo} n'a pas réussi à préparer de cartes cette fois. Réessaie (ou ajoute d'abord des notes à ce cours).`)
   const { data, error } = await supabase.from('review_cards').insert(fresh.map((c) => ({ user_id: uid, course_id: courseId, question: c.question, answer: c.answer }))).select(COLS)
   if (error) throw new Error(error.message)
   const added = ((data ?? []) as unknown as Raw[]).map(fromRaw).filter((c): c is Card => !!c)
