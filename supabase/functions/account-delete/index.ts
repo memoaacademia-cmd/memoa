@@ -84,7 +84,7 @@ async function purgeFolder(admin: Admin, bucket: string, uid: string, keep: Set<
 
 const LEFTOVER_TABLES: [string, string][] = [
   ['profiles', 'id'], ['courses', 'user_id'], ['notes', 'user_id'], ['activity_days', 'user_id'], ['ai_conversations', 'user_id'], ['ai_messages', 'user_id'],
-  ['ai_usage', 'user_id'], ['subscriptions', 'user_id'], ['feedback', 'user_id'], ['push_subscriptions', 'user_id'], ['drafts_expiry', 'user_id'],
+  ['ai_usage', 'user_id'], ['ai_log', 'user_id'], ['review_cards', 'user_id'], ['subscriptions', 'user_id'], ['feedback', 'user_id'], ['push_subscriptions', 'user_id'], ['drafts_expiry', 'user_id'],
   ['expiry_notices', 'user_id'], ['lingala_uses', 'user_id'], ['tp_sessions', 'user_id'], ['library_favorites', 'user_id'], ['library_reports', 'user_id'],
   ['app_events', 'user_id'], ['app_errors', 'user_id'], ['payments', 'user_id'], ['library_documents', 'owner_id']
 ]
@@ -129,6 +129,8 @@ Deno.serve(async (req) => {
 
     // 2) Avatar.
     report.avatarsRemoved = await purgeFolder(admin, 'avatars', uid)
+    // Images créées par Memo (Premium) : dossier <uid>/ du bucket « ai-images » (migration 0021). Bucket absent = rien à effacer.
+    try { report.aiImagesRemoved = await purgeFolder(admin, 'ai-images', uid) } catch (e) { if (!/bucket not found/i.test((e as Error).message)) throw e; report.aiImagesRemoved = 0 }
 
     // 3) Librairie : les documents publiés restent (anonymes) ; le reste est effacé avec son fichier.
     const { data: docs, error: docErr } = await admin.from('library_documents').select('id,file_path,status,deleted_at').eq('owner_id', uid)

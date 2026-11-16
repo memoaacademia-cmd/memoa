@@ -56,13 +56,28 @@ export async function phoneHash(phoneDigits: string): Promise<string | null> {
 // Ici on : vérifie l'identité, applique quotas et anti-abus, construit le contexte du cours,
 // choisit le modèle selon la tâche, appelle le fournisseur, et enregistre historique + consommation.
 
-type Task = 'chat' | 'structure_notes' | 'quiz' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
-const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'tp_plan', 'tp_write', 'tp_section', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
+type Task = 'chat' | 'structure_notes' | 'quiz' | 'cards' | 'tp_plan' | 'tp_write' | 'tp_section' | 'tp_revise' | 'summary' | 'enrich_note' | 'review_doc'
+const TASKS: Task[] = ['chat', 'structure_notes', 'quiz', 'cards', 'tp_plan', 'tp_write', 'tp_section', 'tp_revise', 'summary', 'enrich_note', 'review_doc']
 
 // ---- Limites (modifiables par variables d'environnement, sans toucher au code) ----
 const num = (k: string, d: number) => Number(Deno.env.get(k) ?? d)
 const PER_MINUTE = num('AI_LIMIT_PER_MINUTE', 8) // anti-rafale pour tous
 const PREMIUM_PER_DAY = num('AI_PREMIUM_PER_DAY', 300) // « généreux » mais plafonné
+// ---- Garde-fous (tâche 6) : interrupteurs et plafonds, tous réglables par variables d'environnement ----
+// AI_ENABLED=false → toute l'IA est coupée (message clair, aucun point retiré). WEB_SEARCH_ENABLED=false → plus de recherche web (Memo répond sans, et le dit).
+// WEB_SEARCH_PER_USER_PER_DAY / WEB_SEARCH_GLOBAL_PER_DAY : plafonds de recherches web par jour de Kinshasa (par étudiant / pour tout le monde).
+const flagOn = (k: string) => !['false', '0', 'off', 'no', 'non'].includes((Deno.env.get(k) ?? '').trim().toLowerCase()) // actif par défaut
+const WEB_PER_USER_DAY = num('WEB_SEARCH_PER_USER_PER_DAY', 10)
+const WEB_GLOBAL_DAY = num('WEB_SEARCH_GLOBAL_PER_DAY', 300)
+// Images (tâche 9) : réservées à Premium. IMAGE_MODEL = nom du modèle d'image chez OmniRoute (jamais écrit en dur). IMAGE_DAILY_LIMIT = images par jour et par étudiant Premium.
+const IMAGE_DAILY_LIMIT = num('IMAGE_DAILY_LIMIT', 10)
+const IMAGE_PREMIUM_MSG = 'Créer des images est réservé à Premium. Passe à Premium et Memo dessinera pour toi.'
+const IMAGE_BUSY_MSG = "Memo n'arrive pas à créer d'image pour le moment. Réessaie dans quelques minutes."
+const AI_OFF_MSG = 'Memo fait une petite pause pour le moment. Réessaie un peu plus tard.'
+const AI_BUSY_MSG = 'Memo est très sollicité, réessaie dans quelques minutes. Aucun point ne t’a été retiré.'
+const WEB_OFF_MSG = 'La recherche web est indisponible pour le moment : Memo répond avec ce qu’il sait, sans internet.'
+const WEB_USER_LIMIT_MSG = `Tu as atteint ta limite de ${WEB_PER_USER_DAY} recherches web pour aujourd’hui : Memo répond sans internet. Elle revient demain à minuit (heure de Kinshasa).`
+const WEB_GLOBAL_LIMIT_MSG = 'La recherche web est très demandée aujourd’hui : Memo répond sans internet. Réessaie demain.'
 const MAX_PROMPT = 8000
 const MAX_LONG_TEXT = 60000 // résumé et mise en forme de notes : environ 15 pages
 const CHUNK_CHARS = 18000
@@ -88,7 +103,7 @@ const CHAT_PAID = 1 // chat : 1 point tous les 2 messages (voir plus bas)
 const COURSE_POINTS = 15 // génération complète d'un cours, quelle que soit la méthode (notes, consignes seules…)
 const NOTE_POINTS = 15 // créer ou ajouter une note dans un cours : 15 points FIXES, jamais selon la longueur
 const TP_POINTS = 10 // un TP complet (plan + ajustements + rédaction) : payé UNE seule fois, à l'ouverture de la « session de TP »
-const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
+const POINTS: Record<string, number> = { chat: 1, structure_notes: 4, quiz: 1, cards: 1, tp_plan: TP_POINTS, tp_write: TP_POINTS, tp_section: 0, tp_revise: 0, summary: 4, enrich_note: 4, transcribe: 3, review_doc: 0 }
 const LENGTH_TASKS: string[] = ['structure_notes', 'summary', 'enrich_note']
 const PAGE_CHARS = 1500 // une page environ
 /** « course » = création d'un cours (appelé par l'écran Nouveau cours, sans cours existant) : 15 points au total, tout compris. */
@@ -194,7 +209,7 @@ const refund = async (admin: ReturnType<typeof adminClient>, id: number) => { aw
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
 const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_section' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
-const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : 1536)
+const maxTokensFor = (t: Task) => (t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 600 : t === 'cards' ? 2048 : 1536)
 
 const BASE =
   "Tu es Memo, le compagnon d'étude d'un étudiant universitaire en République démocratique du Congo. " +
@@ -325,6 +340,11 @@ const SYSTEM: Record<Task, string> = {
   structure_notes:
     BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
+  cards:
+    BASE + " Crée des CARTES DE RÉVISION à partir du matériel du cours : 10 cartes au plus (moins s'il y a peu de matière). Chaque carte = une question précise et une réponse courte (25 mots au maximum) sur une notion importante : définition, étape, date, distinction, formule. " +
+    "Les questions sont variées et se comprennent seules (jamais « selon le texte »). Appuie-toi uniquement sur le matériel du cours. " +
+    "FORMAT OBLIGATOIRE : pour chaque carte, une ligne « Q: … », puis une ligne « R: … », puis une ligne vide. Aucune numérotation, aucune introduction, aucune conclusion, ni astérisques ni symboles. " +
+    "Si la demande donne une liste de questions déjà existantes, ne les repose pas et ne les reformule pas.",
   tp_plan: BASE + " Propose un plan détaillé (parties et sous-parties) pour le travail pratique demandé, adapté au niveau universitaire et aux consignes." + PLAN_FORMAT,
   tp_revise:
     BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs. Ne raccourcis jamais le plan : garde toutes les parties existantes sauf celles que l'étudiant demande de retirer." + PLAN_FORMAT,
@@ -342,6 +362,28 @@ const SYSTEM: Record<Task, string> = {
     BASE + ' Rédige le travail pratique complet en suivant le plan validé : introduction, développement, conclusion. Mets une section « Bibliographie à vérifier » sans inventer de références précises.' +
       " Le plan validé est la structure OBLIGATOIRE du document : chaque partie et chaque sous-partie du plan doit apparaître, dans le même ordre, avec son titre repris tel quel et un vrai développement. N'en saute aucune, ne les fusionne pas, ne te contente pas de résumer le plan. Les notes du cours ne servent que d'appui." +
       " Réponds uniquement avec le document demandé : aucune phrase d'introduction (« Voici… »), aucune conclusion adressée à l'étudiant, aucune ligne de séparation ---, aucune consigne entre crochets comme [Insérer un saut de page]. N'écris ni astérisques de mise en forme ni symboles décoratifs."
+}
+
+// ---- Journal serveur de l'IA (table ai_log, migration 0021) : jamais de texte de l'étudiant, seulement des faits techniques. Ne casse jamais la demande. ----
+async function aiLog(admin: ReturnType<typeof adminClient>, row: { user_id?: string | null; kind: string; task?: string; model?: string; detail?: string }) {
+  try {
+    const { error } = await admin.from('ai_log').insert({ ...row, detail: row.detail ? row.detail.slice(0, 200) : null })
+    if (error) console.error('ai-gateway journal :', error.message)
+  } catch (e) { console.error('ai-gateway journal :', (e as Error).message) }
+}
+
+/** La recherche web est-elle permise pour cet étudiant, maintenant ? Compte les recherches du jour de Kinshasa (étudiant, puis total). Si le comptage échoue : on refuse (le quota payant passe avant). */
+async function webPolicy(admin: ReturnType<typeof adminClient>, userId: string): Promise<{ ok: true } | { ok: false; why: 'off' | 'user' | 'global'; notice: string }> {
+  if (!flagOn('WEB_SEARCH_ENABLED') || !Deno.env.get('SEARCH_API_KEY')) return { ok: false, why: 'off', notice: WEB_OFF_MSG }
+  const since = new Date(kinDayStart(Date.now())).toISOString()
+  const [u, g] = await Promise.all([
+    admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('kind', 'web_search').eq('user_id', userId).gte('created_at', since),
+    admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('kind', 'web_search').gte('created_at', since)
+  ])
+  if (u.error || g.error) { console.error('ai-gateway plafond web :', (u.error ?? g.error)?.message); return { ok: false, why: 'off', notice: WEB_OFF_MSG } }
+  if ((u.count ?? 0) >= WEB_PER_USER_DAY) return { ok: false, why: 'user', notice: WEB_USER_LIMIT_MSG }
+  if ((g.count ?? 0) >= WEB_GLOBAL_DAY) return { ok: false, why: 'global', notice: WEB_GLOBAL_LIMIT_MSG }
+  return { ok: true }
 }
 
 // ---- Recherche web (facultative) : active seulement si le secret SEARCH_API_KEY existe (service Tavily). ----
@@ -392,7 +434,9 @@ async function callOpenAICompatible(model: string, system: string, turns: Turn[]
   const data = await res.json()
   const text = String(data.choices?.[0]?.message?.content ?? '').trim()
   if (!text) throw new Error('réponse vide du fournisseur IA')
-  return { text, truncated: data.choices?.[0]?.finish_reason === 'length', tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }
+  // OmniRoute renvoie le modèle qui a réellement répondu (rotation) : on le garde pour le journal. Sinon, le modèle demandé.
+  const used = typeof data.model === 'string' && data.model.trim() ? data.model.trim().slice(0, 120) : model
+  return { text, model: used, truncated: data.choices?.[0]?.finish_reason === 'length', tokensIn: data.usage?.prompt_tokens ?? 0, tokensOut: data.usage?.completion_tokens ?? 0 }
 }
 
 async function callModel(model: string, system: string, turns: Turn[], maxTokens: number) {
@@ -413,7 +457,7 @@ async function callModel(model: string, system: string, turns: Turn[], maxTokens
   const data = await res.json()
   const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim()
   if (!text) throw new Error('réponse vide du fournisseur IA')
-  return { text, truncated: data.candidates?.[0]?.finishReason === 'MAX_TOKENS', tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0 }
+  return { text, model, truncated: data.candidates?.[0]?.finishReason === 'MAX_TOKENS', tokensIn: data.usageMetadata?.promptTokenCount ?? 0, tokensOut: data.usageMetadata?.candidatesTokenCount ?? 0 }
 }
 
 /** Longs documents (TP) : si le fournisseur coupe la réponse faute de place, on lui demande de continuer là où il s'est arrêté (2 reprises au plus, et seulement s'il reste du temps). */
@@ -430,7 +474,7 @@ async function callModelFull(model: string, system: string, turns: Turn[], maxTo
     tokensIn += r.tokensIn
     tokensOut += r.tokensOut
   }
-  return { text, tokensIn, tokensOut }
+  return { text, model: r.model, tokensIn, tokensOut }
 }
 
 // ---- Audio vers texte : un fichier audio (cours enregistré) devient du texte. Utilise un fournisseur compatible OpenAI
@@ -445,6 +489,7 @@ async function transcribe(req: Request, userId: string) {
   if (file.size > TRANSCRIBE_MAX_MB * 1024 * 1024) return json(req, 413, { error: `Ce fichier est trop lourd (${TRANSCRIBE_MAX_MB} Mo maximum). Coupe l'enregistrement en plusieurs parties.` })
 
   const admin = adminClient()
+  if (!flagOn('AI_ENABLED')) { await aiLog(admin, { user_id: userId, kind: 'ai_off', task: 'transcribe' }); return json(req, 503, { error: AI_OFF_MSG, code: 'ai_disabled' }) }
   const minuteAgo = new Date(Date.now() - 60_000).toISOString()
   const { count: recent } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'transcribe').gte('created_at', minuteAgo)
   if ((recent ?? 0) >= 3) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
@@ -475,6 +520,7 @@ async function transcribe(req: Request, userId: string) {
     if (!res.ok) {
       const detail = (await res.text().catch(() => '')).slice(0, 300).replace(/\s+/g, ' ')
       console.error(`ai-gateway audio : HTTP ${res.status} (modèle « ${model} ») ${detail}`)
+      await aiLog(admin, { user_id: userId, kind: 'ai_fail', task: 'transcribe', model, detail: `HTTP ${res.status} ${detail}` })
       await refund(admin, held.id)
       return json(req, 502, { error: "La transcription n'a pas pu se faire. Réessaie avec un fichier plus court ou dans un autre format (MP3, M4A)." })
     }
@@ -485,6 +531,7 @@ async function transcribe(req: Request, userId: string) {
     return json(req, 200, { text })
   } catch (e) {
     console.error('ai-gateway audio :', (e as Error).message)
+    await aiLog(admin, { user_id: userId, kind: 'ai_fail', task: 'transcribe', model, detail: (e as Error).message })
     await refund(admin, held.id)
     return json(req, 502, { error: "La transcription a pris trop de temps. Essaie avec un fichier plus court." })
   }
@@ -506,6 +553,7 @@ async function reviewDoc(req: Request, userId: string, body: Record<string, unkn
   // Le texte est lu ICI, dans le fichier réellement déposé : on ne fait jamais confiance au texte envoyé par le téléphone.
   // Tout ce travail est limité à 30 secondes : passé ce délai (ou à la moindre panne), le document est publié sans attendre.
   const check = async (): Promise<string> => {
+    if (!flagOn('AI_ENABLED')) return 'ok' // IA coupée : même règle qu'en cas de panne, le document est publié sans vérification
     let text = ''
     if (doc.file_path) {
       try {
@@ -561,7 +609,117 @@ async function summarizeLong(model: string, text: string) {
     [{ role: 'user', content: "Voici les résumés successifs des parties d'un même cours. Fusionne-les en UN seul résumé court et fidèle (250 mots au maximum) : garde seulement les idées essentielles, supprime les redondances, n'ajoute rien :\n\n" + partials.join('\n\n') }],
     maxTokensFor('summary')
   )
-  return { text: last.text, tokensIn: tokensIn + last.tokensIn, tokensOut: tokensOut + last.tokensOut }
+  return { text: last.text, model: last.model, tokensIn: tokensIn + last.tokensIn, tokensOut: tokensOut + last.tokensOut }
+}
+
+/** Image demandée dans l'Assistant : PREMIUM seulement (contrôle ici, côté serveur : l'essai gratuit n'y donne pas accès). */
+async function imageTask(req: Request, user: { id: string }, body: Record<string, unknown>) {
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim().slice(0, 800) : ''
+  if (prompt.length < 3) return json(req, 400, { error: 'Dis-moi ce que tu veux voir sur l’image.' })
+  const conversationId = typeof body.conversationId === 'string' && UUID.test(body.conversationId) ? body.conversationId : null
+  const admin = adminClient()
+
+  // 1) Premium obligatoire (abonnement en cours). Essai et points gratuits : refusé, même si la fonction est appelée directement.
+  const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
+  if (!sub) {
+    await aiLog(admin, { user_id: user.id, kind: 'image_denied', task: 'image' })
+    return json(req, 403, { error: IMAGE_PREMIUM_MSG, code: 'premium_image' })
+  }
+
+  // 2) Fournisseur d'images configuré ? (IMAGE_MODEL, puis IMAGE_BASE_URL / IMAGE_API_KEY, sinon ceux de l'IA)
+  const model = (Deno.env.get('IMAGE_MODEL') ?? '').trim()
+  const base = (Deno.env.get('IMAGE_BASE_URL') ?? Deno.env.get('AI_BASE_URL') ?? '').replace(/\/+$/, '')
+  const key = Deno.env.get('IMAGE_API_KEY') ?? Deno.env.get('AI_API_KEY')
+  if (!model || !base || !key) {
+    console.error('ai-gateway image : IMAGE_MODEL / AI_BASE_URL / AI_API_KEY manquants')
+    await aiLog(admin, { user_id: user.id, kind: 'image_fail', task: 'image', detail: 'configuration manquante' })
+    return json(req, 503, { error: "La création d'images n'est pas encore activée.", code: 'image_unavailable' })
+  }
+
+  // 3) Plafond du jour (jour de Kinshasa) et anti-rafale. Une ligne « image_pending » est posée AVANT l'appel : elle compte tout de suite.
+  const since = new Date(kinDayStart(Date.now())).toISOString()
+  const twoMin = new Date(Date.now() - 120_000).toISOString()
+  const [{ count: today, error: e1 }, { count: inFlight }] = await Promise.all([
+    admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('user_id', user.id).in('kind', ['image_ok', 'image_pending']).gte('created_at', since),
+    admin.from('ai_log').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('kind', 'image_pending').gte('created_at', twoMin)
+  ])
+  if (e1) { console.error('ai-gateway image plafond :', e1.message); return json(req, 503, { error: IMAGE_BUSY_MSG, code: 'image_unavailable' }) }
+  if ((inFlight ?? 0) >= 2) return json(req, 429, { error: 'Doucement : une image est déjà en cours. Réessaie dans une minute.' })
+  if ((today ?? 0) >= IMAGE_DAILY_LIMIT) {
+    await aiLog(admin, { user_id: user.id, kind: 'image_limit', task: 'image' })
+    return json(req, 429, { error: `Tu as créé tes ${IMAGE_DAILY_LIMIT} images d’aujourd’hui. Le compteur repart demain à minuit (heure de Kinshasa).`, code: 'image_limit' })
+  }
+  const { data: pending, error: pErr } = await admin.from('ai_log').insert({ user_id: user.id, kind: 'image_pending', task: 'image', model }).select('id').single()
+  if (pErr || !pending) { console.error('ai-gateway image journal :', pErr?.message); return json(req, 503, { error: IMAGE_BUSY_MSG, code: 'image_unavailable' }) }
+  const fail = async (detail: string) => {
+    await admin.from('ai_log').delete().eq('id', pending.id) // l'image n'a pas été créée : elle ne compte pas dans le plafond
+    await aiLog(admin, { user_id: user.id, kind: 'image_fail', task: 'image', model, detail })
+    return json(req, 503, { error: IMAGE_BUSY_MSG, code: 'image_unavailable' })
+  }
+
+  // 4) Appel au point d'accès « images » du routeur (compatible OpenAI), puis lecture des octets (base64 ou adresse).
+  let bytes: Uint8Array
+  try {
+    const res = await fetch(`${base}/images/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
+      signal: AbortSignal.timeout(85_000)
+    })
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 200).replace(/\s+/g, ' ')
+      console.error(`ai-gateway image : HTTP ${res.status} (modèle « ${model} ») ${detail}`)
+      return fail(`HTTP ${res.status} ${detail}`)
+    }
+    const data = await res.json()
+    const item = data?.data?.[0] as { b64_json?: string; url?: string } | undefined
+    if (item?.b64_json) {
+      bytes = Uint8Array.from(atob(item.b64_json), (c) => c.charCodeAt(0))
+    } else if (item?.url && /^https:\/\//.test(item.url)) {
+      const img = await fetch(item.url, { signal: AbortSignal.timeout(30_000) })
+      if (!img.ok) return fail(`téléchargement HTTP ${img.status}`)
+      bytes = new Uint8Array(await img.arrayBuffer())
+    } else return fail('réponse sans image')
+  } catch (e) {
+    console.error('ai-gateway image :', (e as Error).message)
+    return fail((e as Error).message)
+  }
+
+  // 5) Format reconnu (PNG, JPEG ou WebP) et taille raisonnable, sinon on refuse de stocker.
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+  const isJpg = bytes[0] === 0xff && bytes[1] === 0xd8
+  const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57 && bytes[9] === 0x45
+  if ((!isPng && !isJpg && !isWebp) || bytes.length > 8 * 1024 * 1024) return fail('format ou taille refusés')
+  const ext = isPng ? 'png' : isJpg ? 'jpg' : 'webp'
+  const path = `${user.id}/${crypto.randomUUID()}.${ext}`
+  const { error: upErr } = await admin.storage.from('ai-images').upload(path, bytes, { contentType: isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp', upsert: false })
+  if (upErr) { console.error('ai-gateway image stockage :', upErr.message); return fail(`stockage : ${upErr.message}`) }
+
+  // 6) Réussi : la ligne devient « image_ok » (elle compte pour le plafond) ; trace de consommation sans points (compte dans la limite d'abus Premium).
+  await admin.from('ai_log').update({ kind: 'image_ok' }).eq('id', pending.id)
+  await logUsage(admin, { user_id: user.id, task: 'image', model, tokens_in: 0, tokens_out: 0, points: 0 })
+
+  // 7) Historique de la conversation : le message de Memo contient un repère [[image:chemin]] que l'appli transforme en image.
+  const caption = 'Voici ton image.'
+  const reply = `[[image:${path}]]\n${caption}`
+  const uc = userClient(req)
+  let convId = conversationId
+  if (convId) {
+    const { data: conv } = await uc.from('ai_conversations').select('id').eq('id', convId).maybeSingle()
+    if (!conv) convId = null
+  }
+  if (!convId) {
+    const { data: created } = await admin.from('ai_conversations').insert({ user_id: user.id, title: prompt.slice(0, 60) }).select('id').single()
+    convId = created?.id ?? null
+  }
+  if (convId) {
+    await admin.from('ai_messages').insert([
+      { conversation_id: convId, user_id: user.id, role: 'user', content: prompt },
+      { conversation_id: convId, user_id: user.id, role: 'assistant', content: reply }
+    ])
+  }
+  const { data: signed } = await admin.storage.from('ai-images').createSignedUrl(path, 3600)
+  return json(req, 200, { reply, conversationId: convId, imagePath: path, imageUrl: signed?.signedUrl ?? null, points: null })
 }
 
 Deno.serve(async (req) => {
@@ -582,6 +740,14 @@ Deno.serve(async (req) => {
     const { data: sb } = await adm.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
     return json(req, 200, { points: pointsPayload(await accessState(adm, user.id, sb)) })
   }
+
+  // Interrupteur général : IA coupée → message clair, rien n'est consommé (le solde ci-dessus reste consultable).
+  if (!flagOn('AI_ENABLED')) {
+    await aiLog(adminClient(), { user_id: user.id, kind: 'ai_off', task: typeof body.task === 'string' ? body.task : undefined })
+    return json(req, 503, { error: AI_OFF_MSG, code: 'ai_disabled' })
+  }
+
+  if (body.task === 'image') return imageTask(req, user, body)
 
   const task = body.task as Task
   // « course » : appel fait par l'écran Nouveau cours (cours pas encore créé). Valable seulement pour la mise en forme / rédaction d'un cours.
@@ -658,11 +824,20 @@ Deno.serve(async (req) => {
   // ---- Pièce jointe (document ou photo lu sur le téléphone) et recherche web ----
   const attachment = typeof body.attachment === 'string' ? body.attachment.trim().slice(0, MAX_ATTACHMENT) : ''
   if (attachment) context += `${context ? '\n\n' : ''}<piece_jointe>\n${attachment}\n</piece_jointe>`
+  let webNotice: string | null = null // message montré à l'étudiant quand la recherche web demandée n'a pas eu lieu
   if ((task === 'chat' || task === 'enrich_note') && body.web === true) {
-    const found = await webSearch(prompt)
-    context += found
-      ? `${context ? '\n\n' : ''}<resultats_web>\n${found}\n</resultats_web>`
-      : `${context ? '\n\n' : ''}(Aucun résultat web disponible pour cette demande : n'affirme pas avoir cherché sur internet.)`
+    const policy = await webPolicy(admin, user.id)
+    if (!policy.ok) {
+      webNotice = policy.notice
+      await aiLog(admin, { user_id: user.id, kind: policy.why === 'off' ? 'web_off' : 'web_limit', task, detail: policy.why })
+      context += `${context ? '\n\n' : ''}(La recherche web n'est pas disponible pour cette demande : réponds avec tes propres connaissances et n'affirme pas avoir cherché sur internet.)`
+    } else {
+      await aiLog(admin, { user_id: user.id, kind: 'web_search', task }) // compté AVANT l'appel : une tentative consomme le quota payant
+      const found = await webSearch(prompt)
+      context += found
+        ? `${context ? '\n\n' : ''}<resultats_web>\n${found}\n</resultats_web>`
+        : `${context ? '\n\n' : ''}(Aucun résultat web disponible pour cette demande : n'affirme pas avoir cherché sur internet.)`
+    }
   }
 
   // ---- Historique (chat seulement) ----
@@ -706,14 +881,17 @@ Deno.serve(async (req) => {
     console.error('ai-gateway', task, (e as Error).message) // jamais le contenu de l'étudiant dans les logs
     await refund(admin, held.id) // l'IA a échoué : les points sont rendus
     if (newSession) await admin.from('tp_sessions').delete().eq('id', newSession)
-    return json(req, 502, { error: "L'assistant est momentanément indisponible. Réessaie dans un instant." })
+    await aiLog(admin, { user_id: user.id, kind: 'ai_fail', task, model, detail: (e as Error).message })
+    return json(req, 503, { error: AI_BUSY_MSG, code: 'ai_busy' })
   }
 
   // ---- Taquinerie en lingala (chat seulement) ; dans toutes les autres tâches, on retire simplement d'éventuels codes ----
   result = { ...result, text: task === 'chat' ? await withLingala(admin, user.id, prompt, result.text, !conversationId, held.id) : result.text.replace(LINGALA_MARK, '').trim() }
+  // Chat : la raison pour laquelle le web n'a pas servi est ajoutée à la réponse (et gardée dans l'historique). Autres tâches (notes) : renvoyée à part, pour ne pas polluer le texte.
+  if (task === 'chat' && webNotice) result = { ...result, text: `${result.text}\n\n(${webNotice})` }
 
   // ---- Enregistrement (service_role : les étudiants ne peuvent pas écrire ces tables) ----
-  await admin.from('ai_usage').update({ model, tokens_in: result.tokensIn, tokens_out: result.tokensOut }).eq('id', held.id)
+  await admin.from('ai_usage').update({ model: result.model || model, tokens_in: result.tokensIn, tokens_out: result.tokensOut }).eq('id', held.id)
   if (task === 'chat') {
     if (!convId) {
       const { data: created } = await admin.from('ai_conversations').insert({ user_id: user.id, title: prompt.slice(0, 60) }).select('id').single()
@@ -726,5 +904,5 @@ Deno.serve(async (req) => {
       ])
     }
   }
-  return json(req, 200, { reply: result.text, conversationId: task === 'chat' ? convId : null, tpSession: isTp ? (tpSession ?? newSession) : undefined, points: pointsPayload(await accessState(admin, user.id, sub)) })
+  return json(req, 200, { reply: result.text, conversationId: task === 'chat' ? convId : null, tpSession: isTp ? (tpSession ?? newSession) : undefined, webNotice: task === 'chat' ? undefined : webNotice ?? undefined, points: pointsPayload(await accessState(admin, user.id, sub)) })
 })
