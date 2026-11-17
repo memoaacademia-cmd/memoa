@@ -26,6 +26,8 @@ export default function RichText({ text }: { text: string }) {
         }
         const b = /^[-*•·]\s+(.*)$/.exec(t)
         if (b) return <div key={i} style={{ paddingLeft: 18, textIndent: -14 }}>• {inline(b[1], 'b' + i)}</div>
+        const sub = /^(\d+(?:\.\d+)+)[.)]?\s+(.*)$/.exec(t)
+        if (sub) return <div key={i} style={{ paddingLeft: 40, textIndent: -26 }}>{sub[1]} {inline(sub[2], 's' + i)}</div>
         const n = /^(\d+[.)])\s+(.*)$/.exec(t)
         if (n) return <div key={i} style={{ paddingLeft: 22, textIndent: -20 }}>{n[1]} {inline(n[2], 'n' + i)}</div>
         // Ligne entièrement en gras : c'est un titre.

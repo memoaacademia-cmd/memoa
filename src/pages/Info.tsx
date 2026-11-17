@@ -72,7 +72,7 @@ const FAQ: { theme: string; items: [string, string][] }[] = [
   {
     theme: 'Compte et téléphone',
     items: [
-      ["J'ai oublié mon mot de passe", "Sur la page de connexion, touche « Mot de passe oublié ? », entre ton email et ouvre le lien reçu. Regarde aussi dans les courriers indésirables."],
+      ["J'ai oublié mon mot de passe", "Sur la page de connexion, touche « Mot de passe oublié ? », entre ton email, puis tape le code à 6 chiffres reçu par email. Regarde aussi dans les courriers indésirables."],
       ["Comment installer Memoa sur mon téléphone ?", "Android : ouvre Memoa dans Chrome, puis le menu ⋮ et « Installer l'application ». iPhone : ouvre Memoa dans Safari, touche Partager, puis « Sur l'écran d'accueil »."],
       ["Mes données sont-elles gardées si je change de téléphone ?", "Oui. Tes cours et notes sont liés à ton compte : connecte-toi avec le même email et le même mot de passe."]
     ]

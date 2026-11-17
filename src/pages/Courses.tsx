@@ -20,7 +20,7 @@ import { logoUrlFor, universityLabel } from '../data/academic'
 import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle, COVER_ORDER, COVER_TEMPLATES, effectiveTemplate, type CoverTemplate } from '../lib/pdf'
 import { isPremiumNow, usePremium } from '../lib/premium'
 import { usePref } from '../lib/prefs'
-import { cleanTpText } from '../lib/tpclean'
+import { cleanPlan, cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
 import { adjustLength, assemble, limitPlan, loadProgress, parsePlan, partIsComplete, partsFor, saveProgress, subsFor } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
@@ -1068,7 +1068,7 @@ export function TpAssistant() {
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pagesNum()) ? `AU PLUS ${subsFor(pagesNum())} sous-parties par partie` : 'AUCUNE sous-partie (seulement les titres des parties)'} : chaque partie doit rester courte pour que tout tienne en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanTpText(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -1076,7 +1076,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}\n\nLe travail final doit rester à environ ${pagesNum()} pages : n'ajoute des parties que si l'étudiant le demande.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanTpText(r.reply), pagesNum()); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return

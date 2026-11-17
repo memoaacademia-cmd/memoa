@@ -12,10 +12,12 @@ interface AuthState {
   /** Vrai quand le profil n'a pas pu être lu (réseau coupé) : on n'envoie pas l'étudiant vers la connexion. */
   loadFailed: boolean
   endRecovery: () => void
+  /** Démarre le mode « nouveau mot de passe » (après validation du code reçu par email). */
+  startRecovery: () => void
   refresh: () => Promise<void>
 }
 
-const Ctx = createContext<AuthState>({ user: null, profile: null, loading: true, recovery: false, loadFailed: false, endRecovery: () => {}, refresh: async () => {} })
+const Ctx = createContext<AuthState>({ user: null, profile: null, loading: true, recovery: false, loadFailed: false, endRecovery: () => {}, startRecovery: () => {}, refresh: async () => {} })
 
 const CACHE_KEY = 'memoa-profile-cache'
 const readCache = (id: string): Profile | null => {
@@ -63,6 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const endRecovery = useCallback(() => {
     writeRecovery(false)
     setRecovery(false)
+  }, [])
+
+  const startRecovery = useCallback(() => {
+    writeRecovery(true)
+    setRecovery(true)
   }, [])
 
   const refresh = useCallback(async () => {
@@ -121,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  const value = useMemo(() => ({ user, profile, loading, recovery, loadFailed, endRecovery, refresh }), [user, profile, loading, recovery, loadFailed, endRecovery, refresh])
+  const value = useMemo(() => ({ user, profile, loading, recovery, loadFailed, endRecovery, startRecovery, refresh }), [user, profile, loading, recovery, loadFailed, endRecovery, startRecovery, refresh])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

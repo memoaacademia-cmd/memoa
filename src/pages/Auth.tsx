@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'r
 import { takeDeletedNotice } from '../lib/account'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
-import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword, verifySignupCode } from '../lib/api'
+import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword, verifyRecoveryCode, verifySignupCode } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -344,11 +344,22 @@ export function Confirmation({ email }: { email: string }) {
   )
 }
 
-/* Mot de passe oublié : envoie un lien par email. */
+/* Mot de passe oublié : envoie un code à 6 chiffres par email (le lien reçu fonctionne toujours aussi). */
 export function ForgotPassword() {
+  const nav = useNavigate()
+  const { startRecovery, endRecovery, refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [code, setCode] = useState('')
+  const [wait, setWait] = useState(0)
+  const [again, setAgain] = useState(false)
+
+  useEffect(() => {
+    if (wait <= 0) return
+    const t = window.setTimeout(() => setWait((w) => w - 1), 1000)
+    return () => window.clearTimeout(t)
+  }, [wait])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -358,16 +369,52 @@ export function ForgotPassword() {
       await requestPasswordReset(mail)
       return true
     })
-    if (ok) setSent(true)
+    if (ok) { setSent(true); setWait(60); setCode('') }
+  }
+
+  async function resend() {
+    if (wait > 0 || busy) return
+    const ok = await run(async () => { await requestPasswordReset(email.trim().toLowerCase()); return true })
+    if (ok) { setAgain(true); setWait(60); setCode('') }
+  }
+
+  async function validate(e: FormEvent) {
+    e.preventDefault()
+    if (!/^[0-9]{6}$/.test(code)) return setError('Le code a 6 chiffres.')
+    // On passe en mode « nouveau mot de passe » AVANT la validation : sinon l'appli t'enverrait un instant vers l'accueil.
+    startRecovery()
+    const ok = await run(async () => {
+      await verifyRecoveryCode(email.trim().toLowerCase(), code)
+      await refresh()
+      return true
+    })
+    if (ok) nav('/nouveau-mot-de-passe', { replace: true })
+    else endRecovery()
   }
 
   return (
     <main className="page auth">
-      <Header title="Mot de passe oublié" text="Entre ton email : on t'envoie un lien pour en choisir un nouveau." />
+      <Header title="Mot de passe oublié" text={sent ? `On a envoyé un code à 6 chiffres à ${email.trim().toLowerCase()}. Tape-le ici pour choisir un nouveau mot de passe.` : "Entre ton email : on t'envoie un code pour en choisir un nouveau."} />
       {sent ? (
         <>
-          <div className="notice">Si un compte existe avec cet email, un lien vient d'être envoyé. Pense à regarder dans les courriers indésirables.</div>
-          <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
+          <form onSubmit={validate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+            <PillInput
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="Code reçu par email"
+              maxLength={6}
+              value={code}
+              onChange={(e) => { setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6)); setError(null) }}
+              style={{ textAlign: 'center', letterSpacing: 6, fontSize: 22 }}
+              aria-label="Code à 6 chiffres"
+            />
+            <ErrorBox message={error} />
+            <button className="btn primary-light" type="submit" disabled={busy || code.length !== 6}>{busy ? 'Vérification…' : 'Valider le code'}</button>
+          </form>
+          <a className="btn ghost" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
+          <button className="btn ghost" type="button" disabled={wait > 0 || busy} onClick={resend}>{wait > 0 ? `Renvoyer le code (${wait} s)` : 'Renvoyer le code'}</button>
+          {again && <div className="notice">Nouveau code envoyé. Utilise le dernier reçu.</div>}
+          <p className="muted" style={{ textAlign: 'center' }}>Si un compte existe avec cet email, le code arrive en quelques instants. Regarde aussi dans les courriers indésirables.</p>
         </>
       ) : (
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
@@ -376,7 +423,7 @@ export function ForgotPassword() {
             <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <ErrorBox message={error} />
-          <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le lien'}</button>
+          <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le code'}</button>
         </form>
       )}
       <p className="muted" style={{ textAlign: 'center' }}>
@@ -413,8 +460,8 @@ export function NewPassword() {
   if (!loading && (!user || !recovery)) {
     return (
       <main className="page auth">
-        <Header title="Lien non valide" text="Ce lien a expiré ou a déjà été utilisé. Demande-en un nouveau." />
-        <Link className="btn primary-light" to="/mot-de-passe-oublie" replace>Recevoir un nouveau lien</Link>
+        <Header title="Lien non valide" text="Ce code ou ce lien a expiré ou a déjà été utilisé. Demandes-en un nouveau." />
+        <Link className="btn primary-light" to="/mot-de-passe-oublie" replace>Recevoir un nouveau code</Link>
         <p className="muted" style={{ textAlign: 'center' }}><Link className="link" to="/connexion">Retour à la connexion</Link></p>
       </main>
     )

@@ -242,7 +242,18 @@ export async function requestPasswordReset(email: string): Promise<void> {
   if (error) throw error
 }
 
-/** Après le clic sur le lien reçu par email : choisit le nouveau mot de passe. */
+/** Valide le code à 6 chiffres reçu par email pour « mot de passe oublié » : ouvre une session réservée au choix d'un nouveau mot de passe. */
+export async function verifyRecoveryCode(email: string, code: string): Promise<void> {
+  if (!isConfigured) return
+  const token = code.replace(/\s/g, '')
+  const { error } = await sb().auth.verifyOtp({ email: email.trim(), token, type: 'recovery' })
+  if (error) {
+    if (/expired|invalid|otp|token/i.test(error.message)) fail('Code incorrect ou expiré. Vérifie les chiffres ou demande un nouveau code.')
+    throw error
+  }
+}
+
+/** Après la validation du code (ou du lien) reçu par email : choisit le nouveau mot de passe. */
 export async function updatePassword(password: string): Promise<void> {
   if (!isConfigured) {
     const db = loadDemo()

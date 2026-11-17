@@ -1,5 +1,5 @@
 import { askAI, LimitError } from './api'
-import { cleanTpText } from './tpclean'
+import { cleanPlan, cleanTpText } from './tpclean'
 
 /** Une partie principale du plan, avec ses sous-parties. */
 export interface TpPart { n: number; title: string; subs: string[]; raw: string }
@@ -15,7 +15,7 @@ const KEYTOP = /^(introduction|conclusion|bibliographie)\b/i
 
 /** Découpe le plan (texte) en parties. Toujours au moins une partie ; jamais d'erreur. */
 export function parsePlan(plan: string): TpPart[] {
-  const lines = cleanTpText(plan).split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim())
+  const lines = cleanPlan(plan).split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim())
   const isTop = (l: string) => (TOP.test(l) && !SUB.test(l)) || (!/^\s/.test(l) && KEYTOP.test(l))
   let tops = lines.filter(isTop).length
   const parts: TpPart[] = []
@@ -145,7 +145,7 @@ const transient = (e: unknown) => !(e instanceof LimitError) && !/expir|session|
 export class StopError extends Error { constructor() { super('stop') } }
 export const isStop = (e: unknown): e is StopError => e instanceof StopError
 
-const TRY_MS = 130_000 // une tentative qui dépasse 2 min 10 s est abandonnée (le serveur coupe lui-même vers 150 s)
+const TRY_MS = 75_000 // une tentative qui dépasse 75 s est abandonnée tout de suite et refaite (le serveur passe alors à un autre modèle)
 /** Attend le résultat, mais s'arrête si l'étudiant met en pause / annule, ou si le serveur met trop longtemps. */
 function withLimit<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -159,17 +159,17 @@ function withLimit<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
-/** Un appel avec 2 nouvelles tentatives en cas de coupure réseau ou d'erreur passagère (aucun point en plus : même session). */
+/** Un appel avec 1 nouvelle tentative immédiate en cas de coupure réseau ou d'erreur passagère (aucun point en plus : même session). */
 async function callRetry<T>(fn: () => Promise<T>, signal?: AbortSignal, note?: (m: string) => void): Promise<T> {
   let last: unknown
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     if (signal?.aborted) throw new StopError()
     try { return await withLimit(fn(), signal) } catch (e) {
       if (e instanceof StopError) throw e
       last = e
       if (!transient(e)) throw e
-      if (i < 2) note?.(`Le serveur répond lentement… nouvelle tentative (${i + 2} sur 3)`)
-      await wait(2500 * (i + 1))
+      if (i < 1) note?.('Le serveur répond lentement… nouvelle tentative')
+      await wait(1000)
       for (let k = 0; k < 30 && !signal?.aborted && typeof navigator !== 'undefined' && !navigator.onLine; k++) await wait(1000) // attend le retour du réseau (30 s)
       if (signal?.aborted) throw new StopError()
     }
@@ -199,6 +199,7 @@ export async function writeTp(a: WriteArgs): Promise<string> {
   const weight = (p: TpPart) => (/biblio/i.test(p.title) ? 0.25 : /introduction|conclusion/i.test(p.title) ? 0.7 : 1)
   const totalW = parts.reduce((t, p) => t + weight(p), 0) || 1
   const target = (p: TpPart) => (a.pages ? Math.max(300, Math.round((a.pages * 2000 * weight(p)) / totalW / 50) * 50) : 0)
+  let softRounds = 0
   for (let round = 0; round < 3; round++) {
     const todo = parts.filter((p) => !partIsComplete(p, texts[p.n], round === 2))
     if (!todo.length) break
@@ -206,7 +207,8 @@ export async function writeTp(a: WriteArgs): Promise<string> {
     // Chaque partie connaît le plan complet ; la fin de la partie précédente n'est donnée que si elle existe déjà (reprise, nouvelle tentative).
     let next = 0
     let finished = 0
-    let failure: unknown = null
+    let failure: unknown = null // erreur définitive (points épuisés, pause, session expirée…) : on s'arrête
+    let soft: unknown = null // échec passager d'une partie : les autres continuent, la partie est refaite au tour suivant
     const worker = async () => {
       while (!failure) {
         if (a.signal?.aborted) throw new StopError()
@@ -222,11 +224,18 @@ export async function writeTp(a: WriteArgs): Promise<string> {
           if (txt) texts[p.n] = txt
           finished++
           a.onSave(texts)
-        } catch (e) { failure = failure ?? e; return }
+        } catch (e) {
+          // Coupure ou lenteur passagère : on garde cette partie « à refaire » et on continue les autres ; elle sera retentée automatiquement.
+          if (e instanceof StopError || e instanceof LimitError || !transient(e)) { failure = failure ?? e; return }
+          soft = soft ?? e
+          a.onNote?.('Une partie a pris trop de temps : je la refais…')
+        }
       }
     }
     await Promise.all(Array.from({ length: Math.min(3, todo.length) }, () => worker()))
     if (failure) throw failure
+    // Une partie a échoué : UN seul tour de rattrapage automatique (seulement les parties manquantes), puis on s'arrête et on propose « Reprendre ».
+    if (soft) { softRounds++; if (softRounds >= 2) break; await wait(500) }
   }
   const bad = missingParts(parts, texts, true)
   if (bad.length) throw new Error(`Il manque encore la partie ${bad.join(', ')}. Appuie sur « Reprendre la rédaction » : seules les parties manquantes seront refaites, sans point en plus.`)
