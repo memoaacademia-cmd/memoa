@@ -202,17 +202,31 @@ export async function writeTp(a: WriteArgs): Promise<string> {
   for (let round = 0; round < 3; round++) {
     const todo = parts.filter((p) => !partIsComplete(p, texts[p.n], round === 2))
     if (!todo.length) break
-    for (const p of todo) {
-      if (a.signal?.aborted) throw new StopError()
-      a.onProgress(parts.length - todo.length + todo.indexOf(p), parts.length, p.title)
-      const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
-      const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
-        + (target(p) ? `\nLONGUEUR VISÉE POUR CETTE PARTIE : environ ${target(p)} caractères (${Math.round(target(p) / 6)} mots). Ne dépasse pas ce volume de plus de 15 % : le travail entier doit tenir en ${a.pages} pages.\n` : '')
-      const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }), a.signal, a.onNote)
-      const txt = cleanTpText(r.reply).trim()
-      if (txt) texts[p.n] = txt
-      a.onSave(texts)
+    // Plusieurs parties à la fois (3 au plus) : le TP est fini environ 3 fois plus vite qu'en une seule file.
+    // Chaque partie connaît le plan complet ; la fin de la partie précédente n'est donnée que si elle existe déjà (reprise, nouvelle tentative).
+    let next = 0
+    let finished = 0
+    let failure: unknown = null
+    const worker = async () => {
+      while (!failure) {
+        if (a.signal?.aborted) throw new StopError()
+        const p = todo[next++]
+        if (!p) return
+        a.onProgress(parts.length - todo.length + finished, parts.length, p.title)
+        const prev = parts[p.n - 2] ? (texts[p.n - 1] ?? '').slice(-700) : ''
+        const prompt = `Titre du travail : ${a.title}\nConsignes : ${a.brief.slice(0, 2500)}\n\nPLAN COMPLET (pour la cohérence, ne rédige que la partie demandée) :\n${titles}\n\nPARTIE À RÉDIGER (titre et sous-parties à reprendre tels quels) :\n${p.raw}\n` + (prev ? `\nFin de la partie précédente (ne la répète pas) :\n${prev}\n` : '')
+          + (target(p) ? `\nLONGUEUR VISÉE POUR CETTE PARTIE : environ ${target(p)} caractères (${Math.round(target(p) / 6)} mots). Ne dépasse pas ce volume de plus de 15 % : le travail entier doit tenir en ${a.pages} pages.\n` : '')
+        try {
+          const r = await callRetry(() => askAI({ task: 'tp_section', courseId: a.courseId, tpSession: a.session, prompt }), a.signal, a.onNote)
+          const txt = cleanTpText(r.reply).trim()
+          if (txt) texts[p.n] = txt
+          finished++
+          a.onSave(texts)
+        } catch (e) { failure = failure ?? e; return }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(3, todo.length) }, () => worker()))
+    if (failure) throw failure
   }
   const bad = missingParts(parts, texts, true)
   if (bad.length) throw new Error(`Il manque encore la partie ${bad.join(', ')}. Appuie sur « Reprendre la rédaction » : seules les parties manquantes seront refaites, sans point en plus.`)

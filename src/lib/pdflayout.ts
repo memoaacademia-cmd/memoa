@@ -61,8 +61,11 @@ export function parseBlocks(text: string, shift = 0, san: (s: string) => string 
   const nextText = (i: number) => { for (let j = i + 1; j < lines.length; j++) if (lines[j].trim()) return { j, l: lines[j].trim() }; return null }
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i]
-    const t = raw.trim()
+    let t = raw.trim()
     if (!t) continue
+    // Ligne entièrement en gras (« **1. Introduction** ») : on retire les astérisques pour reconnaître le titre ; sinon elle devient un titre court.
+    const boldLine = /^\*\*([^*]+)\*\*:?$/.exec(t)
+    if (boldLine) t = boldLine[1].trim()
     // graphique, forme ou schéma (une ligne [[...]])
     if (isFigLine(t)) { const fg = lineToFig(t); if (fg) { out.push({ t: 'fig', fig: fg }); continue } }
     // tableau
@@ -98,6 +101,7 @@ export function parseBlocks(text: string, shift = 0, san: (s: string) => string 
     const indent = Math.min(2, Math.floor((raw.length - raw.trimStart().length) / 2))
     if ((m = /^[-*•·▪●]\s+(.*)$/.exec(t))) { out.push({ t: 'li', marker: '•', text: san(m[1]), level: indent }); continue }
     if ((m = /^(\d+[.)]|[a-z][.)])\s+(.*)$/.exec(t))) { out.push({ t: 'li', marker: m[1], text: san(m[2]), level: indent }); continue }
+    if (boldLine && t.length <= 90 && noEnd(t)) { out.push({ t: 'h', level: lvl(3), text: san(t) }); continue }
     out.push({ t: 'p', text: san(t) })
   }
   return out.filter((b) => b.t === 'table' || b.t === 'fig' || ('text' in b && b.text.trim()))

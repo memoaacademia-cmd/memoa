@@ -111,7 +111,15 @@ export function startDictation(onText: (t: string) => void, onEnd: (error?: stri
 }
 
 function plain(text: string): string {
-  return toSpeechText(text).replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim()
+  // Les titres et puces n'ont pas de ponctuation : on ajoute un point à la fin de chaque ligne pour que la voix marque une pause.
+  return toSpeechText(text)
+    .replace(/^\s*[-•·]\s+/gm, '')
+    .replace(/[#*_`>]/g, '')
+    .split('\n')
+    .map((l) => { const t = l.trim(); return t && t.length <= 110 && !/[.!?:;,]$/.test(t) ? t + '.' : t }) // courte ligne sans ponctuation = titre ou puce
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // Lecture morceau par morceau : on garde la position pour pouvoir mettre en pause et reprendre.

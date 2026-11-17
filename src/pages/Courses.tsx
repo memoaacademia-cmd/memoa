@@ -966,7 +966,7 @@ export function CourseDetail() {
               <div className="rg-label">Notes choisies</div>
               <span className="muted">{summaryScope}</span>
             </div>
-            <div className="sum-text">{summary}</div>
+            <div className="sum-text" style={{ whiteSpace: 'normal' }}><RichText text={summary} /></div>
             <ErrorBox message={error} />
           </div>
           <div className="sf-foot">
@@ -1234,7 +1234,7 @@ export function TpAssistant() {
         <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <div className="rg-label">Plan proposé</div>
-            <div className="plan-box">{plan}</div>
+            <div className="plan-box" style={{ whiteSpace: 'normal' }}><RichText text={plan} /></div>
           </div>
           {planPages !== null && planPages !== pagesNum() && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1312,7 +1312,7 @@ export function TpAssistant() {
             <span className="s">Année académique {year}</span>
             {!isPrem && <span className="made">Créé avec Memoa</span>}
           </div>
-          <div className="doc-out tp-preview">{doc.slice(0, 1500)}{doc.length > 1500 ? '…' : ''}</div>
+          <div className="doc-out tp-preview" style={{ whiteSpace: 'normal' }}><RichText text={doc.slice(0, 1500) + (doc.length > 1500 ? ' …' : '')} /></div>
           <div className="warn-braise no-print">Relis et vérifie le document avant de le remettre. Les sources citées doivent être contrôlées.</div>
           {busy && stepText && <span className="muted" role="status">{stepText}</span>}
           {notice && <div className="warn-braise no-print">{notice}</div>}

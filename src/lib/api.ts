@@ -59,7 +59,11 @@ export function friendlyError(e: unknown): string {
   if (/Unable to validate email|invalid format|email address .* is invalid/i.test(m)) return 'Cette adresse email n’est pas valide.'
   if (/Signups? not allowed/i.test(m)) return 'Les inscriptions sont fermées pour le moment.'
   if (/Error sending (confirmation|recovery|magic)|sending .* email/i.test(m)) return 'Impossible d’envoyer l’email pour le moment. Réessaie dans quelques minutes.'
-  if (/Database error/i.test(m)) return 'Un problème est survenu de notre côté. Réessaie dans un instant.'
+  if (/Database error|schema is invalid|incompatible|infinite recursion|internal server error|DatabaseError/i.test(m)) return 'Un problème est survenu de notre côté. Réessaie dans un instant.'
+  if (/row-level security|violates row|not authorized|Unauthorized|permission denied/i.test(m)) return 'Action refusée. Déconnecte-toi puis reconnecte-toi, et réessaie.'
+  if (/Bucket not found/i.test(m)) return 'Le stockage des photos n’est pas prêt. Réessaie plus tard.'
+  if (/mime type|not supported|invalid_mime/i.test(m)) return 'Ce format n’est pas pris en charge. Choisis une photo JPG, PNG ou WebP.'
+  if (/exceeded the maximum|too large|payload too large|entity too large/i.test(m)) return 'Ce fichier est trop lourd. Choisis-en un plus léger.'
   const status = Number((e as { status?: number } | null)?.status ?? 0)
   // Le téléphone est en ligne mais le serveur répond une erreur 5xx : ce n'est PAS la connexion de l'étudiant.
   if (status >= 500) return `Le serveur ne répond pas bien pour le moment (erreur ${status}). Réessaie dans quelques minutes.`
