@@ -40,24 +40,32 @@ function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInp
 /* Code à 6 chiffres : six cases séparées, avec un chiffre d'exemple grisé dans chacune. Gère la saisie, le collage et le code proposé par le téléphone. */
 function OtpInput({ value, onChange, label = 'Code à 6 chiffres' }: { value: string; onChange: (v: string) => void; label?: string }) {
   const refs = useRef<(HTMLInputElement | null)[]>([])
+  // Valeur « vivante » : mise à jour tout de suite (avant le prochain rendu), sinon la case suivante croit encore que le code est plus court et renvoie le curseur en arrière.
+  const cur = useRef(value)
+  cur.current = value
   const focus = (i: number) => { const el = refs.current[Math.max(0, Math.min(5, i))]; if (el) { el.focus(); el.select() } }
-  const set = (v: string) => onChange(v.replace(/[^0-9]/g, '').slice(0, 6))
+  const set = (v: string) => { const n = v.replace(/[^0-9]/g, '').slice(0, 6); cur.current = n; onChange(n); return n }
   function change(i: number, raw: string) {
+    const v = cur.current
     let d = raw.replace(/[^0-9]/g, '')
-    if (!d) return
-    const old = value[i] ?? ''
+    if (!d) { // case vidée (retour arrière sur certains claviers de téléphone)
+      const n = set(v.slice(0, i) + v.slice(i + 1))
+      focus(Math.min(i, n.length))
+      return
+    }
+    const old = v[i] ?? ''
     // Une case déjà remplie qui reçoit un chiffre de plus : on garde le nouveau chiffre.
     if (old && d.length === 2) d = d.replace(old, '') || d.slice(-1)
-    const next = d.length === 1 ? value.slice(0, i) + d + value.slice(i + 1) : (value.slice(0, i) + d).slice(0, 6)
-    set(next)
-    focus(Math.min(5, d.length === 1 ? i + 1 : next.length))
+    const n = set(d.length === 1 ? v.slice(0, i) + d + v.slice(i + 1) : (v.slice(0, i) + d))
+    // Un chiffre : on passe tout de suite à la case suivante. Plusieurs (collage, code du téléphone) : après le dernier chiffre.
+    focus(d.length === 1 ? i + 1 : n.length)
   }
   function key(i: number, e: ReactKeyboardEvent<HTMLInputElement>) {
+    const v = cur.current
     if (e.key === 'Backspace') {
       e.preventDefault()
-      if (value[i]) set(value.slice(0, i) + value.slice(i + 1))
-      else if (i > 0) { set(value.slice(0, i - 1) + value.slice(i)); focus(i - 1); return }
-      focus(i)
+      if (v[i]) { set(v.slice(0, i) + v.slice(i + 1)); focus(i) }
+      else if (i > 0) { set(v.slice(0, i - 1) + v.slice(i)); focus(i - 1) }
     } else if (e.key === 'ArrowLeft') { e.preventDefault(); focus(i - 1) }
     else if (e.key === 'ArrowRight') { e.preventDefault(); focus(i + 1) }
   }
@@ -77,8 +85,8 @@ function OtpInput({ value, onChange, label = 'Code à 6 chiffres' }: { value: st
           onChange={(e) => change(i, e.target.value)}
           onKeyDown={(e) => key(i, e)}
           // On ne peut pas laisser de trou : un appui sur une case vide mène à la première case libre.
-          onFocus={(e) => { if (i > value.length) focus(value.length); else e.currentTarget.select() }}
-          onPaste={(e) => { const t = e.clipboardData.getData('text').replace(/[^0-9]/g, ''); if (t) { e.preventDefault(); set(t); focus(Math.min(5, t.length)) } }}
+          onFocus={(e) => { const n = cur.current.length; if (i > n) focus(n); else e.currentTarget.select() }}
+          onPaste={(e) => { const t = e.clipboardData.getData('text').replace(/[^0-9]/g, ''); if (t) { e.preventDefault(); const n = set(t); focus(n.length) } }}
         />
       ))}
     </div>

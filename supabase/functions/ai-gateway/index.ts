@@ -215,7 +215,7 @@ const refund = async (admin: ReturnType<typeof adminClient>, id: number) => { aw
 const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
 const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_section' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
-const maxTokensFor = (t: Task) => (t === 'chat' ? 3072 : t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 3072 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 1000 : t === 'cards' || t === 'schedule' ? 2048 : 1536)
+const maxTokensFor = (t: Task) => (t === 'chat' ? 3072 : t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 8192 : t === 'structure_notes' || t === 'enrich_note' ? 3072 : t === 'summary' ? 1000 : t === 'cards' || t === 'schedule' ? 2048 : 1536)
 
 const BASE =
   "Tu es Memo, le compagnon d'étude d'un étudiant universitaire en République démocratique du Congo. " +

@@ -149,7 +149,7 @@ export function cleanPlan(text: string): string {
     }
     if (!started) continue // phrase d'introduction de l'IA avant le plan
     if (/^-\s+\S/.test(s)) { out.push(s.replace(/[.;]\s*$/, '')); continue } // puce : sous-partie
-    if (s.length > 70 || /[.!?]$/.test(s)) continue // phrase de description : pas une partie
+    if (s.length > 200 || /[.!?]$/.test(s)) continue // phrase de description : pas une partie
     out.push(s)
   }
   if (out.length < 2) return base

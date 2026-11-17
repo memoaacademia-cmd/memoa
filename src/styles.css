@@ -960,3 +960,14 @@ a.pill-btn { text-decoration: none; }
 .editor.title-focus .ed-extra, .editor.title-focus .ed-info, .editor.title-focus .ed-info-card { display: none; }
 /* Hors connexion, « Brouillon » reste seul : il devient le bouton principal. */
 .ed-draft.solo { background: var(--btn); border-color: var(--btn); color: var(--btn-text); }
+
+/* ====================== Barre du bas de l'éditeur : chaque mot reste dans son bouton ====================== */
+.ed-bar { gap: 4px; padding-left: 10px; padding-right: 10px; }
+.ed-bar .ed-chip { flex: none; min-width: 0; padding: 0 9px; gap: 4px; font-size: 12.5px; letter-spacing: -.1px; }
+.ed-bar .ed-chip svg { width: 16px; height: 16px; flex: none; }
+.ed-bar .ed-chip.ed-mic { width: 40px; padding: 0; }
+.ed-bar .ed-chip.ed-mic svg { width: 19px; height: 19px; }
+.ed-bar .ed-guide-ico { flex: none; min-width: 50px; padding: 2px 2px; margin-left: auto; }
+.ed-bar .ed-guide-ico span { white-space: nowrap; }
+.editor .ed-bar .ed-plus { flex: none; width: 36px; height: 36px; }
+@media (max-width: 350px) { .ed-bar .ed-chip svg { display: none; } .ed-bar .ed-chip.ed-mic svg { display: block; } }
