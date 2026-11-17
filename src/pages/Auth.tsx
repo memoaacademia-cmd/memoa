@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { takeDeletedNotice } from '../lib/account'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
@@ -33,6 +33,54 @@ function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInp
           {shown && <path d="M4 4 L20 20" />}
         </svg>
       </button>
+    </div>
+  )
+}
+
+/* Code à 6 chiffres : six cases séparées, avec un chiffre d'exemple grisé dans chacune. Gère la saisie, le collage et le code proposé par le téléphone. */
+function OtpInput({ value, onChange, label = 'Code à 6 chiffres' }: { value: string; onChange: (v: string) => void; label?: string }) {
+  const refs = useRef<(HTMLInputElement | null)[]>([])
+  const focus = (i: number) => { const el = refs.current[Math.max(0, Math.min(5, i))]; if (el) { el.focus(); el.select() } }
+  const set = (v: string) => onChange(v.replace(/[^0-9]/g, '').slice(0, 6))
+  function change(i: number, raw: string) {
+    let d = raw.replace(/[^0-9]/g, '')
+    if (!d) return
+    const old = value[i] ?? ''
+    // Une case déjà remplie qui reçoit un chiffre de plus : on garde le nouveau chiffre.
+    if (old && d.length === 2) d = d.replace(old, '') || d.slice(-1)
+    const next = d.length === 1 ? value.slice(0, i) + d + value.slice(i + 1) : (value.slice(0, i) + d).slice(0, 6)
+    set(next)
+    focus(Math.min(5, d.length === 1 ? i + 1 : next.length))
+  }
+  function key(i: number, e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace') {
+      e.preventDefault()
+      if (value[i]) set(value.slice(0, i) + value.slice(i + 1))
+      else if (i > 0) { set(value.slice(0, i - 1) + value.slice(i)); focus(i - 1); return }
+      focus(i)
+    } else if (e.key === 'ArrowLeft') { e.preventDefault(); focus(i - 1) }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); focus(i + 1) }
+  }
+  return (
+    <div className="otp" role="group" aria-label={label}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <input
+          key={i}
+          ref={(el) => { refs.current[i] = el }}
+          className={value[i] ? 'filled' : ''}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
+          placeholder={String(i + 1)}
+          value={value[i] ?? ''}
+          aria-label={`Chiffre ${i + 1} sur 6`}
+          onChange={(e) => change(i, e.target.value)}
+          onKeyDown={(e) => key(i, e)}
+          // On ne peut pas laisser de trou : un appui sur une case vide mène à la première case libre.
+          onFocus={(e) => { if (i > value.length) focus(value.length); else e.currentTarget.select() }}
+          onPaste={(e) => { const t = e.clipboardData.getData('text').replace(/[^0-9]/g, ''); if (t) { e.preventDefault(); set(t); focus(Math.min(5, t.length)) } }}
+        />
+      ))}
     </div>
   )
 }
@@ -320,15 +368,7 @@ export function Confirmation({ email }: { email: string }) {
       </div>
       <form onSubmit={validate} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {!email && <PillInput type="email" autoComplete="email" placeholder="Ton email" value={mail} onChange={(e) => setMail(e.target.value)} />}
-        <PillInput
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="Code reçu par email"
-          maxLength={6}
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-          style={{ textAlign: 'center', letterSpacing: 6, fontSize: 22 }}
-        />
+        <OtpInput value={code} onChange={setCode} />
         <PillButton type="submit" size="lg" disabled={busy || code.length !== 6 || !mail.trim()}>{busy ? 'Vérification…' : 'Valider le code'}</PillButton>
       </form>
       <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
@@ -398,16 +438,7 @@ export function ForgotPassword() {
       {sent ? (
         <>
           <form onSubmit={validate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
-            <PillInput
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="Code reçu par email"
-              maxLength={6}
-              value={code}
-              onChange={(e) => { setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6)); setError(null) }}
-              style={{ textAlign: 'center', letterSpacing: 6, fontSize: 22 }}
-              aria-label="Code à 6 chiffres"
-            />
+            <OtpInput value={code} onChange={(v) => { setCode(v); setError(null) }} />
             <ErrorBox message={error} />
             <button className="btn primary-light" type="submit" disabled={busy || code.length !== 6}>{busy ? 'Vérification…' : 'Valider le code'}</button>
           </form>

@@ -5,6 +5,7 @@
 // chaque tâche coûte donc SON prix (cours ou note rédigés par Memo 15 points, quiz 1, résumé 4 à 20, TP 10 en tout), jamais en plus du message
 // du chat (le serveur rend le point du message qui lance une action). Un cours créé vide, sans notes ni consignes, coûte 0.
 import { addNote, askAI, createCourse, LimitError, listNotes } from './api'
+import { structureNoteText } from './draftsync'
 import { toAiText } from './blocks'
 import { track } from './track'
 import { stripAiNoise } from './pdf'
@@ -106,10 +107,13 @@ async function addNoteAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
   const instr = str(a.instructions)
   let content = text.trim()
   if (instr) {
-    // Memo rédige (ou complète) la note : 15 points. Sans consignes, la note est gardée telle quelle : 0 point.
+    // Memo rédige (ou complète) la note : 15 points. Avec seulement du texte, il la met en forme : 15 points aussi.
     const r = await askAI({ task: 'enrich_note', courseId: course.id, prompt: `Consignes de l'étudiant : ${instr}\n\nTexte déjà écrit par l'étudiant :\n${content || '(aucun)'}` })
     const extra = stripAiNoise(r.reply).trim()
     content = content ? `${content}\n\nComplément de Memo :\n${extra}` : extra
+  } else if (content) {
+    // Toute note avec du texte passe par Memo (mise en forme) : 15 points, comme dans l'écran « Ajouter une note ».
+    content = await structureNoteText(course.id, content)
   }
   if (!content) return { text: 'Que veux-tu y écrire ? Donne-moi le texte de la note, ou dis-moi ce que je dois rédiger.' }
   const title = str(a.title).slice(0, 80) || (instr ? instr.slice(0, 50) : 'Note du chat')

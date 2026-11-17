@@ -224,7 +224,9 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   useEffect(() => {
     const on = () => setTick((t) => t + 1)
     window.addEventListener('online', on)
-    return () => window.removeEventListener('online', on)
+    // Des brouillons viennent d'être créés / ajoutés au retour du réseau : les listes se rechargent.
+    window.addEventListener('memoa-content', on)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('memoa-content', on) }
   }, [])
   return { data, error, loading, reload: () => setTick((t) => t + 1) }
 }

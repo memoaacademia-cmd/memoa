@@ -27,6 +27,17 @@ export interface Draft {
   createdAt: number
   updatedAt: number
   expiresAt: number
+  /** Gardé SANS réseau avec « Brouillon » : créé / ajouté tout seul dès que la connexion revient (voir draftsync.ts). */
+  offline?: boolean
+  /** Dernier envoi automatique refusé : « credit » = plus assez de points, « error » = autre problème. Le brouillon reste là. */
+  failed?: 'credit' | 'error'
+  failedMsg?: string
+  attempts?: number
+  /** Texte déjà rédigé par l'IA (points déjà payés) : un nouvel essai ne repaie pas. */
+  readyContent?: string
+  /** Identifiants créés sur le téléphone avant l'envoi : une coupure en plein envoi ne crée jamais de doublon. */
+  sendCourseId?: string
+  sendNoteId?: string
 }
 
 const DB_NAME = 'memoa-drafts'
@@ -92,6 +103,8 @@ export async function saveDraft(input: {
   guide?: string
   source?: string
   audio?: Blob | null
+  /** Vrai quand la note est gardée sans réseau : elle partira toute seule au retour de la connexion. */
+  offline?: boolean
 }): Promise<Draft> {
   const now = Date.now()
   const prev = input.id ? await run<Draft | undefined>('readonly', (s) => s.get(input.id as string)) : undefined
@@ -109,13 +122,38 @@ export async function saveDraft(input: {
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
     // Enregistrer à nouveau ne prolonge PAS les 48 h : le compte à rebours part de la première sauvegarde.
-    expiresAt: prev?.expiresAt ?? now + DRAFT_HOURS * HOUR
+    expiresAt: prev?.expiresAt ?? now + DRAFT_HOURS * HOUR,
+    offline: !!input.offline,
+    // Le texte a pu changer : l'ancien résultat de l'IA et l'ancien refus ne valent plus. Les identifiants d'envoi, eux, restent.
+    sendCourseId: prev?.sendCourseId,
+    sendNoteId: prev?.sendNoteId
   }
   await run('readwrite', (s) => s.put(draft))
   changed()
   void syncDraftExpiry(input.userId)
   track('draft_saved', { kind: input.kind, update: !!prev })
   return draft
+}
+
+/** Met à jour quelques champs d'un brouillon (envoi automatique) sans toucher à sa date de fin. */
+export async function patchDraft(id: string, patch: Partial<Draft>): Promise<Draft | null> {
+  const d = await run<Draft | undefined>('readonly', (s) => s.get(id))
+  if (!d) return null
+  const next: Draft = { ...d, ...patch, id: d.id, userId: d.userId, expiresAt: d.expiresAt }
+  await run('readwrite', (s) => s.put(next))
+  changed()
+  return next
+}
+
+/** Brouillon ouvert dans un éditeur en ce moment : l'envoi automatique ne le touche pas. */
+let editingDraft: string | null = null
+export const setEditingDraft = (id: string | null) => { editingDraft = id }
+export const isEditingDraft = (id: string) => editingDraft === id
+
+/** Brouillons de CE téléphone à envoyer tout seuls (gardés sans réseau, pas déjà refusés). */
+export async function autoSendable(userId: string): Promise<Draft[]> {
+  const all = await listDrafts(userId)
+  return all.filter((d) => d.offline && !d.failed && (d.kind === 'course' || d.kind === 'note') && !isEditingDraft(d.id)).sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export async function deleteDraft(id: string): Promise<void> {

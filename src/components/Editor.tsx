@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { BottomSheet, Icon, MemoAvatar, PillButton, Row, RowGroup } from './ui'
 import { useAuth } from '../lib/auth'
 import { track } from '../lib/track'
@@ -12,6 +12,9 @@ import { AutoText, BLOCK_ROWS, BlockSheet, FigBlock, TableBlock, type BlockKind 
 /** Dernière position du curseur dans la note (zone de texte + caractère) : sert à insérer un bloc là où l'étudiant écrivait. */
 let caret: { seg: number; pos: number } | null = null
 
+/** L'éditeur prête sa zone « Consignes » à la barre d'outils : la barre y met le bouton (photo du mémo), l'éditeur affiche la zone au-dessus. */
+const GuideCtx = createContext<{ open: boolean; toggle: () => void; animal: string | null; name: string } | null>(null)
+
 export function EditorScreen(p: {
   backLabel: string
   onBack: () => void
@@ -19,6 +22,8 @@ export function EditorScreen(p: {
   doneLabel: string
   onDone: () => void
   doneDisabled?: boolean
+  /** Cache le bouton principal (hors connexion : seul « Brouillon » reste). */
+  hideDone?: boolean
   /** Bouton « Brouillon » (hors de la zone de texte) : garde la note sur le téléphone. Absent = pas de bouton. */
   onDraft?: () => void
   draftDisabled?: boolean
@@ -31,7 +36,7 @@ export function EditorScreen(p: {
   body: string
   onBody: (v: string) => void
   bodyPlaceholder: string
-  /** Message d'information long (ex. « Sans connexion… ») : affiché en aperçu d'une ligne, il se déplie quand on le touche. */
+  /** Message d'information long (ex. « Sans connexion… ») : réduit à un petit « ! » en bas, le texte s'affiche quand on le touche. */
   hint?: string
   /** Messages (erreur, « Transcription en cours… ») juste au-dessus des outils. */
   banner?: ReactNode
@@ -52,6 +57,8 @@ export function EditorScreen(p: {
   const lastIsBlock = segs.length > 0 && segs[segs.length - 1].k !== 'text'
   const memoName = profile?.memo_name || 'Memo'
   const [hintOpen, setHintOpen] = useState(false)
+  // Pendant qu'on écrit le titre, tout ce qui est sous le texte (consignes, messages) se range pour laisser la place au clavier.
+  const [titleFocus, setTitleFocus] = useState(false)
   // Le titre est un champ qui passe à la ligne et grandit (plus de défilement horizontal).
   // On ne touche à la hauteur que si elle change vraiment : la remettre à « auto » à chaque lettre perturbe le clavier de certains téléphones.
   const titleRef = useRef<HTMLTextAreaElement>(null)
@@ -61,6 +68,8 @@ export function EditorScreen(p: {
     // On ne réajuste que si le texte déborde ou si la hauteur est devenue trop grande.
     if (el.scrollHeight > el.clientHeight + 1) el.style.height = el.scrollHeight + 'px'
     else if (el.clientHeight > 0 && el.scrollHeight < el.clientHeight - 1) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+    // Le titre est tout en haut : pendant qu'on l'écrit, la zone reste calée en haut pour qu'on voie toujours ce qu'on tape.
+    if (document.activeElement === el) { const main = el.closest('.ed-main'); if (main) main.scrollTop = 0 }
   }, [p.title])
   // Quand le clavier s'ouvre, l'écran se réduit à la zone visible : la barre d'outils reste au-dessus du clavier.
   const [box, setBox] = useState<{ h: number; top: number } | null>(null)
@@ -82,15 +91,16 @@ export function EditorScreen(p: {
   useEffect(() => { const t = window.setTimeout(nudge, 350); return () => window.clearTimeout(t) }, [nudge])
 
   return (
-    <div className="editor" data-tour={p.tourKey} style={box ? { height: box.h, top: box.top } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
+    <GuideCtx.Provider value={{ open: guideOpen, toggle: () => setGuideOpen((v) => !v), animal: profile?.memo_animal ?? null, name: memoName }}>
+    <div className={'editor' + (titleFocus ? ' title-focus' : '')} data-tour={p.tourKey} style={box ? { height: box.h, top: box.top } : undefined} role="dialog" aria-modal="true" aria-label={p.titlePlaceholder}>
       <div className="ed-top">
         <button type="button" className="ed-back" onClick={p.onBack} aria-label="Retour">
           <Icon name="back" size={22} stroke={2.2} />
           <span>{p.backLabel}</span>
         </button>
         {p.status && <span className="ed-status">{p.status}</span>}
-        {p.onDraft && <button type="button" data-tour="editor-draft" className="ed-draft" onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
-        <button type="button" data-tour="editor-done" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>
+        {p.onDraft && <button type="button" data-tour="editor-draft" className={'ed-draft' + (p.hideDone ? ' solo' : '')} onClick={p.onDraft} disabled={p.draftDisabled}>Brouillon</button>}
+        {!p.hideDone && <button type="button" data-tour="editor-done" className="ed-done" onClick={p.onDone} disabled={p.doneDisabled}>{p.doneLabel}</button>}
       </div>
 
       <div className="ed-main">
@@ -110,6 +120,8 @@ export function EditorScreen(p: {
           onChange={(e) => { const v = e.target.value; p.onTitle(v.includes('\n') ? v.replace(/\n/g, ' ') : v) }}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.querySelector<HTMLTextAreaElement>('.ed-body')?.focus() } }}
           aria-label={p.titlePlaceholder}
+          onFocus={() => setTitleFocus(true)}
+          onBlur={() => setTitleFocus(false)}
         />
         {p.dateText && <span className="ed-date">{p.dateText}</span>}
         {!flow ? (
@@ -145,31 +157,28 @@ export function EditorScreen(p: {
         )}
       </div>
 
-      <div className="ed-extra">
+      <div className="ed-extra-wrap">
         {p.hint && (
-          <button type="button" className={'ed-hint' + (hintOpen ? ' open' : '')} onClick={() => setHintOpen((v) => !v)} aria-expanded={hintOpen}>
-            <Icon name="info" size={16} color="var(--text-3)" />
-            <span className="ed-hint-text">{p.hint}</span>
-            <Icon name={hintOpen ? 'chevdown' : 'chevup'} size={16} color="var(--text-3)" />
-          </button>
+          <>
+            <button type="button" className={'ed-info' + (hintOpen ? ' open' : '')} onClick={() => setHintOpen((v) => !v)} aria-expanded={hintOpen} aria-label="À savoir sur le mode hors connexion">!</button>
+            {hintOpen && <div className="ed-info-card" role="status" onClick={() => setHintOpen(false)}>{p.hint}</div>}
+          </>
         )}
-        {p.banner}
-        <button type="button" data-tour="editor-guide" className="ed-guide-btn" onClick={() => setGuideOpen((v) => !v)} aria-expanded={guideOpen}>
-          <MemoAvatar animal={profile?.memo_animal ?? null} size={26} />
-          <span className="grow">Guider {memoName} · facultatif</span>
-          <Icon name={guideOpen ? 'chevdown' : 'chevup'} size={18} color="var(--text-3)" />
-        </button>
-        {guideOpen && (
-          <div className="ed-guide-box">
-            <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label={`Consignes pour ${memoName}`} />
-            {p.guideExtra}
-            <span className="muted">{p.guideHelp}</span>
-          </div>
-        )}
+        <div className="ed-extra">
+          {p.banner}
+          {guideOpen && (
+            <div className="ed-guide-box">
+              <textarea value={p.guide} onChange={(e) => p.onGuide(e.target.value)} placeholder="Ex. Complète avec des exemples. Ou, sans notes : explique-moi le chapitre sur la décolonisation." aria-label={`Consignes pour ${memoName}`} />
+              {p.guideExtra}
+              <span className="muted">{p.guideHelp}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {p.bar}
     </div>
+    </GuideCtx.Provider>
   )
 }
 
@@ -183,11 +192,18 @@ export function EditorBar({ onPhoto, onDictate, dictating, dictateDisabled, onRe
   recordDisabled?: boolean
   onPlus: () => void
 }) {
+  const g = useContext(GuideCtx)
   return (
     <div className="ed-bar" data-tour="editor-bar">
       <button type="button" className="ed-chip" onClick={onPhoto}><Icon name="photo" size={18} />Photo</button>
       <button type="button" className={'ed-chip ed-mic' + (dictating ? ' on' : '')} onClick={onDictate} disabled={dictateDisabled} aria-pressed={dictating} aria-label={dictating ? 'Arrêter la dictée' : 'Dicter'}><Icon name="mic" size={20} /></button>
       <button type="button" className="ed-chip" onClick={onRecord} disabled={recordDisabled}><Icon name="audio" size={18} />Enregistrer</button>
+      {g && (
+        <button type="button" data-tour="editor-guide" className={'ed-guide-ico' + (g.open ? ' on' : '')} onClick={g.toggle} aria-expanded={g.open} aria-label={`Consignes pour ${g.name} (facultatif)`}>
+          <MemoAvatar animal={g.animal} size={24} />
+          <span>Consignes</span>
+        </button>
+      )}
       <button type="button" data-tour="editor-plus" className="ed-plus" onClick={onPlus} aria-label="Ajouter : tableau, graphique, document…"><Icon name="plus" size={24} stroke={2.3} /></button>
     </div>
   )
