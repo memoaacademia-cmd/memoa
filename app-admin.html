@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Statistiques de l'application · Memoa</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+:root{--g:#0b5d54;--g2:#dff3ee;--ink:#0e1a2b;--mut:#5b6b66;--bg:#f2f6f5;--card:#fff;--line:#d7e0dd;--amb:#e0a526}
+@media (prefers-color-scheme:dark){:root{--g:#3fc2ae;--g2:#12332e;--ink:#e8f0ee;--mut:#9fb2ac;--bg:#0b1412;--card:#111e1b;--line:#223632;--amb:#f0b93a}}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+header.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 16px}
+header.top img{width:32px;height:32px;border-radius:8px}
+header.top h1{font-size:20px;margin:0;flex:1;min-width:180px}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,button,input{font:inherit}
+select,.btn{min-height:42px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink)}
+.btn{cursor:pointer;font-weight:600}
+.btn.p{background:var(--g);border-color:var(--g);color:#fff}
+.btn:disabled{opacity:.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 4px}
+.card .sub{margin:0 0 12px;color:var(--mut);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+@media(min-width:700px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.kpi b{display:block;font-size:30px;line-height:1.1;color:var(--g)}
+.kpi span{font-size:13px;color:var(--mut)}
+.grid2{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+.hb{display:flex;flex-direction:column;gap:8px}
+.hb .r{display:grid;grid-template-columns:1fr auto;gap:3px 10px;align-items:center;font-size:14px}
+.hb .l{grid-column:1/-1;overflow-wrap:anywhere}
+.hb .bar{height:12px;background:var(--g2);border-radius:99px;overflow:hidden}
+.hb .bar i{display:block;height:100%;background:var(--g);border-radius:99px}
+.hb .v{font-weight:700;min-width:28px;text-align:right}
+.empty{color:var(--mut);font-size:14px;margin:6px 0}
+.login{max-width:380px;margin:12vh auto 0}
+.login h1{font-size:22px;margin:0 0 6px}
+.login p{color:var(--mut);margin:0 0 16px}
+.login label{display:block;font-size:14px;font-weight:600;margin:12px 0 6px}
+.login input{width:100%;min-height:46px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:16px}
+.login .btn{width:100%;margin-top:16px}
+.err{color:#d64545;font-size:14px;margin:10px 0 0;min-height:20px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.foot{color:var(--mut);font-size:12px;text-align:center;margin:18px 0 8px}
+svg text{fill:var(--mut);font-size:10px;font-family:inherit}
+[hidden]{display:none!important}
+
+.kpi small{display:block;font-size:12px;color:var(--mut);margin-top:2px}
+.kpi b.t{font-size:20px}
+</style>
+</head>
+<body>
+
+<main class="wrap" id="login" hidden>
+  <div class="login card">
+    <h1>Statistiques de l'application</h1>
+    <p>Réservé à l'équipe Memoa. Connecte-toi avec ton compte Memoa (celui de l'application).</p>
+    <form id="lf" novalidate>
+      <label for="em">Email</label>
+      <input id="em" type="email" autocomplete="username" inputmode="email">
+      <label for="pw">Mot de passe</label>
+      <input id="pw" type="password" autocomplete="current-password">
+      <p class="err" id="lerr" role="alert"></p>
+      <button class="btn p" id="lbtn" type="submit">Se connecter</button>
+    </form>
+  </div>
+</main>
+
+<main class="wrap" id="app" hidden>
+  <header class="top">
+    <img src="img/logo.png" alt="">
+    <h1>Statistiques de l'application</h1>
+    <div class="tools">
+      <select id="days" aria-label="Période">
+        <option value="7">7 derniers jours</option>
+        <option value="30" selected>30 derniers jours</option>
+        <option value="90">90 derniers jours</option>
+      </select>
+      <button class="btn" id="refresh" type="button">Actualiser</button>
+      <button class="btn" id="logout" type="button">Quitter</button>
+    </div>
+  </header>
+  <p class="err" id="aerr" role="alert"></p>
+
+  <section class="kpis" aria-label="Chiffres clés">
+    <div class="kpi"><b id="k-students">–</b><span>étudiants inscrits</span><small id="k-signups"></small></div>
+    <div class="kpi"><b id="k-today">–</b><span>actifs aujourd'hui</span><small id="k-active"></small></div>
+    <div class="kpi"><b id="k-premium">–</b><span>Premium en cours</span><small id="k-paid"></small></div>
+    <div class="kpi"><b id="k-errors">–</b><span>erreurs sur la période</span><small>sur les téléphones</small></div>
+  </section>
+  <section class="card"><h2>Revenus de la période</h2><p class="sub">Paiements réussis, par monnaie.</p><div class="hb" id="revenue"></div></section>
+
+  <section class="card">
+    <h2>Inscriptions et activité par jour</h2>
+    <p class="sub">Heure de Kinshasa. Barres vertes : nouvelles inscriptions. Ligne dorée : étudiants qui ouvrent l'app.</p>
+    <div id="daily"></div>
+    <div class="legend"><span><i style="background:var(--g)"></i>Inscriptions</span><span><i style="background:var(--amb)"></i>Étudiants actifs</span></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card"><h2>Reviennent-ils ?</h2><p class="sub">Part des inscrits de la période qui rouvrent l'app le jour 1, 3 et 5.</p><div class="hb" id="retention"></div></section>
+    <section class="card"><h2>Le parcours des étudiants</h2><p class="sub">Étudiants distincts à chaque étape (depuis le début).</p><div class="hb" id="funnel"></div></section>
+    <section class="card"><h2>Fonctions les plus utilisées</h2><p class="sub">Nombre d'actions (et d'étudiants).</p><div class="hb" id="features"></div></section>
+    <section class="card"><h2>Ce que demandent les étudiants à l'IA</h2><p class="sub">Par type de demande.</p><div class="hb" id="aitasks"></div></section>
+    <section class="card"><h2>Santé des modèles d'IA</h2><p class="sub">Réponses réussies (et échecs) par modèle.</p><div class="hb" id="aimodels"></div></section>
+    <section class="card"><h2>Journal de l'IA</h2><p class="sub">IA coupée, saturée, recherches web, images…</p><div class="hb" id="aievents"></div></section>
+  </div>
+
+  <section class="card"><h2>Ce qui plante sur les téléphones</h2><p class="sub">Erreurs les plus fréquentes de la période.</p><div class="hb" id="errors"></div></section>
+
+  <p class="foot" id="gen"></p>
+</main>
+
+<script>
+/* À REMPLIR : Project URL et clé « publishable » du projet Supabase de l'APPLICATION (Supabase → Project Settings → API).
+   Ce sont les mêmes valeurs que les secrets VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY de GitHub : publiques par conception. JAMAIS la clé service_role. */
+var SB_URL='https://fbgfhbvaxaensexvvkpx.supabase.co',SB_KEY='sb_publishable_ALJWi9bmCqTCZE9Vh6Zdwg_wdS4ICEx';
+
+var $=function(id){return document.getElementById(id)};
+var TOKEN_KEY='memoa_app_admin_token';
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function nf(n){return Number(n||0).toLocaleString('fr-FR')}
+function getToken(){try{var t=JSON.parse(sessionStorage.getItem(TOKEN_KEY)||'null');if(t&&t.exp>Date.now())return t.v}catch(e){}return null}
+function setToken(v,sec){try{sessionStorage.setItem(TOKEN_KEY,JSON.stringify({v:v,exp:Date.now()+Math.max(60,(sec||3600)-60)*1000}))}catch(e){}}
+function clearToken(){try{sessionStorage.removeItem(TOKEN_KEY)}catch(e){}}
+function showLogin(msg){$('app').hidden=true;$('login').hidden=false;$('lerr').textContent=msg||'';$('pw').value=''}
+function showApp(){$('login').hidden=true;$('app').hidden=false}
+
+$('lf').addEventListener('submit',async function(e){
+  e.preventDefault();
+  if(!SB_URL||!SB_KEY){$('lerr').textContent='Il manque l\u2019URL et la clé de l\u2019application dans le fichier (voir le début du script).';return}
+  var em=$('em').value.trim(),pw=$('pw').value;
+  if(!em||!pw){$('lerr').textContent='Entre ton email et ton mot de passe.';return}
+  var btn=$('lbtn');btn.disabled=true;btn.textContent='Connexion…';$('lerr').textContent='';
+  try{
+    var r=await fetch(SB_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY},body:JSON.stringify({email:em,password:pw})});
+    var j=await r.json().catch(function(){return{}});
+    if(!r.ok||!j.access_token){$('lerr').textContent=(r.status===400||r.status===401)?'Email ou mot de passe incorrect.':'Connexion impossible pour le moment. Réessaie.';return}
+    setToken(j.access_token,j.expires_in);showApp();load();
+  }catch(x){$('lerr').textContent='Pas de connexion. Réessaie dans un instant.'}
+  finally{btn.disabled=false;btn.textContent='Se connecter'}
+});
+$('logout').onclick=function(){clearToken();showLogin('')};
+$('refresh').onclick=function(){load()};
+$('days').onchange=function(){load()};
+
+async function load(){
+  var t=getToken();if(!t){showLogin('Ta session a expiré. Reconnecte-toi.');return}
+  $('aerr').textContent='';$('refresh').disabled=true;
+  try{
+    var r=await fetch(SB_URL+'/rest/v1/rpc/app_stats',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify({days:Number($('days').value)})});
+    if(r.status===401){clearToken();showLogin('Ta session a expiré. Reconnecte-toi.');return}
+    if(r.status===403||r.status===404){var b=await r.json().catch(function(){return{}});
+      if(r.status===403||/forbidden|permission/i.test(JSON.stringify(b))){clearToken();showLogin('Ce compte n\u2019est pas administrateur de l\u2019application.');return}
+      $('aerr').textContent='La fonction app_stats est introuvable : exécute 0028_tableau_de_bord.sql dans Supabase (projet de l\u2019application).';return}
+    if(!r.ok){$('aerr').textContent='Impossible de charger les chiffres pour le moment (code '+r.status+').';return}
+    render(await r.json());
+  }catch(x){$('aerr').textContent='Pas de connexion. Réessaie dans un instant.'}
+  finally{$('refresh').disabled=false}
+}
+
+/* rows : [{label, n, extra?}] ; fmt(label) ; right(row) → texte à droite (défaut : n) */
+function hbars(id,rows,fmt,right){
+  var el=$(id);
+  if(!rows||!rows.length){el.innerHTML='<p class="empty">Pas encore de données.</p>';return}
+  var max=Math.max.apply(null,rows.map(function(r){return r.n}))||1;
+  el.innerHTML=rows.map(function(r){
+    var label=fmt?fmt(r.label):r.label;
+    return '<div class="r"><span class="l" title="'+esc(label)+'">'+esc(label)+'</span><span class="bar"><i style="width:'+(r.n>0?Math.max(3,Math.round(r.n/max*100)):0)+'%"></i></span><span class="v">'+esc(right?right(r):nf(r.n))+'</span></div>'
+  }).join('')
+}
+
+var FEATURES={onboarding_step:'Étapes d\u2019inscription',trial_started:'Essai commencé',course_created:'Cours créé',note_added:'Note ajoutée',draft_saved:'Brouillon enregistré',draft_resumed:'Brouillon repris',quiz_started:'Quiz lancé',assistant_message:'Message à l\u2019assistant',voice_played:'Lecture vocale',tp_started:'TP commencé',tp_done:'TP terminé',library_view:'Librairie consultée',library_publish:'Publication en librairie',premium_view:'Carte Premium vue',payment_started:'Paiement lancé',payment_success:'Paiement réussi',tour_started:'Visite commencée',tour_done:'Visite terminée',tour_skipped:'Visite passée',table_inserted:'Tableau inséré',chart_inserted:'Graphique inséré',shape_inserted:'Forme insérée',diagram_inserted:'Diagramme inséré'};
+var TASKS={chat:'Discussion avec Memo',summary:'Résumés',quiz:'Quiz',structure_notes:'Mise en forme des notes',tp_plan:'Plans de TP',tp_write:'Rédaction de TP',enrich_note:'Aide pour une note',cards:'Cartes de révision'};
+var AIEV={ai_fail:'Un modèle a échoué',ai_off:'IA coupée (interrupteur)',web_search:'Recherches web',web_off:'Web coupé',web_limit:'Plafond web atteint',image_ok:'Images générées',image_fail:'Image : échec',image_denied:'Image refusée (hors Premium)',image_limit:'Plafond d\u2019images atteint'};
+
+function dailyChart(rows){
+  var el=$('daily');
+  var max=Math.max.apply(null,rows.map(function(r){return Math.max(r.signups,r.active)}));
+  if(!max){el.innerHTML='<p class="empty">Pas encore d\u2019activité sur cette période.</p>';return}
+  var W=640,H=190,pl=30,pr=6,pt=8,pb=22,iw=W-pl-pr,ih=H-pt-pb,n=rows.length,step=iw/n,bw=Math.max(2,Math.min(22,step*.66));
+  var top=max<5?5:Math.ceil(max/4)*4;
+  function y(v){return pt+ih-(v/top)*ih}
+  var s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Inscriptions et activité par jour">';
+  for(var g=0;g<=4;g++){var v=top*g/4,yy=y(v);s+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--line)" stroke-width="1"/><text x="'+(pl-4)+'" y="'+(yy+3)+'" text-anchor="end">'+Math.round(v)+'</text>'}
+  rows.forEach(function(r,i){var x=pl+step*i+(step-bw)/2,h=ih-(y(r.signups)-pt);
+    s+='<rect x="'+x+'" y="'+y(r.signups)+'" width="'+bw+'" height="'+Math.max(0,h)+'" rx="2" fill="var(--g)"><title>'+esc(r.day)+' : '+r.signups+' inscrits, '+r.active+' actifs</title></rect>'});
+  s+='<polyline points="'+rows.map(function(r,i){return(pl+step*i+step/2)+','+y(r.active)}).join(' ')+'" fill="none" stroke="var(--amb)" stroke-width="2" stroke-linejoin="round"/>';
+  var ticks=n>14?[0,Math.floor(n/2),n-1]:rows.map(function(_,i){return i});
+  ticks.forEach(function(i){var p=rows[i].day.split('-');s+='<text x="'+(pl+step*i+step/2)+'" y="'+(H-6)+'" text-anchor="middle">'+p[2]+'/'+p[1]+'</text>'});
+  el.innerHTML=s+'</svg>';
+}
+
+function render(d){
+  var t=d.totals||{},f=d.funnel||{};
+  $('k-students').textContent=nf(t.students);$('k-signups').textContent='+'+nf(t.signups)+' sur la période';
+  $('k-today').textContent=nf(t.active_today);$('k-active').textContent=nf(t.active)+' actifs sur la période';
+  $('k-premium').textContent=nf(t.premium);$('k-paid').textContent=nf(t.paid)+' paiement(s) réussi(s)';
+  $('k-errors').textContent=nf(t.errors);
+  hbars('revenue',(d.revenue||[]).map(function(r){return{label:r.label,n:1,amt:r.n}}),function(l){return l},function(r){return nf(r.amt)+' '+r.label});
+  dailyChart(d.daily||[]);
+  var lab={1:'Reviennent le lendemain (J1)',3:'Reviennent au jour 3 (J3)',5:'Reviennent au jour 5 (J5)'};
+  hbars('retention',(d.retention||[]).map(function(r){return{label:String(r.day),n:r.eligible?Math.round(r.returned/r.eligible*100):0,r:r}}),function(l){return lab[l]||l},function(x){return x.r.eligible?x.r.returned+' / '+x.r.eligible+' ('+x.n+' %)':'pas encore de données'});
+  var steps=[['Inscrits (profil rempli)',f.signed_up],['Ont adopté leur Memo',f.memo],['Ont créé un cours',f.course],['Ont posé une question à l\u2019assistant',f.asked_ai],['Ont lancé un paiement',f.payment_started],['Ont payé (Premium)',f.paid]];
+  var base=f.signed_up||0;
+  hbars('funnel',base?steps.map(function(s){return{label:s[0],n:s[1]||0}}):[],null,function(r){return nf(r.n)+(base?' ('+Math.round(r.n/base*100)+' %)':'')});
+  hbars('features',d.features,function(l){return FEATURES[l]||l},function(r){return nf(r.n)+' · '+nf(r.users)+' étud.'});
+  hbars('aitasks',d.ai_tasks,function(l){return TASKS[l]||l},function(r){return nf(r.n)+' · '+nf(r.users)+' étud.'});
+  hbars('aimodels',(d.ai_models||[]).map(function(m){return{label:m.label,n:m.ok,fail:m.fail}}),null,function(r){return nf(r.n)+(r.fail?' · '+nf(r.fail)+' échec(s)':'')});
+  hbars('aievents',d.ai_events,function(l){return AIEV[l]||l});
+  hbars('errors',d.errors_top,null,function(r){return nf(r.n)+'×'});
+  var g=new Date(d.generated_at);$('gen').textContent='Mis à jour le '+g.toLocaleDateString('fr-FR')+' à '+g.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+
+if(getToken()){showApp();load()}else showLogin('');
+</script>
+</body>
+</html>
