@@ -53,6 +53,17 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
 
 .kpi small{display:block;font-size:12px;color:var(--mut);margin-top:2px}
 .kpi b.t{font-size:20px}
+.pf-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.pf-tools input{flex:1;min-width:200px;min-height:42px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:16px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px;min-width:1000px}
+.tbl th,.tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl th{position:sticky;top:0;background:var(--g2);font-size:12px;white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.nw{white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--g2);color:var(--g)}
+.tag.w{background:#fbefd0;color:#8a5a00}
+.pf-pager{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--mut)}
 </style>
 </head>
 <body>
@@ -114,6 +125,21 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
 
   <section class="card"><h2>Ce qui plante sur les téléphones</h2><p class="sub">Erreurs les plus fréquentes de la période.</p><div class="hb" id="errors"></div></section>
 
+  <section class="card">
+    <h2>Profils des étudiants</h2>
+    <p class="sub">Tous les comptes, du plus récent au plus ancien : nom choisi, université, faculté, promotion… Les comptes dont l'inscription n'est pas terminée sont signalés.</p>
+    <div class="pf-tools">
+      <input id="pf-q" type="search" placeholder="Rechercher : nom, e-mail, téléphone, université…" aria-label="Rechercher un profil">
+      <button class="btn" id="pf-csv" type="button">Exporter en CSV</button>
+    </div>
+    <p class="err" id="pf-err" role="alert"></p>
+    <div class="tbl"><table>
+      <thead><tr><th>Inscrit le</th><th>Nom</th><th>Pseudo Memo</th><th>E-mail</th><th>Téléphone</th><th>Université</th><th>Faculté</th><th>Département</th><th>Promo</th><th>Vacation</th><th>Cours</th><th>Vu le</th><th>Statut</th></tr></thead>
+      <tbody id="pf-body"><tr><td colspan="13" class="empty">Chargement…</td></tr></tbody>
+    </table></div>
+    <div class="pf-pager"><span id="pf-count"></span><span><button class="btn" id="pf-prev" type="button">Précédent</button> <button class="btn" id="pf-next" type="button">Suivant</button></span></div>
+  </section>
+
   <p class="foot" id="gen"></p>
 </main>
 
@@ -161,6 +187,7 @@ async function load(){
       $('aerr').textContent='La fonction app_stats est introuvable : exécute 0028_tableau_de_bord.sql dans Supabase (projet de l\u2019application).';return}
     if(!r.ok){$('aerr').textContent='Impossible de charger les chiffres pour le moment (code '+r.status+').';return}
     render(await r.json());
+    loadProfiles();
   }catch(x){$('aerr').textContent='Pas de connexion. Réessaie dans un instant.'}
   finally{$('refresh').disabled=false}
 }
@@ -217,6 +244,53 @@ function render(d){
   hbars('errors',d.errors_top,null,function(r){return nf(r.n)+'×'});
   var g=new Date(d.generated_at);$('gen').textContent='Mis à jour le '+g.toLocaleDateString('fr-FR')+' à '+g.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
+
+/* ---------- Profils des étudiants ---------- */
+var PF={off:0,lim:50,total:0,q:'',timer:null};
+function fdate(s){if(!s)return '–';var d=new Date(s);return isNaN(d)?'–':d.toLocaleDateString('fr-FR')}
+function fullName(r){var n=[r.first_name,r.post_name,r.last_name].filter(Boolean).join(' ');return n||r.full_name||''}
+async function pfFetch(off,lim,q){
+  var t=getToken();if(!t)throw{code:401};
+  var r=await fetch(SB_URL+'/rest/v1/rpc/app_profiles',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify({q:q,lim:lim,off:off})});
+  if(!r.ok)throw{code:r.status};
+  return r.json();
+}
+async function loadProfiles(){
+  $('pf-err').textContent='';
+  try{
+    var d=await pfFetch(PF.off,PF.lim,PF.q);
+    PF.total=d.total||0;renderProfiles(d.rows||[]);
+  }catch(x){
+    $('pf-body').innerHTML='<tr><td colspan="13" class="empty">–</td></tr>';
+    $('pf-err').textContent=(x.code===404)?'La fonction app_profiles est introuvable : exécute 0029_profils_admin.sql dans Supabase (projet de l\u2019application).':(x.code===401?'Ta session a expiré. Reconnecte-toi.':'Impossible de charger les profils pour le moment.');
+  }
+}
+function renderProfiles(rows){
+  if(!rows.length){$('pf-body').innerHTML='<tr><td colspan="13" class="empty">Aucun profil trouvé.</td></tr>'}
+  else $('pf-body').innerHTML=rows.map(function(r){
+    var st=r.premium_until?'<span class="tag">Premium</span>':(r.complete?'':'<span class="tag w">Incomplet</span>');
+    return '<tr><td class="nw">'+fdate(r.created_at)+'</td><td>'+esc(fullName(r)||'–')+'</td><td>'+esc(r.memo_name||'–')+'</td><td>'+esc(r.email||'–')+'</td><td class="nw">'+esc(r.phone||'–')+'</td><td>'+esc(r.university||'–')+'</td><td>'+esc(r.faculty||'–')+'</td><td>'+esc(r.department||'–')+'</td><td class="nw">'+esc(r.promotion||'–')+'</td><td class="nw">'+esc(r.vacation||'–')+'</td><td>'+nf(r.courses)+'</td><td class="nw">'+fdate(r.last_seen)+'</td><td>'+st+'</td></tr>'
+  }).join('');
+  var a=PF.total?PF.off+1:0,b=Math.min(PF.off+PF.lim,PF.total);
+  $('pf-count').textContent=a+'–'+b+' sur '+nf(PF.total);
+  $('pf-prev').disabled=PF.off<=0;$('pf-next').disabled=PF.off+PF.lim>=PF.total;
+}
+$('pf-prev').onclick=function(){PF.off=Math.max(0,PF.off-PF.lim);loadProfiles()};
+$('pf-next').onclick=function(){PF.off+=PF.lim;loadProfiles()};
+$('pf-q').addEventListener('input',function(){clearTimeout(PF.timer);PF.timer=setTimeout(function(){PF.q=$('pf-q').value.trim();PF.off=0;loadProfiles()},350)});
+function csvCell(v){v=v==null?'':String(v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}
+$('pf-csv').onclick=async function(){
+  var btn=$('pf-csv');btn.disabled=true;btn.textContent='Préparation…';$('pf-err').textContent='';
+  try{
+    var all=[],off=0,total=1;
+    while(off<total){var d=await pfFetch(off,1000,PF.q);total=d.total||0;all=all.concat(d.rows||[]);if(!(d.rows||[]).length)break;off+=1000}
+    var head=['Inscrit le','Prénom','Post-nom','Nom','Nom complet','Pseudo Memo','Animal Memo','E-mail','Téléphone','Université','Faculté','Département','Promotion','Vacation','Nombre de cours','Dernière ouverture','Premium jusqu\u2019au','Profil complet'];
+    var lines=[head.map(csvCell).join(';')].concat(all.map(function(r){return [fdate(r.created_at),r.first_name,r.post_name,r.last_name,r.full_name,r.memo_name,r.memo_animal,r.email,r.phone,r.university,r.faculty,r.department,r.promotion,r.vacation,r.courses,r.last_seen?fdate(r.last_seen):'',r.premium_until?fdate(r.premium_until):'',r.complete?'oui':'non'].map(csvCell).join(';')}));
+    var blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='profils-memoa-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+  }catch(x){$('pf-err').textContent='Export impossible pour le moment.'}
+  finally{btn.disabled=false;btn.textContent='Exporter en CSV'}
+};
 
 if(getToken()){showApp();load()}else showLogin('');
 </script>
