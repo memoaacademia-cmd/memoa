@@ -3,7 +3,7 @@
 import { track } from './track'
 import { useSyncExternalStore } from 'react'
 import { friendlyError } from './api'
-import { writeTp, clearProgress, saveProgress, isStop } from './tpwrite'
+import { writeTp, clearProgress, saveProgress, saveDone, isStop } from './tpwrite'
 
 export interface TpJob {
   courseId: string
@@ -22,7 +22,7 @@ export interface TpJob {
 const jobs = new Map<string, TpJob>()
 const args = new Map<string, Parameters<typeof writeTp>[0]>()
 const ctrls = new Map<string, AbortController>()
-const stopMode = new Map<string, 'pause' | 'cancel'>()
+const stopMode = new Map<string, 'pause' | 'cancel' | 'discard'>()
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((f) => f())
 const subscribe = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f) } }
@@ -78,6 +78,8 @@ async function run(id: string) {
       onProgress: (d, t, cur) => set(id, { step: `Rédaction : partie ${Math.min(d + 1, t)} sur ${t} — ${cur.slice(0, 60)}` }),
       onSave: (t) => { set(id, { texts: { ...t } }); a.onSave({ ...t }) }
     })
+    // Le TP terminé est gardé sur le téléphone AVANT tout le reste : il ne doit jamais disparaître avant d'être téléchargé.
+    saveDone({ courseId: id, title: a.title, brief: a.brief, plan: a.plan, session: a.session, pages: a.pages, supervisor: a.supervisor, doc: result, texts: { ...(jobs.get(id)?.texts ?? {}) } })
     set(id, { running: false, step: '', result })
     track('tp_done')
     void notify('Ton TP est prêt', 'Ouvre Memoa pour le télécharger en PDF.')
@@ -85,9 +87,16 @@ async function run(id: string) {
     if (isStop(e)) {
       const mode = stopMode.get(id) ?? 'pause'
       stopMode.delete(id)
+      if (mode === 'discard') {
+        // Bouton « Nouveau » : tout est effacé, plan compris.
+        clearProgress(id)
+        args.delete(id)
+        set(id, { running: false, step: '', texts: {}, result: null, error: null, interrupted: false, paused: false })
+        return
+      }
       if (mode === 'cancel') {
         // Annulation : on efface les parties rédigées, mais on garde le plan et la session déjà payée.
-        saveProgress({ courseId: id, title: a.title, brief: a.brief, plan: a.plan, session: a.session, texts: {}, at: Date.now(), pages: a.pages })
+        saveProgress({ courseId: id, title: a.title, brief: a.brief, plan: a.plan, session: a.session, texts: {}, at: Date.now(), pages: a.pages, supervisor: a.supervisor })
         set(id, { running: false, step: '', texts: {}, result: null, error: null, interrupted: false, paused: false })
       } else {
         set(id, { running: false, step: '', interrupted: false, paused: true })
@@ -104,7 +113,7 @@ async function run(id: string) {
 }
 
 /** Pause (garde le travail fait) ou annulation (efface les parties rédigées) de la rédaction en cours. */
-export function stopTpJob(courseId: string, mode: 'pause' | 'cancel') {
+export function stopTpJob(courseId: string, mode: 'pause' | 'cancel' | 'discard') {
   if (!jobs.get(courseId)?.running) return
   stopMode.set(courseId, mode)
   ctrls.get(courseId)?.abort()

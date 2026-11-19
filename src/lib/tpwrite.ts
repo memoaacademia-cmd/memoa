@@ -152,6 +152,19 @@ export function loadProgress(courseId: string): TpProgress | null {
 export function saveProgress(p: TpProgress) { try { localStorage.setItem(KEY(p.courseId), JSON.stringify({ ...p, at: Date.now() })) } catch { /* stockage plein : on continue sans */ } }
 export function clearProgress(courseId: string) { try { localStorage.removeItem(KEY(courseId)) } catch { /* rien */ } }
 
+// ---- TP terminé : gardé sur le téléphone jusqu'à ce que l'étudiant en commence un nouveau (48 h au plus) ----
+// Avant, le texte terminé n'existait que dans l'écran : fermer l'appli ou en sortir pendant la rédaction le faisait disparaître.
+const DONE = (courseId: string) => `memoa-tp-done:${courseId}`
+export interface TpDone { courseId: string; title: string; brief: string; plan: string; session: string | null; pages?: number; supervisor?: string; doc: string; texts: Record<number, string>; at: number }
+export function saveDone(d: Omit<TpDone, 'at'>) { try { localStorage.setItem(DONE(d.courseId), JSON.stringify({ ...d, at: Date.now() })) } catch { /* stockage plein : on continue sans */ } }
+export function loadDone(courseId: string): TpDone | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(DONE(courseId)) ?? 'null') as TpDone | null
+    return d && d.doc && Date.now() - d.at < 48 * 3600_000 ? d : null
+  } catch { return null }
+}
+export function clearDone(courseId: string) { try { localStorage.removeItem(DONE(courseId)) } catch { /* rien */ } }
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const transient = (e: unknown) => !(e instanceof LimitError) && !/expir|session|point|Premium|limite|Doucement/i.test(e instanceof Error ? e.message : '')
 
@@ -199,6 +212,8 @@ export interface WriteArgs {
   /** Pause / annulation demandée par l'étudiant. */
   /** Nombre de pages voulu (sans la page de garde) : sert à fixer la longueur visée de chaque partie. */
   pages?: number
+  /** Professeur (page de garde) : gardé avec le TP terminé. */
+  supervisor?: string
   signal?: AbortSignal
   /** Petit message d'état (ex. nouvelle tentative). */
   onNote?: (msg: string) => void

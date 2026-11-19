@@ -192,7 +192,7 @@ async function tpWriteAction(env: ActionEnv): Promise<ActionOutcome> {
   if (tp.writing) return { text: 'La rédaction de ce TP est déjà lancée : je te préviens ici dès que c’est prêt.' }
   const planNow = limitPlan(tp.plan, tp.pages) // sécurité : jamais plus de parties que ne le permet le nombre de pages
   startTpJob({
-    courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: {}, pages: tp.pages,
+    courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: {}, pages: tp.pages, supervisor: tp.supervisor,
     onSave: (t) => saveProgress({ courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: t, at: Date.now(), pages: tp.pages, supervisor: tp.supervisor })
   })
   track('chat_action_done', { type: 'tp_write' })
