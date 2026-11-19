@@ -197,8 +197,10 @@ export function NewCourse() {
           if (toSend.length > 7500) throw new Error('trop long pour la mise en forme IA')
           const keep = prot.count ? `\n\n(Les lignes §BLOC1§, §BLOC2§… sont des tableaux ou des schémas : recopie-les telles quelles, chacune sur sa ligne, à leur place.)` : ''
           const r = await askAI({ task: 'structure_notes', purpose: 'course', prompt: instr ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${instr}\n\nTexte à mettre en forme :\n${toSend}${keep}` : toSend + keep })
-          if (r.reply.trim()) {
-            const back = prot.count ? prot.restore(r.reply.trim()) : r.reply.trim()
+          // Bavardage éventuel de l'IA (« Bonjour, je suis… ») retiré avant de remettre les tableaux en place.
+          const cleaned = stripAiNoise(r.reply).trim()
+          if (cleaned) {
+            const back = prot.count ? prot.restore(cleaned) : cleaned
             if (back) structured = back.trim() // sinon l'IA a perdu un bloc : on garde ton texte tel quel
           }
         } catch (e) {
@@ -723,7 +725,12 @@ export function CourseDetail() {
     if (!isOnline()) return setError(OFFLINE_MSG)
     if (pendingAudio) return setError("Ton enregistrement n'est pas encore transcrit. Attends la fin de la transcription, ou garde-le en brouillon.")
     let content = base
-    if (guide) {
+    if (guide && base) {
+      // Ses propres notes + des consignes : on garde ses notes et on applique seulement la mise en forme demandée.
+      const r = await run(() => structureNoteText(id, base, guide))
+      if (r === undefined) return
+      content = r
+    } else if (guide) {
       const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${toAiText(base) || '(aucun)'}` }))
       if (!r) return
       const extra = stripAiNoise(r.reply).trim()
