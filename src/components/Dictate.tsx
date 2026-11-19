@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
-import { canDictate, startDictation, type Dictation } from '../lib/speech'
+import { canDictate, dictationMessage, startDictation, type Dictation } from '../lib/speech'
 
 /** Bouton micro : le texte dicté est envoyé à onText (le navigateur du téléphone fait la dictée, sans coût serveur). */
 export default function DictateButton({ onText, label = 'Dicter' }: { onText: (t: string) => void; label?: string }) {
@@ -15,7 +15,8 @@ export default function DictateButton({ onText, label = 'Dicter' }: { onText: (t
     setMsg('')
     const r = startDictation(onText, (err) => {
       setOn(false)
-      if (err === 'not-allowed' || err === 'service-not-allowed') setMsg('Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.')
+      const m = dictationMessage(err)
+      if (m) setMsg(m)
     })
     if (!r) { setMsg("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome."); return }
     d.current = r
