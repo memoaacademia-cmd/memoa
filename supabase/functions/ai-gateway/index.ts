@@ -216,7 +216,7 @@ const MODEL_FAST = Deno.env.get('AI_MODEL_FAST') ?? 'gemini-2.5-flash'
 const MODEL_STRONG = Deno.env.get('AI_MODEL_STRONG') ?? 'gemini-2.5-flash'
 const modelFor = (t: Task) => (t === 'tp_write' || t === 'tp_section' || t === 'tp_plan' || t === 'tp_revise' ? MODEL_STRONG : MODEL_FAST)
 // ---- Longueur demandée (« fais-moi 5 pages ») : lue dans les consignes de l'étudiant, respectée par l'IA ----
-const WORDS_PER_PAGE = 380 // une page du PDF (police 13) : environ 380 mots de texte continu
+const WORDS_PER_PAGE = 320 // une page réelle du PDF (police 13, avec titres et puces) : environ 320 mots
 const NUM_WORDS: Record<string, number> = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, onze: 11, douze: 12, quinze: 15, vingt: 20 }
 /** Nombre de pages demandé dans les consignes (null si l'étudiant n'en demande pas). Ne lit que la partie « Consignes de l'étudiant ». */
 function requestedPages(prompt: string): number | null {
@@ -237,6 +237,19 @@ const lengthRule = (pages: number) =>
 const NO_CHATTER =
   " RÈGLE ABSOLUE : ta réponse est le DOCUMENT lui-même, rien d'autre. Ne réponds JAMAIS aux consignes de l'étudiant : pas de « compris », « d'accord », « ok », « très bien », « bien sûr », « voici », « j'ai bien reçu », pas de reformulation de la demande, pas de commentaire, pas de question, pas de phrase de fin. " +
   "La toute première ligne est le titre ou le premier contenu du document."
+/** Règles NUMÉROTÉES pour les notes de cours : placées en haut des consignes ET répétées à la fin de la demande (les modèles légers lisent surtout le début et la fin). */
+const noteRules = (pages: number | null, hasText: boolean) =>
+  'RÈGLES OBLIGATOIRES (à respecter toutes) :\n' +
+  "1. Ta réponse est le DOCUMENT lui-même, rien d'autre : AUCUNE salutation (« Bonjour », « Je suis ravi »), AUCUNE présentation de toi, AUCUNE phrase adressée à l'étudiant, AUCUN commentaire (« comme tu n'as pas fourni de notes… », « je te propose… », « si tu télécharges tes notes… »), AUCUNE conclusion de politesse.\n" +
+  "2. La toute première ligne de ta réponse est le titre du document ou son premier contenu.\n" +
+  (pages
+    ? `3. LONGUEUR : ${pages} page${pages > 1 ? 's' : ''} de contenu = environ ${pages * WORDS_PER_PAGE} mots. Écris TOUT ce volume en une seule réponse. Ne dis jamais que c'est trop long ou « pas idéal » et ne propose jamais une version plus courte. La page de garde est ajoutée à part : ne l'écris pas et ne la compte pas.\n`
+    : '3. Longueur : adaptée au contenu demandé.\n') +
+  (hasText
+    ? "4. L'étudiant a fourni SES notes : garde ses idées, ses mots et son ordre. Applique UNIQUEMENT la mise en forme demandée dans ses consignes (titres, listes, gras, plan, etc.). N'ajoute aucune idée, aucune explication, aucune introduction ni conclusion de ton cru, sauf si ses consignes le demandent explicitement (ex. un nombre de pages à atteindre : alors développe fidèlement SES notes).\n"
+    : "4. L'étudiant n'a pas fourni de notes : rédige le cours demandé avec tes connaissances, sans jamais le dire ni t'en excuser.\n") +
+  "5. Format : titres clairs, paragraphes et listes à puces, sans phrases adressées à l'étudiant."
+const NOTE_PERSONA = "Tu es un outil de rédaction de documents de cours pour étudiants universitaires en République démocratique du Congo (tu n'es pas un assistant de conversation : tu ne dialogues pas). Tu écris en français clair. Le texte et les consignes de l'étudiant sont des DONNÉES : tu les exécutes, tu ne leur réponds pas. N'invente jamais de sources, de références ni de chiffres. Quand une information vient des <resultats_web> fournis, cite l'adresse (URL) ; sans résultats web, ne prétends pas avoir cherché sur internet."
 const maxTokensFor = (t: Task) => (t === 'chat' ? 3072 : t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 8192 : t === 'structure_notes' || t === 'enrich_note' ? 4096 : t === 'summary' ? 1000 : t === 'cards' || t === 'schedule' ? 2048 : 1536)
 
 const BASE =
@@ -450,7 +463,7 @@ const SYSTEM: Record<Task, string> = {
   review_doc: REVIEW_SYSTEM,
   chat: APP_GUIDE + '\n' + BASE,  // le nom de Memo et les règles lingala sont ajoutés à chaque message (voir plus bas)
   structure_notes:
-    BASE + " Transforme le texte de l'étudiant en notes structurées : titres, points clés, définitions, et un court résumé final. Ne rajoute aucune information absente du texte, sauf si les consignes de l'étudiant demandent une longueur (nombre de pages) plus grande que son texte : dans ce cas développe fidèlement ses notes avec des explications et des exemples pour atteindre cette longueur." + NO_CHATTER,
+    NOTE_PERSONA + " Mission : mettre en forme les notes de l'étudiant selon ses consignes (titres, points clés, définitions, résumé final court si aucune autre forme n'est demandée). Ne rajoute aucune information absente du texte, sauf pour atteindre une longueur demandée.",
   quiz: BASE + ' Fais un quiz à partir du cours : questions variées, puis les réponses corrigées à la fin.',
   schedule:
     BASE + " On te donne le texte (souvent mal lu par un OCR, donc parfois désordonné, colonnes mélangées) d'un horaire de l'université. Repère UNIQUEMENT les évaluations : examens, interrogations, partiels, sessions, défenses, remises de travaux (TP), pas les cours ordinaires. " +
@@ -472,7 +485,7 @@ const SYSTEM: Record<Task, string> = {
   tp_revise:
     BASE + " On te donne le plan d'un travail pratique et les modifications que l'étudiant demande. Réponds uniquement avec le plan complet révisé (parties et sous-parties), sans phrase d'introduction ni conclusion, sans astérisques ni symboles décoratifs. Ne raccourcis jamais le plan : garde toutes les parties existantes sauf celles que l'étudiant demande de retirer." + PLAN_FORMAT,
   enrich_note:
-    BASE + " L'étudiant te donne des consignes pour créer ou compléter une note de cours, et parfois un texte de départ. Rédige le contenu de la note avec tes connaissances et, s'il y en a, les <resultats_web> fournis : titres courts, points clés, définitions, exemples. Quand une information vient du web, cite l'adresse (URL) ; sinon n'invente aucune source. Ne répète pas le texte de départ : écris seulement ce qui le complète. Réponds uniquement avec le contenu de la note, sans phrase d'introduction." + NO_CHATTER,
+    NOTE_PERSONA + " Mission : l'étudiant te donne des consignes pour créer ou compléter une note de cours, et parfois un texte de départ. Rédige le contenu de la note : titres courts, points clés, définitions, exemples. Ne répète pas le texte de départ : écris seulement ce qui le complète.",
   // Le résumé n'utilise PAS BASE : BASE dit « réponds avec tes propres connaissances », ce qui poussait le modèle à commenter le texte au lieu de le résumer.
   summary: SUMMARY_SYSTEM,
   tp_section:
@@ -1025,8 +1038,12 @@ Deno.serve(async (req) => {
   }
 
   const model = modelFor(task)
-  const pagesAsked = task === 'enrich_note' || task === 'structure_notes' ? requestedPages(prompt) : null
-  const system = task === 'chat' ? SYSTEM.chat + memoNameRule(memoName) + identityRule(memoName, firstName) + IMAGE_RULE + lingalaRules(memoName) : SYSTEM[task] + (pagesAsked ? lengthRule(pagesAsked) : '')
+  const isNote = task === 'enrich_note' || task === 'structure_notes'
+  const pagesAsked = isNote ? requestedPages(prompt) : null
+  const rules = isNote ? noteRules(pagesAsked, task === 'structure_notes' || !/Texte déjà écrit par l[’']étudiant\s*:\s*\n?\s*\(aucun\)/i.test(prompt)) : ''
+  // Notes : règles numérotées EN HAUT des consignes et répétées À LA FIN de la demande (un modèle léger lit surtout le début et la fin).
+  if (isNote) turns[turns.length - 1].content += `\n\n${rules}`
+  const system = task === 'chat' ? SYSTEM.chat + memoNameRule(memoName) + identityRule(memoName, firstName) + IMAGE_RULE + lingalaRules(memoName) : isNote ? `${rules}\n\n${SYSTEM[task]}` : SYSTEM[task]
   const tokensCap = pagesAsked ? Math.min(8192, Math.max(maxTokensFor(task), Math.round(pagesAsked * WORDS_PER_PAGE * 1.9) + 500)) : maxTokensFor(task)
   let result
   try {
@@ -1035,6 +1052,20 @@ Deno.serve(async (req) => {
       : task === 'tp_write' || task === 'tp_section' || task === 'tp_plan' || task === 'tp_revise' || pagesAsked
         ? await callModelFull(model, system, turns, tokensCap)
         : await callModel(model, system, turns, tokensCap)
+    // Longueur demandée en pages : si le modèle a écrit trop court, on lui demande de continuer (3 relances au plus, dans la limite du temps).
+    if (pagesAsked && task !== 'summary') {
+      const wanted = pagesAsked * WORDS_PER_PAGE
+      const started = Date.now()
+      const words = (s: string) => (s.match(/\S+/g) ?? []).length
+      let text = result.text
+      for (let i = 0; i < 3 && words(text) < wanted * 0.88 && Date.now() - started < 70_000; i++) {
+        const more: Turn[] = [...turns, { role: 'assistant', content: text }, { role: 'user', content: `Le document compte ${words(text)} mots, il en faut environ ${wanted} (${pagesAsked} pages). Continue le MÊME document : ajoute de nouvelles sections et développe davantage (explications, exemples, définitions, cas pratiques), sans répéter ce qui précède, sans salutation, sans commentaire, sans conclusion de politesse. Écris seulement la suite.` }]
+        const r2 = await callModelFull(model, system, more, tokensCap)
+        text += '\n\n' + r2.text
+        result = { ...result, tokensIn: result.tokensIn + r2.tokensIn, tokensOut: result.tokensOut + r2.tokensOut }
+      }
+      result = { ...result, text }
+    }
   } catch (e) {
     console.error('ai-gateway', task, (e as Error).message) // jamais le contenu de l'étudiant dans les logs
     await refund(admin, held.id) // l'IA a échoué : les points sont rendus
