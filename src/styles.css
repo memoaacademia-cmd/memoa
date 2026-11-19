@@ -662,6 +662,9 @@ a.pill-btn { text-decoration: none; }
 
 .pages-input { width: 100%; box-sizing: border-box; border-radius: 16px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--text); padding: 12px 14px; font-size: 16px; margin: 6px 0 4px; outline: none; }
 .pages-input:focus { border-color: var(--btn); }
+.tp-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; align-items: end; }
+.tp-row2 .rg-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-row2 .pages-input { margin-bottom: 0; }
 
 /* Aperçu de la page de garde : cadre selon le modèle, bandeau plein (Premium, Classique, Émeraude) */
 .cover { border: 2px solid transparent; }
