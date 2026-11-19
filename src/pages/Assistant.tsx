@@ -11,7 +11,7 @@ import { useTpJob } from '../lib/tpjob'
 import { chatRun, clearPending, markPending, recoverChat, resetChat, setChat, useChat, getChat, type ChatMsg } from '../lib/chatstate'
 import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
-import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
+import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
 import { WEB_SEARCH_ENABLED } from '../lib/features'
 
@@ -137,7 +137,8 @@ export default function Assistant() {
       (t) => setText((x) => (x ? x + ' ' : '') + t),
       (err) => {
         setListening(false)
-        if (err === 'not-allowed' || err === 'service-not-allowed') setError('Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.')
+        const m = dictationMessage(err)
+        if (m) setError(m)
       }
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")

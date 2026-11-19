@@ -25,7 +25,7 @@ import { readPhotoText } from '../lib/ocr'
 import { adjustLength, assemble, limitPlan, loadProgress, parsePlan, partIsComplete, partsFor, saveProgress, subsFor } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '../lib/tpjob'
-import { canDictate, canSpeak, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
+import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
 // « Ajouter une note » propose toutes les méthodes : on y ajoute l'enregistrement direct et la vidéo (réduite à sa voix par la transcription).
@@ -118,8 +118,8 @@ export function NewCourse() {
       (t) => setContent((c) => (c ? c + ' ' : '') + t),
       (err) => {
         setListening(false)
-        if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
-        else if (err === 'network') setError('La dictée a besoin du réseau sur ce téléphone. Écris ta note à la main, ou réessaie quand le réseau revient.')
+        const m = dictationMessage(err)
+        if (m) setError(m)
       }
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
@@ -584,8 +584,8 @@ export function CourseDetail() {
       (t) => setNoteText((x) => (x ? x + ' ' : '') + t),
       (err) => {
         setListening(false)
-        if (err === 'not-allowed' || err === 'service-not-allowed') setError("Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.")
-        else if (err === 'network') setError('La dictée a besoin du réseau sur ce téléphone. Écris ta note à la main, ou réessaie quand le réseau revient.')
+        const m = dictationMessage(err)
+        if (m) setError(m)
       }
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
@@ -1040,7 +1040,7 @@ export function TpAssistant() {
 
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
-    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pagesNum()) ? `AU PLUS ${subsFor(pagesNum())} sous-parties par partie` : 'AUCUNE sous-partie (seulement les titres des parties)'} : chaque partie doit rester courte pour que tout tienne en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
+    const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pagesNum()) ? `${subsFor(pagesNum())} sous-parties par partie principale (au plus)` : 'AUCUNE sous-partie (seulement les titres des parties)'}. Le plan doit être COMPLET et DÉTAILLÉ : chaque sous-partie dit précisément ce qu'elle contiendra, pour que l'étudiant voie tout le contenu de son travail, tout en tenant en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
     if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
@@ -1104,7 +1104,7 @@ export function TpAssistant() {
   const stepText = writing ? job?.step ?? '' : step
   useEffect(() => {
     const p = loadProgress(id)
-    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); setPlan(p.plan); if (p.pages) setPagesWanted(String(p.pages)); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
+    if (p && p.plan) { setTitle(p.title); setBrief(p.brief); if (p.supervisor) setSupervisor(p.supervisor); setPlan(p.plan); if (p.pages) setPagesWanted(String(p.pages)); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
   // L'avancement en direct (si on revient sur la page pendant la rédaction).
@@ -1117,7 +1117,7 @@ export function TpAssistant() {
   }, [job?.result, id])
   useEffect(() => { if (job?.error && !job.running) { setError(job.error); dismissTpError(id) } }, [job?.error, job?.running, id])
   function persist(nextPlan: string | null, t: Record<number, string>) {
-    if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum() })
+    if (nextPlan) saveProgress({ courseId: id, title, brief: fullBrief, plan: nextPlan, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum(), supervisor: supervisor.trim() })
   }
   function cancelWrite() {
     if (!window.confirm('Annuler la rédaction ? Les parties déjà rédigées seront effacées. Ton plan est gardé et tu ne repaies rien.')) return
@@ -1134,7 +1134,7 @@ export function TpAssistant() {
     if (planNow !== plan) setPlan(planNow)
     startTpJob({
       courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts, pages: pagesNum(),
-      onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum() }) }
+      onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum(), supervisor: supervisor.trim() }) }
     })
   }
 
@@ -1192,11 +1192,17 @@ export function TpAssistant() {
             <DictateButton onText={(t) => setBrief((b) => (b ? b + ' ' : '') + t)} label="Dicter" />
           </div>
         </div>
-        <div>
-          <div className="rg-label">Nombre de pages du travail (sans la page de garde)</div>
-          <input className="pages-input" type="number" inputMode="numeric" min={1} max={60} value={pagesWanted} onChange={(e) => setPagesWanted(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="5" aria-label="Nombre de pages du travail" />
-          <small style={{ opacity: 0.75 }}>5 pages par défaut. Ex. 4 donne un PDF de 5 pages avec la page de garde. Le plan et la rédaction suivent ce nombre.</small>
+        <div className="tp-row2">
+          <div className="tp-pages">
+            <div className="rg-label">Pages (sans garde)</div>
+            <input className="pages-input" type="number" inputMode="numeric" min={1} max={60} value={pagesWanted} onChange={(e) => setPagesWanted(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="5" aria-label="Nombre de pages du travail, sans la page de garde" />
+          </div>
+          <div className="tp-prof">
+            <div className="rg-label">Professeur (facultatif)</div>
+            <input className="pages-input" type="text" value={supervisor} onChange={(e) => setSupervisor(e.target.value)} placeholder="Ex. Prof. Mukendi" aria-label="Nom du professeur, écrit sur la page de garde" maxLength={80} />
+          </div>
         </div>
+        <small style={{ opacity: 0.75, marginTop: -6 }}>5 pages par défaut, page de garde en plus (ex. 4 donne un PDF de 5 pages). Le nom du professeur s’écrit sur la page de garde ; laisse vide pour ne pas en mettre.</small>
         {stepText && <span className="muted" role="status">{stepText}</span>}
         <ErrorBox message={error} />
         {!plan && <LogoCheck />}
@@ -1268,7 +1274,6 @@ export function TpAssistant() {
             </div>
             {!isPrem && <small style={{ opacity: 0.75 }}>Style doré : <Link to="/premium">avec Premium</Link>.</small>}
           </div>
-          <PillInput id="tpsup" value={supervisor} onChange={(e) => setSupervisor(e.target.value)} placeholder="Encadrant (facultatif)" aria-label="Encadrant" maxLength={80} />
           <div className={`cover cv-${look.frame}${look.band === 'filled' ? ' cv-filled' : ''}`} style={{ '--cv-main': `rgb(${look.main.join(',')})`, '--cv-acc': `rgb(${look.accent.join(',')})` } as CSSProperties}>
             <small>République démocratique du Congo</small>
             {profile?.university && <span className="t" style={{ fontSize: 16, color: 'var(--cv-main)' }}>{universityLabel(profile.university)}</span>}
@@ -1281,7 +1286,7 @@ export function TpAssistant() {
             </div>
             {course.data?.title && <span className="s">Cours : {course.data.title}</span>}
             {profile?.full_name && <span className="s">Présenté par : {profile.full_name}</span>}
-            {supervisor.trim() && <span className="s">Encadrant : {supervisor.trim()}</span>}
+            {supervisor.trim() && <span className="s">Professeur : {supervisor.trim()}</span>}
             <span className="s">Année académique {year}</span>
             {!isPrem && <span className="made">Créé avec Memoa</span>}
           </div>
