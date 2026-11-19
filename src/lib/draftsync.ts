@@ -63,14 +63,16 @@ async function buildCourseContent(content: string, instr: string): Promise<strin
 }
 
 /** Mise en forme d'une note ajoutée à un cours (15 points). Si l'IA échoue pour une autre raison que les points, le texte reste tel quel. */
-export async function structureNoteText(courseId: string, base: string): Promise<string> {
+export async function structureNoteText(courseId: string, base: string, guide = ''): Promise<string> {
   const prot = protectBlocks(base)
   try {
     if (prot.text.length > 7500) throw new Error('trop long pour la mise en forme IA')
     const keep = prot.count ? `\n\n(Les lignes §BLOC1§, §BLOC2§… sont des tableaux ou des schémas : recopie-les telles quelles, chacune sur sa ligne, à leur place.)` : ''
-    const r = await askAI({ task: 'structure_notes', courseId, prompt: prot.text + keep })
-    if (r.reply.trim()) {
-      const back = prot.count ? prot.restore(r.reply.trim()) : r.reply.trim()
+    const g = guide.trim()
+    const r = await askAI({ task: 'structure_notes', courseId, prompt: g ? `Consignes de l'étudiant pour la mise en forme (applique-les, ne les recopie pas dans les notes) : ${g}\n\nTexte à mettre en forme :\n${prot.text}${keep}` : prot.text + keep })
+    const cleaned = stripAiNoise(r.reply).trim()
+    if (cleaned) {
+      const back = prot.count ? prot.restore(cleaned) : cleaned
       if (back) return back.trim()
     }
   } catch (e) {
@@ -81,6 +83,8 @@ export async function structureNoteText(courseId: string, base: string): Promise
 
 /** Toute note ajoutée avec du texte coûte 15 points (mise en forme, ou rédaction si consignes). Une note vide ne passe pas par l'IA. */
 async function buildNoteContent(courseId: string, base: string, guide: string): Promise<string> {
+  // Notes de l'étudiant + consignes : on respecte ses notes et on applique seulement la mise en forme demandée.
+  if (guide && base) return structureNoteText(courseId, base, guide)
   if (guide) {
     const r = await askAI({ task: 'enrich_note', courseId, web: false, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${base || '(aucun)'}` })
     const extra = stripAiNoise(r.reply).trim()

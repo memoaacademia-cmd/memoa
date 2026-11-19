@@ -98,6 +98,20 @@ export function limitPlan(plan: string, pages: number): string {
   return out.map((it, i) => [`${i + 1}. ${it.title}`, ...it.subs.slice(0, maxS).map((x, j) => `${i + 1}.${j + 1} ${x}`)].join('\n')).join('\n')
 }
 
+/**
+ * Une sous-partie est présente si son titre court figure dans le texte. Les sous-parties du plan sont des lignes détaillées
+ * (« Contexte et enjeux : définition des notions clés ») que l'IA raccourcit ou reformule : on compare seulement le titre avant les deux-points,
+ * et à défaut la plupart de ses mots importants (le texte est déjà normalisé).
+ */
+function subPresent(sub: string, normText: string): boolean {
+  const head = sub.replace(/^\s*(\d+\.\d+|[ivxl]+\.\d+|[a-z]\)|[-•·▪●])\s*/i, '').split(/\s*[:–—]\s+/)[0]
+  const b = norm(head)
+  if (b.length < 4 || normText.includes(b)) return true
+  const words = b.split(' ').filter((w) => w.length > 3)
+  if (!words.length) return true
+  return words.filter((w) => normText.includes(w)).length / words.length >= 0.6
+}
+
 /** Une partie est valide si son titre et chacune de ses sous-parties y figurent, avec un vrai développement. */
 export function partIsComplete(part: TpPart, text: string | undefined, relaxed = false): boolean {
   if (!text) return false
@@ -105,7 +119,7 @@ export function partIsComplete(part: TpPart, text: string | undefined, relaxed =
   if (!t.includes(bare(part.title))) return false
   // Dernier essai (relaxed) : le modèle a pu reformuler légèrement un titre de sous-partie ; on exige alors seulement le titre et un vrai texte.
   if (relaxed) return text.trim().length >= 300
-  for (const s of part.subs) { const b = bare(s); if (b.length >= 4 && !t.includes(b)) return false }
+  for (const s of part.subs) if (!subPresent(s, t)) return false
   const needed = 350 + 250 * part.subs.length
   return text.trim().length >= Math.min(needed, 2500) * (/biblio/i.test(part.title) ? 0.25 : 0.6)
 }

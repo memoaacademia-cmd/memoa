@@ -104,6 +104,18 @@ export function cleanDocText(text: string, opt: CleanOptions = {}): string {
     out.push(t === raw.trim() ? raw.replace(/\s+$/, '') : t)
   }
 
+  // Paragraphes d'ouverture de conversation (« Bonjour ! Je suis ravi de t'aider… », « Comme tu n'as pas fourni tes notes… », « Si tu télécharges tes notes… ») :
+  // retirés tant qu'ils précèdent le vrai document. On s'arrête au premier paragraphe qui est du contenu.
+  const talk = /^(bonjour|bonsoir|salut|coucou|hello|salutations)\b|\bje suis (ton|ta|ravi|ravie|ici|là|memo|mémo|un assistant|une assistante|l'assistant)|\b(ravi|ravie|heureux|heureuse) de (t'|te |vous |t’)|\bje (te |t'|t’|vous )(propose|conseille|recommande|suggère|donne|fais|prépare|rédige|ai préparé)|\bje vais (te |t'|t’|vous |donc )?(proposer|faire|rédiger|écrire|préparer|créer|structurer|développer)|\bje me base\b|\bje peux (alors |ensuite )?(te |t'|t’)?(développer|aider|compléter|détailler)|\b(comme|puisque|vu que) tu n['’]as pas|\btu n['’]as pas (encore )?(fourni|donné|envoyé|joint|mis)|\bsi tu (télécharges|fournis|me donnes|m['’]envoies|joins|ajoutes|veux)|\bn['’]hésite pas\b|^(note importante|remarque|attention)\s*:.*\b(tu|ton|tes|je)\b|générer \d+ pages? d['’]un seul coup/i
+  const paras: string[] = []
+  {
+    let cur: string[] = []
+    for (const l of out) { if (!l.trim()) { if (cur.length) { paras.push(cur.join('\n')); cur = [] } } else cur.push(l) }
+    if (cur.length) paras.push(cur.join('\n'))
+    let k = 0
+    while (k < paras.length - 1 && talk.test(paras[k].replace(/^[#*\s]+/, ''))) k++
+    if (k > 0) { out.length = 0; paras.slice(k).forEach((x, i) => { if (i) out.push(''); out.push(...x.split('\n')) }) }
+  }
   while (out.length && (!out[0].trim() || chatty.test(out[0].trim()))) out.shift()
   while (out.length && (!out[out.length - 1].trim() || chatty.test(out[out.length - 1].trim()))) out.pop()
   // Une seule ligne vide entre deux blocs
@@ -152,17 +164,19 @@ export function cleanPlan(text: string): string {
     if (s.length > 200 || /[.!?]$/.test(s)) continue // phrase de description : pas une partie
     out.push(s)
   }
-  if (out.length < 2) return base
-  // Renumérote : le modèle répète parfois un numéro (« 5. Analyse… » puis « 5. Conclusion »). Seulement si toutes les parties sont numérotées 1., 2., 3.…
-  const tops = out.filter((l) => /^\d+\.\s/.test(l)).length
-  const others = out.filter((l) => !/^\d+(\.\d+)*\.?\s/.test(l) && !/^-\s/.test(l) && !keyTop.test(l)).length
-  if (tops >= 2 && others === 0) {
-    let n = 0, m = 0
-    return out.map((l) => {
-      if (/^\d+\.\s/.test(l)) { n++; m = 0; return l.replace(/^\d+\.\s+/, `${n}. `) }
-      if (/^\d+\.\d+/.test(l) && n) { m++; return l.replace(/^\d+(?:\.\d+)+\s+/, `${n}.${m} `) }
-      return l
-    }).join('\n')
+  // Conseils glissés dans la liste (« 5. Sources : N'oublie pas de citer… ») : jamais des parties du plan.
+  let kept = out.filter((l) => !/n['’]oublie pas|n['’]oubliez pas|pense[zr]? à |pensez à |tu dois |tu peux |tu devras|ton syllabus|vérifie que tu|assure-toi/i.test(l))
+  // Le plan s'arrête à la bibliographie : tout ce qui suit est du commentaire.
+  const bi = kept.findIndex((l) => /^(?:\d+(?:\.\d+)*[.)]?\s+)?bibliographie/i.test(l))
+  if (bi >= 0) kept = kept.slice(0, bi + 1)
+  if (kept.length < 2) return base
+  // Renumérotation systématique et lisible : parties « 1. », « 2. »… ; sous-parties « 1.1 », « 1.2 »… (les puces deviennent des sous-parties numérotées).
+  let n = 0, m = 0
+  const res: string[] = []
+  for (const l of kept) {
+    const isSub = /^(?:\d+\.\d+|-\s)/.test(l)
+    if (isSub && n) { m++; res.push(`${n}.${m} ${l.replace(/^(?:\d+(?:\.\d+)+|-)\s*[.)\-:–]?\s*/, '')}`) }
+    else { n++; m = 0; res.push(`${n}. ${l.replace(/^(?:partie\s+)?(?:\d+|[ivxlc]+|[a-h])\s*[.)\-:–]\s+/i, '')}`) }
   }
-  return out.join('\n')
+  return res.join('\n')
 }
