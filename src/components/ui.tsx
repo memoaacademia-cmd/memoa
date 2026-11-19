@@ -279,11 +279,12 @@ export function PillInput(props: InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /** En-tête d'écran : bouton retour rond + titre facultatif. */
-export function PageHead({ to, title, size = 22 }: { to: string; title?: string; size?: number }) {
+export function PageHead({ to, title, size = 22, right }: { to: string; title?: string; size?: number; right?: ReactNode }) {
   return (
     <div className="topbar">
       <Link to={to} className="icon-btn round" aria-label="Retour"><Icon name="back" stroke={2.2} /></Link>
       {title && <h1 className="h1" style={{ fontSize: size, lineHeight: 1.2 }}>{title}</h1>}
+      {right && <div style={{ marginLeft: 'auto' }}>{right}</div>}
     </div>
   )
 }
