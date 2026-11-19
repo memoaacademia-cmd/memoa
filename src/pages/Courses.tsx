@@ -22,7 +22,7 @@ import { isPremiumNow, usePremium } from '../lib/premium'
 import { usePref } from '../lib/prefs'
 import { cleanPlan, cleanTpText } from '../lib/tpclean'
 import { readPhotoText } from '../lib/ocr'
-import { adjustLength, assemble, limitPlan, loadProgress, parsePlan, partIsComplete, partsFor, saveProgress, subsFor } from '../lib/tpwrite'
+import { adjustLength, assemble, clearDone, clearProgress, limitPlan, loadDone, loadProgress, parsePlan, partIsComplete, partsFor, saveDone, saveProgress, subsFor } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
@@ -1045,10 +1045,19 @@ export function TpAssistant() {
     r.readAsDataURL(f)
   }
 
+  /** Bouton « + » en haut : remet tout à zéro pour commencer un nouveau TP. */
+  function newTp() {
+    if ((plan || doc || writing || title.trim() || brief.trim()) && !window.confirm('Commencer un nouveau TP ? Le TP en cours (plan et document) sera effacé de ce téléphone.')) return
+    if (writing) stopTpJob(id, 'discard')
+    clearDone(id); clearProgress(id)
+    setTitle(''); setBrief(''); setAtts([]); setPlan(null); setPlanPages(null); setDoc(null); setTexts({})
+    setRemarks(''); setRemAtts([]); setSupervisor(''); setPagesWanted('5'); setNotice(''); setError(null); setStep('')
+    tpSession.current = null; docTexts.current = {}; lastTexts.current = {}
+  }
   async function makePlan() {
     if (!title.trim() || !fullBrief) return setError("Écris le titre et l'énoncé du TP.")
     const r = await run(() => askAI({ task: 'tp_plan', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief}\n\nLONGUEUR DU TRAVAIL : ${pagesNum()} page${pagesNum() > 1 ? 's' : ''} au total (sans la page de garde). Propose AU PLUS ${partsFor(pagesNum())} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pagesNum()) ? `${subsFor(pagesNum())} sous-parties par partie principale (au plus)` : 'AUCUNE sous-partie (seulement les titres des parties)'}. Le plan doit être COMPLET et DÉTAILLÉ : chaque sous-partie dit précisément ce qu'elle contiendra, pour que l'étudiant voie tout le contenu de son travail, tout en tenant en ${pagesNum()} pages. Ne dépasse jamais ce nombre de parties.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); setDoc(null); setTexts({}); persist(np, {}) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setPlanPages(pagesNum()); clearDone(id); setDoc(null); setTexts({}); persist(np, {}) }
   }
   async function adjustPlan() {
     if (!plan) return
@@ -1056,7 +1065,7 @@ export function TpAssistant() {
     if (!remarks.trim() && !extra) return setError('Écris ce que tu veux changer dans le plan (ou dicte-le avec le micro).')
     const asked = `${remarks.trim()}${extra ? '\n\n' + extra : ''}`.slice(0, 2500)
     const r = await run(() => askAI({ task: 'tp_revise', courseId: id, tpSession: tpSession.current, prompt: `Titre : ${title}\nConsignes : ${fullBrief.slice(0, 2500)}\n\nPlan actuel :\n${plan}\n\nModifications demandées par l'étudiant : ${asked}\n\nLe travail final doit rester à environ ${pagesNum()} pages : n'ajoute des parties que si l'étudiant le demande.` }))
-    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setTexts({}); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
+    if (r) { if (r.tpSession) tpSession.current = r.tpSession; const np = limitPlan(cleanPlan(r.reply), pagesNum()); setPlan(np); setTexts({}); clearDone(id); setDoc(null); persist(np, {}); setRemarks(''); setRemAtts([]) }
   }
   async function downloadTp() {
     if (!doc || !profile) return
@@ -1087,7 +1096,7 @@ export function TpAssistant() {
         } catch { break }
       }
       setStep('')
-      if (text !== doc) setDoc(text)
+      if (text !== doc) { setDoc(text); saveDone({ courseId: id, title, brief: fullBrief, plan: plan ?? '', session: tpSession.current, pages: wanted, supervisor: supervisor.trim(), doc: text, texts: { ...docTexts.current } }) }
       return res
     })
     if (!out) return
@@ -1110,6 +1119,9 @@ export function TpAssistant() {
   const busy = actionBusy || writing
   const stepText = writing ? job?.step ?? '' : step
   useEffect(() => {
+    // TP déjà terminé (même si l'appli a été fermée ou quittée pendant la rédaction) : on le remet tel quel, prêt à télécharger.
+    const done = loadDone(id)
+    if (done) { setTitle(done.title); setBrief(done.brief); if (done.supervisor) setSupervisor(done.supervisor); setPlan(done.plan); if (done.pages) setPagesWanted(String(done.pages)); setDoc(cleanTpText(done.doc)); docTexts.current = { ...done.texts }; tpSession.current = done.session; return }
     const p = loadProgress(id)
     if (p && p.plan) { setTitle(p.title); setBrief(p.brief); if (p.supervisor) setSupervisor(p.supervisor); setPlan(p.plan); if (p.pages) setPagesWanted(String(p.pages)); setTexts(job?.texts && Object.keys(job.texts).length ? job.texts : (p.texts ?? {})); tpSession.current = p.session }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1136,11 +1148,12 @@ export function TpAssistant() {
     if (!plan || writing) return // protège contre les doubles appuis
     if (!tpSession.current) return setError('Cette session de TP a expiré. Relance « Proposer un plan ».')
     setError(null)
+    clearDone(id) // nouvelle rédaction lancée : l'ancien TP terminé est remplacé
     lastTexts.current = { ...texts }
     const planNow = limitPlan(plan, pagesNum()) // sécurité : jamais plus de parties que ne le permet le nombre de pages
     if (planNow !== plan) setPlan(planNow)
     startTpJob({
-      courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts, pages: pagesNum(),
+      courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current as string, texts, pages: pagesNum(), supervisor: supervisor.trim(),
       onSave: (t) => { lastTexts.current = { ...t }; saveProgress({ courseId: id, title, brief: fullBrief, plan: planNow, session: tpSession.current, texts: t, at: Date.now(), pages: pagesNum(), supervisor: supervisor.trim() }) }
     })
   }
@@ -1180,7 +1193,7 @@ export function TpAssistant() {
 
   return (
     <main className="page">
-      <div className="no-print"><PageHead to={`/sac/${id}`} title="Assistant TP" /></div>
+      <div className="no-print"><PageHead to={`/sac/${id}`} title="Assistant TP" right={<button type="button" className="icon-btn round" onClick={newTp} aria-label="Nouveau TP" title="Nouveau TP"><Icon name="plus" stroke={2.4} /></button>} /></div>
       <p className="lead no-print" style={{ margin: 0 }}>Cours : <strong>{course.data?.title ?? '…'}</strong></p>
 
       {/* Sélecteurs de fichiers : toujours présents, ouverts directement par un appui. */}
