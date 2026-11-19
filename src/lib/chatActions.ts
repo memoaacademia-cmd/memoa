@@ -16,7 +16,7 @@ import { parseQuiz, QUIZ_PROMPT } from '../pages/Courses'
 import type { Course } from './types'
 
 /** TP en préparation dans le chat (le plan est aussi gardé sur le téléphone, comme dans l'écran « Assistant TP »). */
-export interface TpDraft { courseId: string; courseTitle: string; title: string; brief: string; plan: string; session: string | null; pages: number; /** La rédaction a été lancée. */ writing?: boolean }
+export interface TpDraft { courseId: string; courseTitle: string; title: string; brief: string; plan: string; session: string | null; pages: number; /** Nom du professeur (page de garde), vide = aucun. */ supervisor?: string; /** La rédaction a été lancée. */ writing?: boolean }
 
 export interface ActionEnv {
   userId: string
@@ -159,13 +159,14 @@ async function tpPlanAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
   const pages = Math.max(1, Math.min(60, Math.round(Number(a.pages) || 5)))
   const r = await askAI({
     task: 'tp_plan', courseId: course.id, tpSession: null,
-    prompt: `Titre : ${title}\nConsignes : ${brief}\n\nLONGUEUR DU TRAVAIL : ${pagesLabel(pages)} au total (sans la page de garde). Propose AU PLUS ${partsFor(pages)} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pages) ? `AU PLUS ${subsFor(pages)} sous-parties par partie` : 'AUCUNE sous-partie (seulement les titres des parties)'} : chaque partie doit rester courte pour que tout tienne en ${pagesLabel(pages)}. Ne dépasse jamais ce nombre de parties.`
+    prompt: `Titre : ${title}\nConsignes : ${brief}\n\nLONGUEUR DU TRAVAIL : ${pagesLabel(pages)} au total (sans la page de garde). Propose AU PLUS ${partsFor(pages)} parties principales (introduction, conclusion et bibliographie comprises) et ${subsFor(pages) ? `${subsFor(pages)} sous-parties par partie principale (au plus)` : 'AUCUNE sous-partie (seulement les titres des parties)'}. Le plan doit être COMPLET et DÉTAILLÉ : chaque sous-partie dit précisément ce qu'elle contiendra, pour que l'étudiant voie tout le contenu de son travail, tout en tenant en ${pagesLabel(pages)}. Ne dépasse jamais ce nombre de parties.`
   })
   const plan = limitPlan(cleanTpText(r.reply), pages)
-  const tp: TpDraft = { courseId: course.id, courseTitle: course.title, title, brief, plan, session: r.tpSession ?? null, pages }
-  saveProgress({ courseId: course.id, title, brief, plan, session: tp.session, texts: {}, at: Date.now(), pages })
+  const supervisor = str(a.professor).slice(0, 80)
+  const tp: TpDraft = { courseId: course.id, courseTitle: course.title, title, brief, plan, session: r.tpSession ?? null, pages, supervisor }
+  saveProgress({ courseId: course.id, title, brief, plan, session: tp.session, texts: {}, at: Date.now(), pages, supervisor })
   track('chat_action_done', { type: 'tp_plan' })
-  return { text: `Voici le plan proposé pour « ${title} » (${pagesLabel(pages)}, cours « ${course.title} ») :\n\n${plan}\n\nDis-moi ce que tu veux changer, ou dis « c’est bon » et je rédige le TP.`, tp }
+  return { text: `Voici le plan proposé pour « ${title} » (${pagesLabel(pages)}, cours « ${course.title} »${supervisor ? `, professeur : ${supervisor}` : ''}) :\n\n${plan}\n\nDis-moi ce que tu veux changer, ou dis « c’est bon » et je rédige le TP.`, tp }
 }
 
 async function tpReviseAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
@@ -179,7 +180,7 @@ async function tpReviseAction(a: Raw, env: ActionEnv): Promise<ActionOutcome> {
   })
   const plan = limitPlan(cleanTpText(r.reply), tp.pages)
   const next: TpDraft = { ...tp, plan, session: r.tpSession ?? tp.session }
-  saveProgress({ courseId: next.courseId, title: next.title, brief: next.brief, plan, session: next.session, texts: {}, at: Date.now(), pages: next.pages })
+  saveProgress({ courseId: next.courseId, title: next.title, brief: next.brief, plan, session: next.session, texts: {}, at: Date.now(), pages: next.pages, supervisor: next.supervisor })
   track('chat_action_done', { type: 'tp_revise' })
   return { text: `Plan mis à jour :\n\n${plan}\n\nC’est mieux ? Dis « c’est bon » et je rédige, ou dis-moi quoi changer encore.`, tp: next }
 }
@@ -192,7 +193,7 @@ async function tpWriteAction(env: ActionEnv): Promise<ActionOutcome> {
   const planNow = limitPlan(tp.plan, tp.pages) // sécurité : jamais plus de parties que ne le permet le nombre de pages
   startTpJob({
     courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: {}, pages: tp.pages,
-    onSave: (t) => saveProgress({ courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: t, at: Date.now(), pages: tp.pages })
+    onSave: (t) => saveProgress({ courseId: tp.courseId, title: tp.title, brief: tp.brief, plan: planNow, session: tp.session, texts: t, at: Date.now(), pages: tp.pages, supervisor: tp.supervisor })
   })
   track('chat_action_done', { type: 'tp_write' })
   return {

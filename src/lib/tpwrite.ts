@@ -48,7 +48,7 @@ export function parsePlan(plan: string): TpPart[] {
 /** Nombre MAXIMUM de parties principales selon les pages voulues (introduction, conclusion et bibliographie comprises). 1 page = 3 parties. */
 export const partsFor = (n: number) => (n <= 1 ? 3 : n <= 3 ? 4 : n <= 5 ? 5 : n <= 7 ? 6 : n <= 10 ? 7 : n <= 15 ? 8 : 10)
 /** Nombre maximum de sous-parties par partie : aucune pour un travail très court (1 à 2 pages), sinon 2. */
-export const subsFor = (n: number) => (n <= 2 ? 0 : 2)
+export const subsFor = (n: number) => (n <= 1 ? 0 : n <= 2 ? 2 : n <= 7 ? 3 : 4)
 
 /** Retire la numérotation ou la puce au début d'une ligne de plan, pour garder seulement le titre. */
 const stripNum = (s: string) => s.replace(/^\s*[0-9]+(\.[0-9]+)+\s*[.)\-:–]?\s*/, '').replace(/^\s*(partie\s+)?([0-9]+|[ivxl]+|[a-z])\s*[.)\-:–]\s*/i, '').replace(/^[-•·▪●]\s*/, '').trim()
@@ -128,7 +128,7 @@ export function missingParts(parts: TpPart[], texts: Record<number, string>, rel
 export const assemble = (parts: TpPart[], texts: Record<number, string>) => cleanTpText(parts.map((p) => (texts[p.n] ?? '').trim()).filter(Boolean).join('\n\n'))
 
 const KEY = (courseId: string) => `memoa-tp-progress:${courseId}`
-export interface TpProgress { courseId: string; title: string; brief: string; plan: string; session: string | null; texts: Record<number, string>; at: number; /** Nombre de pages voulu (sans page de garde). */ pages?: number }
+export interface TpProgress { courseId: string; title: string; brief: string; plan: string; session: string | null; texts: Record<number, string>; at: number; /** Nombre de pages voulu (sans page de garde). */ pages?: number; /** Nom du professeur (page de garde). */ supervisor?: string }
 export function loadProgress(courseId: string): TpProgress | null {
   try {
     const p = JSON.parse(localStorage.getItem(KEY(courseId)) ?? 'null') as TpProgress | null

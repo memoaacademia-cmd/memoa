@@ -56,45 +56,72 @@ export interface Dictation {
 /** Durée maximale d'une dictée (le navigateur coupe tout seul après quelques secondes de silence : on relance automatiquement). */
 const MAX_DICTATION_MS = 30 * 60_000
 
+/** Message à montrer à l'étudiant selon l'erreur renvoyée par le navigateur (undefined = rien à dire). */
+export function dictationMessage(err?: string): string | null {
+  switch (err) {
+    case 'not-allowed':
+    case 'service-not-allowed': return 'Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.'
+    case 'audio-capture': return "Je n'arrive pas à utiliser le micro (il est peut-être pris par une autre application). Ferme-la puis réessaie."
+    case 'network': return 'La dictée a besoin du réseau sur ce téléphone. Écris à la main, ou réessaie quand le réseau revient.'
+    case 'no-speech': return "Je n'ai rien entendu. Rapproche le téléphone de ta bouche et réessaie."
+    case 'language-not-supported': return "La dictée en français n'est pas disponible sur ce navigateur. Essaie avec Chrome."
+    default: return err ? 'La dictée a été interrompue. Réessaie.' : null
+  }
+}
+
 /**
- * Démarre la dictée. onText reçoit le texte définitif au fur et à mesure ; onEnd est appelé à l'arrêt.
+ * Démarre la dictée. onText reçoit le texte au fur et à mesure ; onEnd est appelé à l'arrêt (avec l'erreur éventuelle).
  * La dictée continue tant que l'étudiant ne l'arrête pas : les silences et les coupures automatiques du navigateur
- * (quelques secondes, parfois une minute) relancent l'écoute sans qu'il s'en aperçoive. Limite : 30 minutes.
+ * relancent l'écoute sans qu'il s'en aperçoive. Limite : 30 minutes.
+ * Sur Android, Chrome gère mal le mode « continu » (texte vide ou répété) : on y écoute phrase par phrase et on relance.
+ * Si le navigateur coupe sans avoir confirmé la dernière phrase, le texte provisoire est quand même gardé.
  */
 export function startDictation(onText: (t: string) => void, onEnd: (error?: string) => void): Dictation | null {
   const Ctor = recognitionCtor()
   if (!Ctor) return null
+  const android = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent)
   const startedAt = Date.now()
   let stopped = false
   let current: Recognition | null = null
-  let quick = 0 // coupures rapprochées d'affilée : au-delà de 3, on s'arrête (micro indisponible)
+  let quick = 0 // coupures rapprochées d'affilée : au-delà de 3, on s'arrête
   let began = 0
+  let lang = 'fr-FR'
 
   const begin = (): boolean => {
     const r = new Ctor()
-    r.lang = 'fr-FR'
-    r.interimResults = false
-    r.continuous = true
+    r.lang = lang
+    r.interimResults = true
+    r.continuous = !android
     let err: string | undefined
+    let pending = '' // texte provisoire pas encore confirmé
+    let heard = false
+    const flush = () => { const t = pending.trim(); pending = ''; if (t) { heard = true; onText(t) } }
     r.onresult = (e) => {
-      let out = ''
+      let fin = ''
+      let interim = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) out += e.results[i][0].transcript
+        const res = e.results[i]
+        if (res.isFinal) fin += res[0].transcript
+        else interim += res[0].transcript
       }
-      if (out.trim()) onText(out.trim())
+      if (fin.trim()) { heard = true; onText(fin.trim()) }
+      pending = interim
     }
     r.onerror = (e) => { err = e.error }
     r.onend = () => {
+      flush()
       if (stopped) return onEnd(undefined)
-      const fatal = err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture'
+      // Erreur « no-speech » : simple silence, on continue d'écouter ; les autres erreurs graves arrêtent la dictée.
+      if (err === 'language-not-supported' && lang === 'fr-FR') { lang = 'fr'; err = undefined }
+      const fatal = err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture' || err === 'network' || err === 'language-not-supported'
       if (fatal || Date.now() - startedAt > MAX_DICTATION_MS) { stopped = true; return onEnd(fatal ? err : undefined) }
-      quick = Date.now() - began < 700 ? quick + 1 : 0
-      if (quick >= 3) { stopped = true; return onEnd(err) }
-      // Coupure automatique (silence, limite du navigateur) : on relance l'écoute.
+      quick = !heard && Date.now() - began < 1500 ? quick + 1 : 0
+      if (quick >= 4) { stopped = true; return onEnd(err ?? 'no-speech') }
+      // Coupure automatique (silence, fin de phrase, limite du navigateur) : on relance l'écoute.
       window.setTimeout(() => {
         if (stopped) return
         if (!begin()) { stopped = true; onEnd(err) }
-      }, 200)
+      }, 250)
     }
     try {
       began = Date.now()

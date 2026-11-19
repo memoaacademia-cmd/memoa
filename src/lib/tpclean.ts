@@ -49,7 +49,7 @@ export function cleanDocText(text: string, opt: CleanOptions = {}): string {
     if (t && (ADVICE_HEAD.test(t) || (strict && ADVICE_BARE.test(t)))) { lines = lines.slice(0, i); break }
   }
 
-  const chatty = /^(voici|bien sûr|bien sur|d'accord|d’accord|certainement|avec plaisir|j'espère|j’espère|n'hésite|n’hésite|n'hesite|si tu veux|souhaites-tu|veux-tu|dis-moi|je reste|peux-tu)/i
+  const chatty = /^(voici|bien sûr|bien sur|d'accord|d’accord|ok\b|okay|ouais|oui\b|compris\b|c'est compris|c’est compris|j'ai (bien )?(compris|reçu|noté)|j’ai (bien )?(compris|reçu|noté)|entendu\b|très bien|tres bien|parfait\b|pas de souci|pas de problème|no problem|noté(?![a-zà-ÿ])|certainement|avec plaisir|je m'en occupe|je m’en occupe|je vais (te )?(faire|rédiger|écrire|préparer|créer)|je te (fais|prépare|rédige|propose)|je comprends|bien reçu|super\b|excellent\b|volontiers\b|j'espère|j’espère|n'hésite|n’hésite|n'hesite|si tu veux|souhaites-tu|veux-tu|dis-moi|je reste|peux-tu)/i
   const out: string[] = []
   let skipCover = 0
   for (const raw of lines) {

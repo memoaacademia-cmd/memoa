@@ -222,7 +222,7 @@ export interface TpCover {
   kind?: string
   /** Modèle de page de garde (« classique » par défaut). */
   template?: CoverTemplate
-  /** Encadrant / professeur (facultatif). */
+  /** Professeur (facultatif) : écrit sur la page de garde seulement s'il est renseigné. */
   supervisor?: string
   /** Étudiant Premium : aucune mention « Créé avec Memoa ». Le modèle doré lui est réservé. */
   premium?: boolean
@@ -575,7 +575,7 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   const promo = [f.promotion, f.department].filter(Boolean).join(' / ')
   if (promo) rows.push(['PROMOTION', promo])
   if (f.vacation) rows.push(['VACATION', f.vacation.replace(/^Vacation\s+/i, '')])
-  if (f.supervisor) rows.push(['ENCADRANT', f.supervisor])
+  if (f.supervisor) rows.push(['PROFESSEUR', f.supervisor])
   const lineX = 74 + sideW / 2
   const valueW = W - lineX - 28
   const yearY = H - 46
