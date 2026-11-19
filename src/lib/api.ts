@@ -736,7 +736,7 @@ export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<stri
       if (!p) return
       const mine = db.docs.filter((d) => d.owner_id === id && !d.deleted_at)
       const likes = mine.filter((d) => db.likes.includes(d.id)).length
-      out[id] = { user_id: id, last_name: p.last_name, post_name: p.post_name, first_name: p.first_name, full_name: p.full_name, memo_name: p.memo_name || 'Memo', avatar_url: p.avatar_url, university: p.university, faculty: p.faculty, promotion: p.promotion, bio: db.bio, doc_count: mine.length, total_likes: likes, best_likes: likes ? 1 : 0 }
+      out[id] = { user_id: id, public_name: db.publicName, memo_name: p.memo_name || 'Memo', avatar_url: p.avatar_url, university: p.university, faculty: p.faculty, promotion: p.promotion, bio: db.bio, doc_count: mine.length, total_likes: likes, best_likes: likes ? 1 : 0 }
     })
     return out
   }
@@ -746,9 +746,8 @@ export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<stri
   return out
 }
 
-/** Like / retire son like. Un étudiant ne peut pas liker son propre document (refusé aussi par le serveur). */
+/** Like / retire son like (on peut aussi liker son propre document). */
 export async function toggleLike(userId: string, doc: LibDoc, on: boolean): Promise<void> {
-  if (doc.owner_id === userId) fail('Tu ne peux pas liker ton propre document.')
   if (!isConfigured) {
     const db = loadDemo()
     db.likes = on ? [...new Set([...db.likes, doc.id])] : db.likes.filter((x) => x !== doc.id)
@@ -765,26 +764,31 @@ export async function toggleLike(userId: string, doc: LibDoc, on: boolean): Prom
 }
 
 export const BIO_MAX = 160
+export const PUBLIC_NAME_MAX = 40
 
-export async function getMyBio(userId: string): Promise<string> {
-  if (!isConfigured) return loadDemo().bio
-  const { data, error } = await sb().from('profile_bios').select('bio').eq('user_id', userId).maybeSingle()
+/** Ce que l'étudiant montre publiquement dans la Librairie : un nom public et une petite bio (tous deux facultatifs). */
+export async function getMyPublic(userId: string): Promise<{ bio: string; public_name: string }> {
+  if (!isConfigured) { const db = loadDemo(); return { bio: db.bio, public_name: db.publicName } }
+  const { data, error } = await sb().from('profile_bios').select('bio, public_name').eq('user_id', userId).maybeSingle()
   if (error) throw error
-  return (data as { bio: string } | null)?.bio ?? ''
+  const r = data as { bio: string; public_name: string } | null
+  return { bio: r?.bio ?? '', public_name: r?.public_name ?? '' }
 }
 
-export async function saveMyBio(userId: string, bio: string): Promise<string> {
-  const clean = bio.replace(/\s+/g, ' ').trim()
-  if (clean.length > BIO_MAX) fail(`Ta bio ne doit pas dépasser ${BIO_MAX} caractères.`)
+export async function saveMyPublic(userId: string, input: { bio: string; public_name: string }): Promise<void> {
+  const bio = input.bio.replace(/\s+/g, ' ').trim()
+  const public_name = input.public_name.replace(/\s+/g, ' ').trim()
+  if (bio.length > BIO_MAX) fail(`Ta bio ne doit pas dépasser ${BIO_MAX} caractères.`)
+  if (public_name.length > PUBLIC_NAME_MAX) fail(`Ton nom public ne doit pas dépasser ${PUBLIC_NAME_MAX} caractères.`)
   if (!isConfigured) {
     const db = loadDemo()
-    db.bio = clean
+    db.bio = bio
+    db.publicName = public_name
     saveDemo(db)
-    return clean
+    return
   }
-  const { error } = await sb().from('profile_bios').upsert({ user_id: userId, bio: clean, updated_at: new Date().toISOString() })
+  const { error } = await sb().from('profile_bios').upsert({ user_id: userId, bio, public_name, updated_at: new Date().toISOString() })
   if (error) throw error
-  return clean
 }
 
 /** Adresse temporaire d'un document. Avec `saveAs`, le navigateur télécharge le fichier au lieu de l'ouvrir. */

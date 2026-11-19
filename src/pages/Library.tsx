@@ -5,7 +5,7 @@ import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/ac
 import { askAI, deleteDocForever, docDownloadUrl, getLibraryAuthors, getLibrarySocial, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, toggleLike, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { plaqueFor } from '../lib/plaque'
-import { officialName } from '../lib/names'
+import DocCover from '../components/DocCover'
 import { AuthorSheet, Heart, PlaqueAvatar } from '../components/AuthorBadge'
 import type { LibAuthor, LibDoc, LibSocial } from '../lib/types'
 
@@ -89,7 +89,7 @@ export default function Library() {
     reload()
   }
   async function like(d: LibDoc) {
-    if (!user || d.owner_id === user.id) return
+    if (!user) return
     const cur = likeOf(d.id)
     const on = !cur.liked_by_me
     setLikeOv((o) => ({ ...o, [d.id]: { like_count: Math.max(0, cur.like_count + (on ? 1 : -1)), liked_by_me: on } }))
@@ -185,7 +185,7 @@ export default function Library() {
           {shown.map((d) => (
             <article key={d.id} className="lib-card">
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <span className="lib-type" aria-hidden="true">{(d.doc_type || 'PDF').slice(0, 3).toUpperCase()}</span>
+                <DocCover filePath={d.file_path} type={d.doc_type} title={d.title} />
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <strong style={{ fontSize: 15, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.title}</strong>
                   <span className="muted" style={{ fontSize: 13 }}>{[d.faculty, d.promotion, d.department].filter(Boolean).join(' · ')}</span>
@@ -201,20 +201,19 @@ export default function Library() {
               {(() => {
                 const a = authors.data?.[d.owner_id]
                 const sc = likeOf(d.id)
-                const mine = d.owner_id === user?.id
                 const first = d.id === shown[0]?.id
                 return (
                   <div className="lib-author-row">
                     {a ? (
                       <>
-                        <PlaqueAvatar src={a.avatar_url} name={officialName(a) || a.memo_name} size={40} plaque={plaqueFor(sc.like_count)} onClick={() => setOpenAuthor(a)} tour={first ? 'lib-author' : undefined} />
+                        <PlaqueAvatar src={a.avatar_url} name={a.public_name || a.memo_name} size={40} plaque={plaqueFor(sc.like_count)} onClick={() => setOpenAuthor(a)} tour={first ? 'lib-author' : undefined} />
                         <button type="button" className="lib-author-name" onClick={() => setOpenAuthor(a)}>
-                          <b>{officialName(a) || a.memo_name}</b>
+                          <b>{a.public_name || a.memo_name}</b>
                           <span>{a.promotion}</span>
                         </button>
                       </>
                     ) : <span style={{ flex: 1 }} />}
-                    <button type="button" className="lib-like" aria-pressed={sc.liked_by_me} disabled={mine || act.busy} aria-label={mine ? `${sc.like_count} likes sur ton document` : sc.liked_by_me ? 'Retirer mon like' : 'Liker ce document'} onClick={() => void like(d)} data-tour={first ? 'lib-like' : undefined}>
+                    <button type="button" className="lib-like" aria-pressed={sc.liked_by_me} disabled={act.busy} aria-label={sc.liked_by_me ? 'Retirer mon like' : 'Liker ce document'} onClick={() => void like(d)} data-tour={first ? 'lib-like' : undefined}>
                       <Heart on={sc.liked_by_me} /> {sc.like_count}
                     </button>
                   </div>

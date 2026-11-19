@@ -4,7 +4,7 @@
 -- Ce fichier AJOUTE seulement : deux nouvelles tables et trois fonctions.
 -- Aucune table existante (profiles, library_documents…) n'est modifiée, aucune règle existante n'est changée.
 -- Les fonctions ne renvoient QUE des infos publiques choisies : photo, nom du Memo, université, faculté, promotion, bio, likes.
--- Le nom (nom, post-nom, prénom) est public sur la Librairie ; jamais le téléphone ni l'e-mail.
+-- Le nom affiché est le « nom public » que l'étudiant choisit lui-même (sinon le nom de son Memo). Le vrai nom, le téléphone et l'e-mail ne sortent jamais.
 
 -- ------------------------------------------------------------------ bio
 create table if not exists public.profile_bios (
@@ -12,6 +12,8 @@ create table if not exists public.profile_bios (
   bio text not null default '' check (char_length(bio) <= 160),
   updated_at timestamptz not null default now()
 );
+-- Nom public : le nom que l'étudiant veut montrer sur la Librairie (facultatif).
+alter table public.profile_bios add column if not exists public_name text not null default '' check (char_length(public_name) <= 40);
 alter table public.profile_bios enable row level security;
 drop policy if exists "bio : lecture de la sienne" on public.profile_bios;
 create policy "bio : lecture de la sienne" on public.profile_bios for select using (user_id = auth.uid());
@@ -31,12 +33,12 @@ create index if not exists library_likes_doc_idx on public.library_likes (docume
 alter table public.library_likes enable row level security;
 drop policy if exists "likes : lecture des siens" on public.library_likes;
 create policy "likes : lecture des siens" on public.library_likes for select using (user_id = auth.uid());
--- On ne peut liker qu'un document publié, et jamais le sien.
+-- On ne peut liker qu'un document publié (le sien compris).
 drop policy if exists "likes : ajout" on public.library_likes;
 create policy "likes : ajout" on public.library_likes for insert
   with check (
     user_id = auth.uid()
-    and exists (select 1 from public.library_documents d where d.id = document_id and d.status = 'published' and d.deleted_at is null and d.owner_id <> auth.uid())
+    and exists (select 1 from public.library_documents d where d.id = document_id and d.status = 'published' and d.deleted_at is null)
   );
 drop policy if exists "likes : retrait" on public.library_likes;
 create policy "likes : retrait" on public.library_likes for delete using (user_id = auth.uid());
@@ -61,11 +63,11 @@ grant execute on function public.library_social(uuid[]) to authenticated;
 drop function if exists public.library_authors(uuid[]);
 create or replace function public.library_authors(owner_ids uuid[])
 returns table (
-  user_id uuid, last_name text, post_name text, first_name text, full_name text, memo_name text, avatar_url text, university text, faculty text, promotion text,
+  user_id uuid, public_name text, memo_name text, avatar_url text, university text, faculty text, promotion text,
   bio text, doc_count integer, total_likes integer, best_likes integer
 )
 language sql stable security definer set search_path = public as $$
-  select p.id, p.last_name, p.post_name, p.first_name, p.full_name,
+  select p.id, coalesce(b.public_name, ''),
          coalesce(nullif(p.memo_name, ''), 'Memo'),
          p.avatar_url, p.university, p.faculty, p.promotion,
          coalesce(b.bio, ''),

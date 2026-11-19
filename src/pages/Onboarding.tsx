@@ -1,9 +1,9 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Brand, ErrorBox, MemoAvatar, Steps, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
-import { saveProfile, uploadAvatar } from '../lib/api'
+import { BIO_MAX, getMyPublic, PUBLIC_NAME_MAX, saveMyPublic, saveProfile, uploadAvatar } from '../lib/api'
 import { track } from '../lib/track'
 import { useAuth } from '../lib/auth'
 import { composeFullName, initialsOf, titleCase } from '../lib/names'
@@ -37,6 +37,15 @@ export default function Onboarding() {
   const { busy, error, setError, run } = useAction()
   const [f, setF] = useState(() => initial(profile))
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }))
+  // Nom public et bio : seulement dans « Modifier mon profil », jamais demandés à l'inscription.
+  const [pub, setPub] = useState({ name: '', bio: '' })
+  const [pubLoaded, setPubLoaded] = useState(false)
+  useEffect(() => {
+    if (!editing || !user) return
+    let alive = true
+    getMyPublic(user.id).then((r) => { if (alive) { setPub({ name: r.public_name, bio: r.bio }); setPubLoaded(true) } }).catch(() => { /* base pas encore mise à jour (0029) : on n'enregistre rien de ce côté */ })
+    return () => { alive = false }
+  }, [editing, user])
 
   const univAutre = f.univ === OTHER_UNIV
   const facs = univAutre ? [] : Object.keys(CATALOGUE[f.univ] ?? {})
@@ -75,6 +84,7 @@ export default function Onboarding() {
         university, faculty, department,
         promotion: f.promo, vacation: f.vac
       })
+      if (editing && pubLoaded) await saveMyPublic(user.id, { bio: pub.bio, public_name: pub.name })
       await refresh()
       return true
     })
@@ -156,6 +166,21 @@ export default function Onboarding() {
             </select>
           </div>
         </div>
+
+        {editing && pubLoaded && (
+          <>
+            <div className="field">
+              <label htmlFor="pubname">Nom public (facultatif)</label>
+              <input id="pubname" className="input" maxLength={PUBLIC_NAME_MAX} placeholder="Ex. : Jean K." value={pub.name} onChange={(e) => setPub((x) => ({ ...x, name: e.target.value }))} />
+              <span className="muted" style={{ fontSize: 13 }}>C’est ce nom que les autres voient sous tes documents dans la Librairie. Si tu ne mets rien, c’est le nom de ton Memo qui s’affiche, jamais ton vrai nom.</span>
+            </div>
+            <div className="field">
+              <label htmlFor="pubbio">Ma bio (facultatif)</label>
+              <textarea id="pubbio" className="textarea" rows={3} maxLength={BIO_MAX} placeholder="Ex. : Étudiant en L2 droit, je partage mes fiches de révision." value={pub.bio} onChange={(e) => setPub((x) => ({ ...x, bio: e.target.value }))} />
+              <span className="bio-count">{pub.bio.length} / {BIO_MAX} · visible par tous quand on touche ta photo dans la Librairie</span>
+            </div>
+          </>
+        )}
 
         <ErrorBox message={error} />
         <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Enregistrement…' : editing ? 'Enregistrer' : 'Continuer'}</button>

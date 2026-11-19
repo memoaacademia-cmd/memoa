@@ -56,13 +56,11 @@ export interface LibSocial {
   liked_by_me: boolean
 }
 
-/** Profil public d'un auteur de la Librairie : son nom, mais jamais son téléphone ni son e-mail. */
+/** Profil public d'un auteur de la Librairie : jamais son vrai nom, son téléphone ni son e-mail. */
 export interface LibAuthor {
   user_id: string
-  last_name: string
-  post_name: string
-  first_name: string
-  full_name: string
+  /** Nom que l'étudiant a choisi d'afficher (vide : on montre le nom de son Memo). */
+  public_name: string
   memo_name: string
   avatar_url: string | null
   university: string

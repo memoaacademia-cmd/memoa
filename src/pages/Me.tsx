@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { DELETE_WORD, deleteMyAccount, downloadMyData } from '../lib/account'
-import { BIO_MAX, friendlyError, getLibraryAuthors, getMyBio, getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, saveMyBio, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
+import { friendlyError, getLibraryAuthors, getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
 import { VAPID_PUBLIC_KEY } from '../lib/features'
@@ -75,26 +75,6 @@ function PremiumCard({ plan }: { plan: ReturnType<typeof usePlan> }) {
   )
 }
 
-/** « Ma bio » : une petite phrase visible par tous les étudiants quand ils touchent ta photo dans la Librairie. */
-function BioSheet({ open, userId, current, onClose, onSaved }: { open: boolean; userId: string; current: string; onClose: () => void; onSaved: (bio: string) => void }) {
-  const { busy, error, run } = useAction()
-  const [text, setText] = useState(current)
-  useEffect(() => { if (open) setText(current) }, [open, current])
-  async function save() {
-    const saved = await run(() => saveMyBio(userId, text))
-    if (typeof saved === 'string') { onSaved(saved); onClose() }
-  }
-  return (
-    <BottomSheet open={open} onClose={onClose} title="Ma bio">
-      <span className="muted">Une ou deux phrases sur toi. Elle s’affiche dans ton profil, visible par tous les étudiants, quand ils touchent ta photo dans la Librairie.</span>
-      <textarea className="textarea" aria-label="Ma bio" maxLength={BIO_MAX} rows={4} placeholder="Ex. : Étudiant en L2 droit, je partage mes fiches de révision." value={text} onChange={(e) => setText(e.target.value)} />
-      <span className="bio-count">{text.length} / {BIO_MAX}</span>
-      <ErrorBox message={error} />
-      <PillButton onClick={() => void save()} disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</PillButton>
-    </BottomSheet>
-  )
-}
-
 export function Me() {
   const { user, profile, refresh } = useAuth()
   const { error, run } = useAction()
@@ -103,10 +83,8 @@ export function Me() {
   const streak = currentStreak(act.data ?? [])
   const initials = initialsOf(profile)
   const avatarSrc = useAvatar(profile?.avatar_url)
-  // Ma bio publique et ma plaque (si la mise à jour de la base n'est pas faite, rien ne s'affiche : la page marche quand même).
-  const bio = useLoad(() => getMyBio(user?.id ?? '').catch(() => ''), [user?.id])
+  // Ma plaque (si la mise à jour de la base n'est pas faite, rien ne s'affiche : la page marche quand même).
   const me = useLoad<Record<string, LibAuthor>>(() => (user ? getLibraryAuthors([user.id]).catch(() => ({} as Record<string, LibAuthor>)) : Promise.resolve({} as Record<string, LibAuthor>)), [user?.id])
-  const [bioOpen, setBioOpen] = useState(false)
   const myPlaque = plaqueFor(me.data?.[user?.id ?? '']?.best_likes ?? 0)
 
   async function pick(f: File | undefined) {
@@ -139,7 +117,6 @@ export function Me() {
         </div>
       </section>
       <ErrorBox message={error} />
-      <BioSheet open={bioOpen} userId={user?.id ?? ''} current={bio.data ?? ''} onClose={() => setBioOpen(false)} onSaved={() => bio.reload()} />
 
       <section className="me-stats" aria-label="Mes chiffres">
         <div><b>{streak}</b><span>{streak > 1 ? 'jours de suite' : 'jour de suite'}</span></div>
@@ -153,7 +130,6 @@ export function Me() {
 
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
-        <Row tour="me-bio" icon="pencil" title="Ma bio" sub={bio.data ? bio.data : 'Visible par tous dans la Librairie'} onClick={() => setBioOpen(true)} />
         <Row tour="me-exams" icon="clock" title="Mes examens" sub="Dates, rappels et horaire" to="/examens" />
         <Row tour="me-memo" iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
         <Row tour="me-settings" icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />

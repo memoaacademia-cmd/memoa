@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react'
 import { BottomSheet } from './ui'
 import { universityLabel } from '../data/academic'
 import { useAvatar } from '../lib/avatar'
-import { officialName } from '../lib/names'
 import { nextPlaque, plaqueFor, type Plaque } from '../lib/plaque'
 import type { LibAuthor } from '../lib/types'
 
@@ -55,16 +54,16 @@ export function AuthorSheet({ author, onClose }: { author: LibAuthor | null; onC
   const prevMin = plaque?.min ?? 0
   const pct = author && next ? Math.min(100, Math.max(4, Math.round(((author.best_likes - prevMin) / (next.min - prevMin)) * 100))) : 100
   const style = plaque ? ({ ['--plq-glow' as string]: plaque.gem } as CSSProperties) : undefined
-  const realName = author ? officialName(author) || author.memo_name : ''
+  const shownName = author ? author.public_name || author.memo_name : ''
   const uni = author?.university ? universityLabel(author.university) : ''
   return (
-    <BottomSheet open={!!author} onClose={onClose} title={author ? `Profil de ${realName}` : undefined}>
+    <BottomSheet open={!!author} onClose={onClose} title={author ? `Profil de ${shownName}` : undefined}>
       {author && (
         <div className="aut" style={style}>
           <div className={'aut-hero' + (plaque ? ' ' + plaque.id : '')}>
-            <PlaqueAvatar src={author.avatar_url} name={realName} size={96} plaque={plaque} />
-            <strong className="aut-name">{realName}</strong>
-            <span className="muted">Memo : {author.memo_name}</span>
+            <PlaqueAvatar src={author.avatar_url} name={shownName} size={96} plaque={plaque} />
+            <strong className="aut-name">{shownName}</strong>
+            {author.public_name && <span className="muted">Memo : {author.memo_name}</span>}
             <span className={'aut-tag' + (plaque ? ' on' : '')}>{plaque ? `Plaque ${plaque.label}` : 'Pas encore de plaque'}</span>
           </div>
           {author.bio && <p className="aut-bio">{author.bio}</p>}

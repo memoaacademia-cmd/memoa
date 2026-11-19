@@ -21,6 +21,8 @@ export interface DemoDb {
   likes: string[]
   /** Bio publique (mode démo). */
   bio: string
+  /** Nom public (mode démo). */
+  publicName: string
   activity: string[]
   convs: Conversation[]
   msgs: (Message & { conversation_id: string })[]
@@ -39,6 +41,7 @@ const empty = (): DemoDb => ({
   favs: [],
   likes: [],
   bio: '',
+  publicName: '',
   activity: [],
   convs: [],
   msgs: [],
