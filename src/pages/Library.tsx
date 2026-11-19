@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { track } from '../lib/track'
 import { ErrorBox, Icon, PillButton, Spinner, useAction, useLoad, Empty } from '../components/ui'
 import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
-import { askAI, deleteDocForever, docDownloadUrl, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
+import { askAI, deleteDocForever, docDownloadUrl, getLibraryAuthors, getLibrarySocial, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, toggleLike, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import type { LibDoc } from '../lib/types'
+import { plaqueFor } from '../lib/plaque'
+import { officialName } from '../lib/names'
+import { AuthorSheet, Heart, PlaqueAvatar } from '../components/AuthorBadge'
+import type { LibAuthor, LibDoc, LibSocial } from '../lib/types'
 
 const TYPES = ['Cours', 'TP', 'Examen', 'Résumé', 'Autre']
 
@@ -35,6 +38,15 @@ export default function Library() {
   const trashed = trash.data ?? []
   const daysLeft = (d?: string | null) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(d ?? Date.now()).getTime()) / 86400000))
   const faculties = useMemo(() => allFaculties(), [])
+
+  // Likes et profils publics des auteurs : si la mise à jour de la base (0029) n'est pas encore faite, la Librairie marche quand même, sans likes ni profils.
+  const idsKey = (data ?? []).map((d) => d.id).join(',')
+  const ownersKey = [...new Set((data ?? []).map((d) => d.owner_id))].join(',')
+  const social = useLoad(() => getLibrarySocial(idsKey ? idsKey.split(',') : []).catch(() => ({} as Record<string, LibSocial>)), [idsKey])
+  const authors = useLoad(() => getLibraryAuthors(ownersKey ? ownersKey.split(',') : []).catch(() => ({} as Record<string, LibAuthor>)), [ownersKey])
+  const [likeOv, setLikeOv] = useState<Record<string, LibSocial>>({})
+  const [openAuthor, setOpenAuthor] = useState<LibAuthor | null>(null)
+  const likeOf = (id: string): LibSocial => likeOv[id] ?? social.data?.[id] ?? { like_count: 0, liked_by_me: false }
 
   // Tant qu'un de tes documents est « en vérification », la liste se rafraîchit toute seule : le badge disparaît dès la publication.
   const reloadRef = useRef(reload)
@@ -75,6 +87,15 @@ export default function Library() {
     if (!user) return
     await act.run(() => toggleFavorite(user.id, d.id, !d.is_favorite))
     reload()
+  }
+  async function like(d: LibDoc) {
+    if (!user || d.owner_id === user.id) return
+    const cur = likeOf(d.id)
+    const on = !cur.liked_by_me
+    setLikeOv((o) => ({ ...o, [d.id]: { like_count: Math.max(0, cur.like_count + (on ? 1 : -1)), liked_by_me: on } }))
+    const ok = await act.run(async () => { await toggleLike(user.id, d, on); return true })
+    if (!ok) setLikeOv((o) => ({ ...o, [d.id]: cur }))
+    else { social.reload(); authors.reload() }
   }
   /** « Voir » ouvre le PDF dans le navigateur ; « Télécharger » l'enregistre sur le téléphone. */
   async function openDoc(d: LibDoc, mode: 'view' | 'download') {
@@ -177,6 +198,28 @@ export default function Library() {
                   <Icon name="star" size={22} color={d.is_favorite ? '#f2a33a' : '#9db0aa'} />
                 </button>
               </div>
+              {(() => {
+                const a = authors.data?.[d.owner_id]
+                const sc = likeOf(d.id)
+                const mine = d.owner_id === user?.id
+                const first = d.id === shown[0]?.id
+                return (
+                  <div className="lib-author-row">
+                    {a ? (
+                      <>
+                        <PlaqueAvatar src={a.avatar_url} name={officialName(a) || a.memo_name} size={40} plaque={plaqueFor(sc.like_count)} onClick={() => setOpenAuthor(a)} tour={first ? 'lib-author' : undefined} />
+                        <button type="button" className="lib-author-name" onClick={() => setOpenAuthor(a)}>
+                          <b>{officialName(a) || a.memo_name}</b>
+                          <span>{a.promotion}</span>
+                        </button>
+                      </>
+                    ) : <span style={{ flex: 1 }} />}
+                    <button type="button" className="lib-like" aria-pressed={sc.liked_by_me} disabled={mine || act.busy} aria-label={mine ? `${sc.like_count} likes sur ton document` : sc.liked_by_me ? 'Retirer mon like' : 'Liker ce document'} onClick={() => void like(d)} data-tour={first ? 'lib-like' : undefined}>
+                      <Heart on={sc.liked_by_me} /> {sc.like_count}
+                    </button>
+                  </div>
+                )
+              })()}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {d.file_path && <button type="button" className="lib-act primary" onClick={() => void openDoc(d, 'view')}>Voir</button>}
                 {d.file_path && <button type="button" className="lib-act" onClick={() => void openDoc(d, 'download')}><Icon name="download" size={16} /> Télécharger</button>}
@@ -215,6 +258,7 @@ export default function Library() {
           )}
         </>
       )}
+      <AuthorSheet author={openAuthor} onClose={() => setOpenAuthor(null)} />
     </main>
   )
 }

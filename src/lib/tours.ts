@@ -135,7 +135,9 @@ export const TOURS: TourDef[] = [
       { target: 'lib-search', tag: 'Chercher', icon: 'search', text: 'Cherche un document ou un cours partagé par d’autres étudiants.' },
       { target: 'lib-filters', tag: 'Filtrer', icon: 'shelf', text: 'Affine par faculté et par promotion pour tomber tout de suite sur ce qui te concerne.' },
       { target: 'lib-publish', tag: 'Partager', icon: 'upload', text: 'Tu as de bonnes notes ? Publie-les pour aider ta promotion.' },
-      { target: 'lib-list', tag: 'Les documents', icon: 'pdf', text: 'Les documents partagés apparaissent ici : touche « Voir » pour les lire, ou l’étoile pour les garder en favoris.' }
+      { target: 'lib-list', tag: 'Les documents', icon: 'pdf', text: 'Les documents partagés apparaissent ici : touche « Voir » pour les lire, ou l’étoile pour les garder en favoris.' },
+      { target: 'lib-author', tag: 'Qui l’a partagé', icon: 'user', text: 'Sous chaque document, tu vois le nom de son auteur. Touche sa photo pour voir son profil : nom de son Memo, promotion, faculté, université et sa petite bio. L’anneau autour de sa photo est sa plaque : Bronze dès 100 likes, Or 500, Diamant 1000, Émeraude 1500, Rubis 2000.' },
+      { target: 'lib-like', tag: 'Le cœur', icon: 'star', text: 'Un document t’a aidé ? Touche le cœur pour le liker. Plus un document est liké, plus son auteur monte de plaque.' }
     ]
   },
   {
@@ -161,6 +163,7 @@ export const TOURS: TourDef[] = [
     steps: [
       { target: 'me-premium', tag: 'Premium', icon: 'bolt', text: `Premium coûte ${PRICE_LABEL.USD} ou ${PRICE_LABEL.CDF} pour 30 jours, par Orange Money, Airtel Money ou M-Pesa : il s’active dès le paiement et la date de fin s’affiche sur cette carte. Tu gagnes aussi la page de garde dorée sur tes PDF, sans la mention « Créé avec Memoa ».` },
       { target: 'me-profile', tag: 'Ton profil', icon: 'user', text: 'Ton université, ta faculté, ta promotion : garde-les à jour pour que tes travaux aient la bonne page de garde.' },
+      { target: 'me-bio', tag: 'Ta bio', icon: 'pencil', text: 'Écris une petite phrase sur toi : elle s’affiche sur ton profil, visible par tous quand ils touchent ta photo dans la Librairie.' },
       { target: 'me-exams', tag: 'Mes examens', icon: 'clock', text: 'Note tes examens, interros et TP avec leur date, ou importe ton horaire : je te les rappelle et le compte à rebours s’affiche sur ton accueil.' },
       { target: 'me-memo', tag: 'Ton Memo', icon: 'sparkle', text: 'Je suis ton compagnon d’étude. Tu peux me changer d’animal quand tu veux.' },
       { target: 'me-settings', tag: 'Réglages', icon: 'gear', text: 'Notifications, thème, langue, abonnement et paiements. Tu y trouves aussi « Exporter mes données » et « Supprimer mon compte ».' },

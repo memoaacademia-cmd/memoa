@@ -17,6 +17,10 @@ export interface DemoDb {
   notes: Note[]
   docs: LibDoc[]
   favs: string[]
+  /** Documents likés (mode démo). */
+  likes: string[]
+  /** Bio publique (mode démo). */
+  bio: string
   activity: string[]
   convs: Conversation[]
   msgs: (Message & { conversation_id: string })[]
@@ -33,6 +37,8 @@ const empty = (): DemoDb => ({
   notes: [],
   docs: [],
   favs: [],
+  likes: [],
+  bio: '',
   activity: [],
   convs: [],
   msgs: [],

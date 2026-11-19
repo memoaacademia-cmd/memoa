@@ -50,6 +50,31 @@ export interface LibDoc {
   is_favorite?: boolean
 }
 
+/** Likes d'un document de la Librairie. */
+export interface LibSocial {
+  like_count: number
+  liked_by_me: boolean
+}
+
+/** Profil public d'un auteur de la Librairie : son nom, mais jamais son téléphone ni son e-mail. */
+export interface LibAuthor {
+  user_id: string
+  last_name: string
+  post_name: string
+  first_name: string
+  full_name: string
+  memo_name: string
+  avatar_url: string | null
+  university: string
+  faculty: string
+  promotion: string
+  bio: string
+  doc_count: number
+  total_likes: number
+  /** Likes de son document le plus aimé : c'est lui qui donne la plaque sur son profil. */
+  best_likes: number
+}
+
 export interface Conversation {
   id: string
   title: string

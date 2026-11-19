@@ -31,6 +31,14 @@ Chaque page principale (Accueil, Mes cours, Un cours, Créer un cours, Librairie
 - Progression : copie locale par compte + métadonnées du compte (`user_metadata.tours`) — aucune migration SQL.
 - Banc d’essai : `tools/tour-tests/` (voir son README).
 
+## Profil public, likes et plaques (Librairie)
+
+- Sous chaque document : photo + nom (nom, post-nom, prénom) + promotion de l'auteur (touche la photo pour sa fiche : nom du Memo, faculté, université, bio, nombre de documents et de likes) et un cœur pour liker. On ne like pas son propre document.
+- Plaques selon les likes d'un document : Bronze 100 · Or 500 · Diamant 1000 · Émeraude 1500 · Rubis 2000. Paliers et couleurs : `src/lib/plaque.ts`. Affichage : `src/components/AuthorBadge.tsx`.
+- Bio de 160 caractères max : **Moi › Ma bio**.
+- Base de données : **exécuter `supabase/migrations/0029_profil_public_likes_plaques.sql`** (ajoute seulement 2 tables et 3 fonctions ; ne modifie aucune table existante). Tant qu'elle n'est pas exécutée, la Librairie marche mais sans likes ni profils.
+- Le guide de l'assistant (`supabase/functions/_shared/appGuide.ts`) en parle : redéployer `ai-gateway` après modification (`supabase functions deploy ai-gateway`).
+
 ## Brancher Supabase
 
 1. Crée un projet sur supabase.com.

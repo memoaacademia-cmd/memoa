@@ -534,41 +534,8 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   if (f.faculty) y = center(f.faculty, 11.5, 'bold', y + 3, ACC, 0.5, 140, true)
   if (f.department) y = center(`Département : ${f.department}`, 12.5, 'bold', y + 4, MAIN, 0, 150)
 
-  // Logo (hauteur max 48 mm, largeur max 70 mm)
-  let logoBottom = y + 8
-  if (logo) {
-    const ratio = logo.w / logo.h
-    let lw = 70
-    let lh = lw / ratio
-    if (lh > 48) { lh = 48; lw = lh * ratio }
-    doc.addImage(logo.data, 'PNG', cx - lw / 2, y + 12, lw, lh)
-    logoBottom = y + 12 + lh
-  }
-
-  // Bandeau : « TRAVAIL PRATIQUE » et le titre forment un seul bloc, centré dans le bandeau
-  // (même marge en haut et en bas, chaque ligne centrée exactement sur le milieu de la page).
-  const bandTop = Math.max(logoBottom + 10, 132)
-  const bw = 150
-  const LH = 9.5
-  const TITLE_PT = 20
-  const pad = 9
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(TITLE_PT)
-  const titleLines = doc.splitTextToSize(clean(head.title).toUpperCase(), bw - 18) as string[]
-  const labelBase = bandTop + pad + 2.6 // le haut des majuscules du libellé touche la marge du haut
-  const firstBase = head.kind ? labelBase + 5.5 + 5.1 : bandTop + pad + 5.1
-  const lastBase = firstBase + (titleLines.length - 1) * LH
-  const bandH = lastBase - bandTop + pad
-  const filled = look.band === 'filled'
-  drawBand(doc, look, cx, bandTop, bw, bandH)
-  if (head.kind) center(head.kind, 10, 'normal', labelBase, filled && look.frame !== 'gold' ? [255, 255, 255] : ACC, 2.4, bw - 12, true)
-  const titleColor: RGB = filled ? [255, 255, 255] : MAIN
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(TITLE_PT)
-  doc.setTextColor(titleColor[0], titleColor[1], titleColor[2])
-  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, firstBase + i * LH))
-
-  // Bloc « présenté par » : étiquettes à gauche, trait vertical, valeurs à droite
+  // Lignes « présenté par » : préparées AVANT de poser le logo. La place qui reste entre le bandeau et l'année décide
+  // de la taille du logo et des espaces : la dernière ligne (le professeur) ne passe plus jamais sur l'année ni sur les filets.
   const rows: Array<[string, string]> = []
   if (f.student) rows.push(['PRÉSENTÉ PAR', f.student])
   if (f.course) rows.push(['COURS', f.course])
@@ -579,22 +546,86 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   const lineX = 74 + sideW / 2
   const valueW = W - lineX - 28
   const yearY = H - 46
-  let ry = bandTop + bandH + 16
+  const rowsLimit = yearY - 17 // dernière ligne de texte au plus bas ici (le filet de l'année est à yearY - 7)
+
+  // Bandeau : « TRAVAIL PRATIQUE » et le titre forment un seul bloc, centré dans le bandeau
+  // (même marge en haut et en bas, chaque ligne centrée exactement sur le milieu de la page).
+  const bw = 150
+  const LH = 9.5
+  const TITLE_PT = 20
+  const pad = 9
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(TITLE_PT)
+  const titleLines = doc.splitTextToSize(clean(head.title).toUpperCase(), bw - 18) as string[]
+  const labelOff = pad + 2.6 // le haut des majuscules du libellé touche la marge du haut
+  const firstOff = head.kind ? labelOff + 5.5 + 5.1 : pad + 5.1
+  const bandH = firstOff + (titleLines.length - 1) * LH + pad
+
+  const ratio = logo ? logo.w / logo.h : 1
+  const logoSize = (maxH: number) => {
+    let lw = 70
+    let lh = lw / ratio
+    if (lh > maxH) { lh = maxH; lw = lh * ratio }
+    return { lw, lh }
+  }
+  // Réglages essayés dans l'ordre : le premier est la mise en page habituelle ; on ne resserre que si les lignes ne tiennent pas.
+  const presets = [
+    { logo: 48, floor: 132, bandGap: 16, rowGap: 4.5, step: 5, size: 11 },
+    { logo: 38, floor: 126, bandGap: 14, rowGap: 4, step: 5, size: 11 },
+    { logo: 30, floor: 120, bandGap: 12, rowGap: 3.5, step: 4.6, size: 10.5 },
+    { logo: 22, floor: 114, bandGap: 10, rowGap: 3, step: 4.4, size: 10 },
+    { logo: 0, floor: 110, bandGap: 9, rowGap: 3, step: 4.4, size: 10 }
+  ]
+  const plan = (pr: (typeof presets)[number]) => {
+    const dims = logo && pr.logo > 0 ? logoSize(pr.logo) : null
+    const bandTop = Math.max(dims ? y + 12 + dims.lh + 10 : y + 18, pr.floor)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(pr.size)
+    const lines = rows.map(([, v]) => doc.splitTextToSize(clean(v), valueW) as string[])
+    const first = bandTop + bandH + pr.bandGap
+    let last = first
+    lines.forEach((l, i) => { last += i < lines.length - 1 ? Math.max(1, l.length) * pr.step + pr.rowGap : (Math.max(1, l.length) - 1) * pr.step })
+    return { dims, bandTop, lines, first, last, fits: last <= rowsLimit }
+  }
+  let pr = presets[0]
+  let lay = plan(pr)
+  for (const cand of presets) {
+    pr = cand
+    lay = plan(cand)
+    if (lay.fits) break
+  }
+
+  if (logo && lay.dims) doc.addImage(logo.data, 'PNG', cx - lay.dims.lw / 2, y + 12, lay.dims.lw, lay.dims.lh)
+
+  const bandTop = lay.bandTop
+  const labelBase = bandTop + labelOff
+  const firstBase = bandTop + firstOff
+  const filled = look.band === 'filled'
+  drawBand(doc, look, cx, bandTop, bw, bandH)
+  if (head.kind) center(head.kind, 10, 'normal', labelBase, filled && look.frame !== 'gold' ? [255, 255, 255] : ACC, 2.4, bw - 12, true)
+  const titleColor: RGB = filled ? [255, 255, 255] : MAIN
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(TITLE_PT)
+  doc.setTextColor(titleColor[0], titleColor[1], titleColor[2])
+  titleLines.forEach((l, i) => doc.text(l, cx - doc.getTextWidth(l) / 2, firstBase + i * LH))
+
+  // Bloc « présenté par » : étiquettes à gauche, trait vertical, valeurs à droite
+  let ry = lay.first
   const startY = ry - 5
-  rows.forEach(([label, value]) => {
+  rows.forEach(([label], i) => {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.5)
     doc.setTextColor(ACC[0], ACC[1], ACC[2])
     doc.text(label, lineX - 6, ry, { align: 'right' })
-    doc.setFontSize(11)
+    doc.setFontSize(pr.size)
     doc.setTextColor(MAIN[0], MAIN[1], MAIN[2])
-    const vl = doc.splitTextToSize(clean(value), valueW) as string[]
-    vl.forEach((l, i) => doc.text(l, lineX + 6, ry + i * 5))
-    ry += Math.max(1, vl.length) * 5 + 4.5
+    const vl = lay.lines[i]
+    vl.forEach((l, k) => doc.text(l, lineX + 6, ry + k * pr.step))
+    ry += Math.max(1, vl.length) * pr.step + pr.rowGap
   })
   doc.setDrawColor(ACC[0], ACC[1], ACC[2])
   doc.setLineWidth(0.5)
-  doc.line(lineX, startY, lineX, Math.min(ry - 6, yearY - 16))
+  doc.line(lineX, startY, lineX, Math.min(lay.last + 3, yearY - 16))
 
   // Année académique entre deux filets. Les lettres sont espacées à la main (mesure exacte) : le texte ne dépasse jamais.
   const yearText = clean(f.year ? `ANNÉE ACADÉMIQUE ${f.year.replace('-', ' – ')}` : '')

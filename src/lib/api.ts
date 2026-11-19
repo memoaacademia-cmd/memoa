@@ -8,7 +8,7 @@ import { isConfigured, supabase } from './supabase'
 import { loadDemo, saveDemo, uid } from './demo'
 import { shrinkImage } from './image'
 import { reportError, track } from './track'
-import type { AiTask, Conversation, Course, LibDoc, Message, Note, Payment, Profile } from './types'
+import type { AiTask, Conversation, Course, LibAuthor, LibDoc, LibSocial, Message, Note, Payment, Profile } from './types'
 
 export interface AuthUser {
   id: string
@@ -705,6 +705,86 @@ export async function toggleFavorite(userId: string, docId: string, on: boolean)
     const { error } = await sb().from('library_favorites').delete().eq('user_id', userId).eq('document_id', docId)
     if (error) throw error
   }
+}
+
+/* ------------------- LIKES, PROFIL PUBLIC ET BIO (LIBRAIRIE) ------------------- */
+
+/** Likes de plusieurs documents d'un coup (nombre + « je l'ai liké »). */
+export async function getLibrarySocial(docIds: string[]): Promise<Record<string, LibSocial>> {
+  const out: Record<string, LibSocial> = {}
+  if (!docIds.length) return out
+  if (!isConfigured) {
+    const db = loadDemo()
+    docIds.forEach((id) => { const on = db.likes.includes(id); out[id] = { like_count: on ? 1 : 0, liked_by_me: on } })
+    return out
+  }
+  const { data, error } = await sb().rpc('library_social', { doc_ids: docIds })
+  if (error) throw error
+  ;(data as Array<{ document_id: string; like_count: number; liked_by_me: boolean }>).forEach((r) => { out[r.document_id] = { like_count: r.like_count, liked_by_me: r.liked_by_me } })
+  return out
+}
+
+/** Profil public des auteurs de documents (photo, nom du Memo, promotion, faculté, université, bio, likes). */
+export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<string, LibAuthor>> {
+  const out: Record<string, LibAuthor> = {}
+  const ids = [...new Set(ownerIds)]
+  if (!ids.length) return out
+  if (!isConfigured) {
+    const db = loadDemo()
+    ids.forEach((id) => {
+      const p = db.profiles.find((x) => x.id === id)
+      if (!p) return
+      const mine = db.docs.filter((d) => d.owner_id === id && !d.deleted_at)
+      const likes = mine.filter((d) => db.likes.includes(d.id)).length
+      out[id] = { user_id: id, last_name: p.last_name, post_name: p.post_name, first_name: p.first_name, full_name: p.full_name, memo_name: p.memo_name || 'Memo', avatar_url: p.avatar_url, university: p.university, faculty: p.faculty, promotion: p.promotion, bio: db.bio, doc_count: mine.length, total_likes: likes, best_likes: likes ? 1 : 0 }
+    })
+    return out
+  }
+  const { data, error } = await sb().rpc('library_authors', { owner_ids: ids })
+  if (error) throw error
+  ;(data as LibAuthor[]).forEach((a) => { out[a.user_id] = a })
+  return out
+}
+
+/** Like / retire son like. Un étudiant ne peut pas liker son propre document (refusé aussi par le serveur). */
+export async function toggleLike(userId: string, doc: LibDoc, on: boolean): Promise<void> {
+  if (doc.owner_id === userId) fail('Tu ne peux pas liker ton propre document.')
+  if (!isConfigured) {
+    const db = loadDemo()
+    db.likes = on ? [...new Set([...db.likes, doc.id])] : db.likes.filter((x) => x !== doc.id)
+    saveDemo(db)
+    return
+  }
+  if (on) {
+    const { error } = await sb().from('library_likes').insert({ user_id: userId, document_id: doc.id })
+    if (error && (error as { code?: string }).code !== '23505') throw error // déjà liké : sans erreur
+  } else {
+    const { error } = await sb().from('library_likes').delete().eq('user_id', userId).eq('document_id', doc.id)
+    if (error) throw error
+  }
+}
+
+export const BIO_MAX = 160
+
+export async function getMyBio(userId: string): Promise<string> {
+  if (!isConfigured) return loadDemo().bio
+  const { data, error } = await sb().from('profile_bios').select('bio').eq('user_id', userId).maybeSingle()
+  if (error) throw error
+  return (data as { bio: string } | null)?.bio ?? ''
+}
+
+export async function saveMyBio(userId: string, bio: string): Promise<string> {
+  const clean = bio.replace(/\s+/g, ' ').trim()
+  if (clean.length > BIO_MAX) fail(`Ta bio ne doit pas dépasser ${BIO_MAX} caractères.`)
+  if (!isConfigured) {
+    const db = loadDemo()
+    db.bio = clean
+    saveDemo(db)
+    return clean
+  }
+  const { error } = await sb().from('profile_bios').upsert({ user_id: userId, bio: clean, updated_at: new Date().toISOString() })
+  if (error) throw error
+  return clean
 }
 
 /** Adresse temporaire d'un document. Avec `saveAs`, le navigateur télécharge le fichier au lieu de l'ouvrir. */
