@@ -50,13 +50,14 @@ supabase login && supabase link --project-ref TON_REF
 supabase secrets set GEMINI_API_KEY=...           # clé d'IA : UNIQUEMENT ici, jamais dans le code ni dans .env
 supabase secrets set AI_MODEL_FAST=gemini-2.5-flash AI_MODEL_STRONG=gemini-2.5-flash   # vérifie les noms de modèles actuels
 supabase functions deploy ai-gateway
-supabase functions deploy payments-initiate
+# Paiement : NE PAS déployer « payments-initiate » en ligne de commande. L'application appelle la fonction « swift-worker » (nom donné par Supabase).
+# Copie le contenu de supabase/functions/payments-initiate/index.ts dans swift-worker, depuis l'éditeur du tableau de bord (voir CHARIOW_SETUP.md).
 supabase functions deploy payments-webhook --no-verify-jwt
 supabase functions deploy payments-reconcile --no-verify-jwt
 ```
 
 - `ai-gateway` : toutes les tâches IA (chat, notes structurées, quiz, plan et rédaction de TP). Quotas par minute et par jour (`AI_LIMIT_PER_MINUTE`, `AI_FREE_PER_DAY`, `AI_PREMIUM_PER_DAY`), modèle choisi selon la tâche, historique et consommation enregistrés. Pour changer de fournisseur d'IA, on ne modifie que la fonction `callModel`.
-- `payments-initiate` / `payments-webhook` / `payments-reconcile` : paiement **Chariow** (1 paiement = 30 jours de Premium). Mise en place complète : voir `CHARIOW_SETUP.md`. Le montant est toujours fixé et revérifié côté serveur.
+- `payments-initiate` (installée dans la fonction Supabase nommée `swift-worker`) / `payments-webhook` / `payments-reconcile` : paiement **Chariow** (1 paiement = 30 jours de Premium). Mise en place complète : voir `CHARIOW_SETUP.md`. Le montant est toujours fixé et revérifié côté serveur.
 
 ## Hébergement GitHub Pages
 

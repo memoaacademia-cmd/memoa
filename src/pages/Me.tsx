@@ -18,8 +18,6 @@ import { plaqueFor } from '../lib/plaque'
 import type { LibAuthor } from '../lib/types'
 import { track } from '../lib/track'
 
-const LANGUAGES: [string, string][] = [['fr', 'Français'], ['en', 'English']]
-
 // Paiement dans une fenêtre intégrée (iframe) : DÉSACTIVÉ tant que Chariow n'a pas confirmé que sa page de paiement l'autorise
 // (la page checkout.orqex.com reste bloquée dans l'iframe). Passer à true pour réactiver la fenêtre, rien d'autre à changer.
 const EMBED_PAYMENT = false
@@ -130,15 +128,13 @@ export function Me() {
 
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
-        <Row tour="me-exams" icon="clock" title="Mes examens" sub="Dates, rappels et horaire" to="/examens" />
         <Row tour="me-memo" iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
         <Row tour="me-settings" icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
       </RowGroup>
       <RowGroup label="Aide">
         <Row tour="me-tours" icon="sparkle" title="Visites guidées" sub="Revoir les explications de chaque page" to="/visites" />
         <Row icon="chat" title="Centre d’aide" to="/aide" />
-        <Row icon="text" title="Signaler un problème" to="/signaler" />
-        <Row icon="star" title="Donner mon avis" to="/avis" />
+        <Row icon="text" title="Un retour ?" sub="Signaler un problème ou donner ton avis" to="/signaler" />
       </RowGroup>
       <RowGroup label="À propos">
         <Row icon="pdf" title="Confidentialité" to="/confidentialite" />
@@ -162,8 +158,6 @@ export function Settings() {
   const nav = useNavigate()
   const { user, profile } = useAuth()
   const [theme, setTheme] = usePref('theme', 'light')
-  const [storedLang, setLang] = usePref('lang', 'fr')
-  const lang = LANGUAGES.some(([c]) => c === storedLang) ? storedLang : 'fr'
   const [pushOn, setPushOn] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
 
@@ -230,32 +224,23 @@ export function Settings() {
 
   async function logout() { await signOut(); nav('/connexion', { replace: true }) }
 
-  const [pick, setPick] = useState<null | 'lang' | 'theme'>(null)
-  const langName = LANGUAGES.find(([c]) => c === lang)?.[1] ?? 'Français'
+  const [pick, setPick] = useState<null | 'theme'>(null)
 
   return (
     <main className="page" style={{ gap: 18 }}>
       <PageHead to="/moi" title="Réglages" />
 
-      <RowGroup label="Apparence et langue">
-        <Row icon="globe" title="Langue" right={langName} onClick={() => setPick('lang')} />
+      <RowGroup label="Apparence">
         <Row icon="sparkle" title="Thème" right={theme === 'dark' ? 'Sombre' : 'Clair'} onClick={() => setPick('theme')} />
       </RowGroup>
-      {lang !== 'fr' && <div className="notice">Memoa est pour l'instant écrit en français. Ton choix est gardé : la traduction en anglais arrive bientôt.</div>}
 
       <RowGroup label="Notifications">
-        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications" sub="« Le savais-tu ? », rappels d’examens, interros et TP, brouillons, cartes de révision" on={pushOn} set={(v) => void togglePush(v)} />}
+        {VAPID_PUBLIC_KEY && <SwitchRow label="Notifications" sub="« Le savais-tu ? », brouillons, cartes de révision" on={pushOn} set={(v) => void togglePush(v)} />}
       </RowGroup>
       {pushMsg && <div className="notice" role="alert">{pushMsg}</div>}
 
-      <RowGroup label="Aide et informations">
-        <Row icon="chat" title="Centre d'aide" to="/aide" />
-        <Row icon="text" title="Signaler un problème" to="/signaler" />
-        <Row icon="star" title="Noter l'application" to="/avis" />
+      <RowGroup label="Partager">
         <Row icon="upload" title="Partager Memoa" onClick={() => void share()} chevron={false} />
-        <Row icon="pdf" title="Politique de confidentialité" to="/confidentialite" />
-        <Row icon="pdf" title="Conditions d'utilisation" to="/conditions" />
-        <Row icon="home" title="À propos de Memoa" to="/a-propos" />
       </RowGroup>
       {shared && <div className="notice">Lien copié. Colle-le dans WhatsApp ou ailleurs.</div>}
 
@@ -299,16 +284,6 @@ export function Settings() {
             <PillButton onClick={() => void removeAccount()} disabled={!wordOk || delBusy}>{delBusy ? 'Suppression…' : 'Supprimer pour de bon'}</PillButton>
           </div>
         </div>
-      </BottomSheet>
-      <BottomSheet open={pick === 'lang'} onClose={() => setPick(null)} title="Langue de l'application">
-        <RowGroup>
-          {LANGUAGES.map(([code, name]) => (
-            <button key={code} type="button" className="rg-row" onClick={() => { setLang(code); setPick(null) }}>
-              <span className="rg-body"><span className="rg-title">{name}</span></span>
-              <span className={'radio' + (lang === code ? ' on' : '')} />
-            </button>
-          ))}
-        </RowGroup>
       </BottomSheet>
       <BottomSheet open={pick === 'theme'} onClose={() => setPick(null)} title="Thème">
         <RowGroup>

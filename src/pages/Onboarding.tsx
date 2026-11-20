@@ -198,6 +198,7 @@ export function Adoption() {
   const { user, profile, refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
   const [animal, setAnimal] = useState<string | null>(changing ? null : profile?.memo_animal ?? null)
+  const [showAll, setShowAll] = useState(false)
   const [name, setName] = useState(profile?.memo_name ?? '')
   const chosen = ANIMALS.find((a) => a.id === animal)
 
@@ -225,13 +226,14 @@ export function Adoption() {
         <p className="lead">Il t'accompagne dans tes révisions. Choisis l'animal qui te ressemble.</p>
         {changing && <Link to="/moi" className="link">Annuler</Link>}
         <div className="grid2">
-          {ANIMALS.map((a) => (
+          {(showAll ? ANIMALS : ANIMALS.filter((a) => a.svg)).map((a) => (
             <button key={a.id} type="button" className="tile" style={{ alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 150 }} onClick={() => setAnimal(a.id)} aria-label={`Choisir ${a.name}`}>
               <MemoAvatar animal={a.id} size={84} />
               <span className="h2">{a.name}</span>
             </button>
           ))}
         </div>
+        {!showAll && <button type="button" className="link" style={{ textDecoration: 'none', alignSelf: 'center', padding: 12 }} onClick={() => setShowAll(true)}>Voir plus d’animaux</button>}
       </main>
     )
   }

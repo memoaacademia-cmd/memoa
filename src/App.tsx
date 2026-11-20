@@ -9,8 +9,6 @@ import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
 import { NotifStep, TrialStep } from './pages/Welcome'
 import Home from './pages/Home'
 import Review from './pages/Review'
-import Exams from './pages/Exams'
-import ScheduleImport from './pages/ScheduleImport'
 import Install from './pages/Install'
 import { Backpack, CourseDetail, NewCourse, TpAssistant } from './pages/Courses'
 import Library from './pages/Library'
@@ -21,7 +19,6 @@ import Tours from './pages/Tours'
 import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
 import AutoCards from './components/AutoCards'
-import { isConfigured } from './lib/supabase'
 import { usePref } from './lib/prefs'
 
 /** Bandeau discret : le réseau coupe, l'étudiant reste connecté et tout se remet à jour au retour. */
@@ -89,7 +86,6 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   if (!profile.memo_animal) return <Navigate to="/adoption" replace />
   return (
     <div className="shell app">
-      {!isConfigured && <div className="demo-banner" role="note">Mode démo : tes données restent dans ce navigateur.</div>}
       <DraftWatcher />
       <OutboxSync />
       <AutoCards />
@@ -148,8 +144,8 @@ export default function App() {
             <Route path="/sac" element={<Backpack />} />
             <Route path="/sac/:id" element={<CourseDetail />} />
             <Route path="/revision" element={<Review />} />
-            <Route path="/examens" element={<Exams />} />
-            <Route path="/examens/horaire" element={<ScheduleImport />} />
+            <Route path="/examens" element={<Navigate to="/" replace />} />
+            <Route path="/examens/horaire" element={<Navigate to="/" replace />} />
             <Route path="/revision/:courseId" element={<Review />} />
             <Route path="/tp/:id" element={<TpAssistant />} />
             <Route path="/librairie" element={<Library />} />

@@ -9,7 +9,6 @@ import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } fro
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isDue, useCards } from '../lib/review'
-import ExamRow from '../components/ExamRow'
 import { DraftsSection } from '../components/Drafts'
 import { deleteDraft, getDraft, saveDraft, setEditingDraft, useDrafts } from '../lib/drafts'
 import { isOnline, OFFLINE_MSG, useOnline } from '../lib/online'
@@ -523,6 +522,8 @@ export function CourseDetail() {
   const online = useOnline()
   const [params, setParams] = useSearchParams()
   const [pdfPrompt, setPdfPrompt] = useState(params.get('pdf') === '1')
+  const [menu, setMenu] = useState(false)
+  const [revSheet, setRevSheet] = useState(false)
   const { drafts, now, reload: reloadDrafts } = useDrafts(user?.id)
   const [quiz, setQuiz] = useState<{ qs: QuizQ[]; raw: string; n: number; seen: string[] } | null>(null)
   const courseCards = useCards(user?.id).filter((c) => c.course_id === id)
@@ -779,6 +780,7 @@ export function CourseDetail() {
       const url = URL.createObjectURL(blob)
       w.location.href = url
       setTimeout(() => URL.revokeObjectURL(url), 60000)
+      setPdfPrompt(true)
     } else saveBlob(course.data.title, blob)
   }
 
@@ -820,7 +822,7 @@ export function CourseDetail() {
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
   return (
     <main className="page">
-      <PageHead to="/sac" title={course.data.title} />
+      <PageHead to="/sac" title={course.data.title} right={<button type="button" className="icon-btn round" aria-label="Plus d'actions" onClick={() => setMenu(true)}><Icon name="more" /></button>} />
 
       {pdfPrompt && (
         <PillButton size="lg" onClick={() => { setPdfPrompt(false); void pdf('save') }} disabled={busy || !all.length}>
@@ -833,16 +835,12 @@ export function CourseDetail() {
       {!online && <span className="muted" role="status" style={{ padding: '0 4px' }}>Sans connexion : tu peux lire ton cours (« Lire le PDF ») et l’écouter tel quel. Résumé, quiz, TP et téléchargement reviennent avec le réseau.</span>}
 
       <RowGroup label="Outils">
-        <Row tour="course-modify" icon="pencil" title="Modifier" sub="Revoir ton cours avant le PDF" onClick={openModify} disabled={busy} />
-        <Row tour="course-cards" icon="copy" title="Cartes de révision" sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} à réviser · ${courseCards.length} au total` : `${profile?.memo_name || 'Memo'} crée des cartes à partir de tes notes`} to={`/revision/${id}`} />
-        <ExamRow courseId={id} courseTitle={course.data.title} />
-        <Row tour="course-revise" icon="quiz" title={busy && !editing ? 'Un instant…' : 'Quiz'} sub={online ? 'Des questions à choix multiples sur tes notes' : 'Besoin du réseau'} onClick={() => void revise()} disabled={busy || !online} />
+        <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours, puis le télécharger" onClick={() => void pdf('read')} disabled={!all.length || busy} />
         {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
-        <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours" onClick={() => void pdf('read')} disabled={!all.length || busy} />
-        <Row icon="download" title="Télécharger" sub={online ? 'Enregistrer en PDF' : 'Besoin du réseau'} onClick={() => void pdf('save')} disabled={!all.length || busy || !online} />
         {online
           ? <Row tour="course-tp" icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
           : <Row tour="course-tp" icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />}
+        <Row tour="course-cards" icon="copy" title={busy && !editing ? 'Un instant…' : 'Révision'} sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} carte(s) à réviser · quiz disponible` : 'Cartes de révision et quiz'} onClick={() => setRevSheet(true)} disabled={busy} />
       </RowGroup>
 
       <ErrorBox message={editing || listenOpen ? null : error} />
@@ -855,7 +853,21 @@ export function CourseDetail() {
 
       <DraftsSection label="Brouillons" drafts={drafts.filter((d) => d.courseId === id)} now={now} onDelete={(d) => void deleteDraft(d.id).then(reloadDrafts)} />
 
-      <button type="button" className="pill-btn outline" style={{ marginTop: 16, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void trashCourse()} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
+      {all.length > 0 && (
+        <RowGroup label="Notes">
+          {all.map((n) => <Row key={n.id} icon="text" title={n.title} sub={new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} chevron={false} />)}
+        </RowGroup>
+      )}
+
+      <BottomSheet open={menu} onClose={() => setMenu(false)} title="Ce cours">
+        <PillButton variant="outline" onClick={() => { setMenu(false); openModify() }} disabled={busy}><Icon name="pencil" size={20} />Modifier</PillButton>
+        <button type="button" className="pill-btn outline" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => { setMenu(false); void trashCourse() }} disabled={busy}><Icon name="trash" size={20} />Supprimer ce cours</button>
+      </BottomSheet>
+
+      <BottomSheet open={revSheet} onClose={() => setRevSheet(false)} title="Révision">
+        <PillButton onClick={() => { setRevSheet(false); nav(`/revision/${id}`) }}><Icon name="copy" size={20} />Cartes de révision</PillButton>
+        <PillButton variant="outline" onClick={() => { setRevSheet(false); void revise() }} disabled={busy || !online}><Icon name="quiz" size={20} />{online ? 'Quiz sur mes notes' : 'Quiz : réseau requis'}</PillButton>
+      </BottomSheet>
 
       {/* Sélecteurs de fichiers : toujours présents, ouverts par « Continuer » ou par les boutons de l'éditeur. */}
       <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />

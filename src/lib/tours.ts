@@ -83,13 +83,10 @@ export const TOURS: TourDef[] = [
     match: (p) => /^\/sac\/[^/]+$/.test(p),
     steps: [
       { target: 'course-add', tag: 'Ajouter une note', icon: 'plus', text: 'Écris, dicte, photographie ou importe un document : chaque note est rangée dans ce cours.' },
-      { target: 'course-modify', tag: 'Modifier', icon: 'pencil', text: 'Relis et corrige ton cours avant de le mettre en PDF.' },
-      { target: 'course-cards', tag: 'Cartes de révision', icon: 'copy', text: 'Je transforme ton cours en cartes question / réponse. Chaque jour, tu révises celles qui reviennent : « Je savais » ou « À revoir », et les cartes ratées reviennent plus vite.' },
-      { target: 'course-exam', tag: 'Examen, interro ou TP', icon: 'clock', text: 'Note la date d’un examen, d’une interro ou d’un TP pour ce cours : le compte à rebours apparaît sur ton accueil, et je peux te le rappeler.' },
-      { target: 'course-revise', tag: 'Quiz', icon: 'quiz', text: 'Je te pose un quiz à choix multiples tiré de tes propres notes, avec la correction. Il faut une connexion.' },
+      { target: 'course-pdf', tag: 'Lire le PDF', icon: 'pdf', text: 'Ouvre ton cours mis en page, prêt à relire. Un bouton « Télécharger » apparaît ensuite en haut de l’écran.' },
       { target: 'course-listen', tag: 'Écouter', icon: 'headphones', text: 'Je te lis ton cours à voix haute : pratique dans le bus ou en marchant.' },
-      { target: 'course-pdf', tag: 'Lire le PDF', icon: 'pdf', text: 'Ouvre ton cours mis en page, prêt à relire. Tu peux aussi le télécharger juste en dessous.' },
-      { target: 'course-tp', tag: 'Assistant TP', icon: 'book', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec ta page de garde.' }
+      { target: 'course-tp', tag: 'Assistant TP', icon: 'book', text: 'Un travail pratique à rendre ? On fait le plan ensemble, je rédige, et tu télécharges un PDF avec ta page de garde.' },
+      { target: 'course-cards', tag: 'Révision', icon: 'copy', text: 'Cartes de révision ou quiz : je transforme ton cours en questions. Chaque jour, tu révises les cartes qui reviennent, et celles que tu rates reviennent plus vite.' }
     ]
   },
   {
@@ -163,7 +160,6 @@ export const TOURS: TourDef[] = [
     steps: [
       { target: 'me-premium', tag: 'Premium', icon: 'bolt', text: `Premium coûte ${PRICE_LABEL.USD} ou ${PRICE_LABEL.CDF} pour 30 jours, par Orange Money, Airtel Money ou M-Pesa : il s’active dès le paiement et la date de fin s’affiche sur cette carte. Tu gagnes aussi la page de garde dorée sur tes PDF, sans la mention « Créé avec Memoa ».` },
       { target: 'me-profile', tag: 'Ton profil', icon: 'user', text: 'Ton université, ta faculté, ta promotion : garde-les à jour pour que tes travaux aient la bonne page de garde. Tu peux aussi y choisir un nom public et écrire une bio, visibles dans la Librairie.' },
-      { target: 'me-exams', tag: 'Mes examens', icon: 'clock', text: 'Note tes examens, interros et TP avec leur date, ou importe ton horaire : je te les rappelle et le compte à rebours s’affiche sur ton accueil.' },
       { target: 'me-memo', tag: 'Ton Memo', icon: 'sparkle', text: 'Je suis ton compagnon d’étude. Tu peux me changer d’animal quand tu veux.' },
       { target: 'me-settings', tag: 'Réglages', icon: 'gear', text: 'Notifications, thème, langue, abonnement et paiements. Tu y trouves aussi « Exporter mes données » et « Supprimer mon compte ».' },
       { target: 'me-tours', tag: 'Visites guidées', icon: 'sparkle', text: 'Une visite t’a échappé ? Tu peux les revoir toutes ici, quand tu veux.' }

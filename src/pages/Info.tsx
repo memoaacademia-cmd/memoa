@@ -146,7 +146,8 @@ export function Feedback({ mode }: { mode: 'report' | 'rating' }) {
   const [rating, setRating] = useState(0)
   const [message, setMessage] = useState('')
   const [done, setDone] = useState(false)
-  const isRating = mode === 'rating'
+  const [tab, setTab] = useState<'report' | 'rating'>(mode)
+  const isRating = tab === 'rating'
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -162,16 +163,20 @@ export function Feedback({ mode }: { mode: 'report' | 'rating' }) {
 
   return (
     <main className="page" style={{ gap: 18 }}>
-      <PageHead to="/parametres" title={isRating ? "Noter l'application" : 'Signaler un problème'} size={26} />
+      <PageHead to="/moi" title="Un retour ?" size={26} />
       {done ? (
         <section style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, paddingTop: 24 }}>
           <Logo size={56} />
           <strong className="h2" style={{ fontSize: 22 }}>Merci !</strong>
           <span className="muted">{isRating ? 'Ta note nous aide à améliorer Memoa.' : "Ton message est bien arrivé. On s'en occupe."}</span>
-          <div style={{ width: '100%', marginTop: 12 }}><PillButton size="lg" to="/parametres">Retour aux paramètres</PillButton></div>
+          <div style={{ width: '100%', marginTop: 12 }}><PillButton size="lg" to="/moi">Retour</PillButton></div>
         </section>
       ) : (
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }} noValidate>
+          <div className="chips" role="radiogroup" aria-label="Sujet">
+            <button type="button" role="radio" aria-checked={!isRating} className={'pill' + (!isRating ? ' on' : '')} onClick={() => { setTab('report'); setError(null) }}>Un problème</button>
+            <button type="button" role="radio" aria-checked={isRating} className={'pill' + (isRating ? ' on' : '')} onClick={() => { setTab('rating'); setError(null) }}>Mon avis</button>
+          </div>
           {isRating ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
               <span className="lead">Ton avis sur Memoa</span>

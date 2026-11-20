@@ -146,10 +146,6 @@ export function Login() {
           <Icon name="back" stroke={2.2} />
         </button>
       </div>
-      {/* Choix de langue : décoratif pour l'instant (la traduction vient plus tard dans le plan). */}
-      <div style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: 'var(--text-2)' }}>
-        Français <Icon name="chevdown" size={16} />
-      </div>
       <div style={{ alignSelf: 'center', width: 76, height: 76, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0 4px' }}>
         <Logo size={44} />
       </div>
