@@ -75,12 +75,12 @@ export function AuthorSheet({ author, onClose }: { author: LibAuthor | null; onC
           <div className="aut-stats">
             <div><b>{author.doc_count}</b><span>{author.doc_count > 1 ? 'documents' : 'document'}</span></div>
             <i aria-hidden="true" />
-            <div><b>{author.total_likes}</b><span>{author.total_likes > 1 ? 'likes' : 'like'}</span></div>
+            <div><b>{author.total_likes}</b><span>{author.total_likes > 1 ? 'étoiles' : 'étoile'}</span></div>
           </div>
           {next ? (
             <div className="aut-next">
               <div className="aut-bar" aria-hidden="true"><span style={{ width: pct + '%' }} /></div>
-              <span className="muted">Encore {next.min - author.best_likes} {next.min - author.best_likes > 1 ? 'likes' : 'like'} sur son meilleur document pour la plaque {next.label}.</span>
+              <span className="muted">Encore {next.min - author.best_likes} {next.min - author.best_likes > 1 ? 'étoiles' : 'étoile'} sur son meilleur document pour la plaque {next.label}.</span>
             </div>
           ) : (
             <span className="muted" style={{ textAlign: 'center' }}>La plus haute plaque : Rubis.</span>

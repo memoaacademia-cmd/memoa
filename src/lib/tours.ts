@@ -133,8 +133,8 @@ export const TOURS: TourDef[] = [
       { target: 'lib-filters', tag: 'Filtrer', icon: 'shelf', text: 'Affine par faculté et par promotion pour tomber tout de suite sur ce qui te concerne.' },
       { target: 'lib-publish', tag: 'Partager', icon: 'upload', text: 'Tu as de bonnes notes ? Publie-les pour aider ta promotion.' },
       { target: 'lib-list', tag: 'Les documents', icon: 'pdf', text: 'Les documents partagés apparaissent ici : touche « Voir » pour les lire, ou l’étoile pour les garder en favoris.' },
-      { target: 'lib-author', tag: 'Qui l’a partagé', icon: 'user', text: 'Sous chaque document, tu vois le nom public de son auteur. Touche sa photo pour voir son profil : nom de son Memo, promotion, faculté, université et sa petite bio. L’anneau autour de sa photo est sa plaque : Bronze dès 100 likes, Or 500, Diamant 1000, Émeraude 1500, Rubis 2000.' },
-      { target: 'lib-like', tag: 'Le cœur', icon: 'star', text: 'Un document t’a aidé ? Touche le cœur pour le liker (tu peux aussi liker le tien). Plus un document est liké, plus son auteur monte de plaque.' }
+      { target: 'lib-author', tag: 'Qui l’a partagé', icon: 'user', text: 'Sous chaque document, tu vois le nom public de son auteur. Touche sa photo pour voir son profil : nom de son Memo, promotion, faculté, université et sa petite bio. L’anneau autour de sa photo est sa plaque : Bronze dès 100 étoiles, Or 500, Diamant 1000, Émeraude 1500, Rubis 2000.' },
+      { target: 'lib-star', tag: 'L’étoile', icon: 'star', text: 'Un document t’a aidé ? Touche l’étoile : il rejoint tes favoris et son auteur reçoit une étoile. Le nombre à côté montre combien d’étudiants l’ont étoilé. Plus un document a d’étoiles, plus son auteur monte de plaque.' }
     ]
   },
   {

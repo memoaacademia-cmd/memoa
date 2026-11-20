@@ -27,16 +27,6 @@ import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '.
 import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
 
-// « Ajouter une note » propose toutes les méthodes : on y ajoute l'enregistrement direct et la vidéo (réduite à sa voix par la transcription).
-const NOTE_SOURCES = [
-  { id: 'texte', label: 'Texte', icon: 'text' },
-  { id: 'voix', label: 'Dictée', icon: 'mic' },
-  { id: 'enreg', label: 'Enregistrer', icon: 'mic' },
-  { id: 'audio', label: 'Audio', icon: 'audio' },
-  { id: 'video', label: 'Vidéo', icon: 'video' },
-  { id: 'pdf', label: 'PDF', icon: 'pdf' },
-  { id: 'photo', label: 'Photo', icon: 'photo' }
-]
 const MAX_MEDIA_MB = 20
 const asFile = (b: Blob): File => (b instanceof File ? b : new File([b], 'enregistrement.webm', { type: b.type || 'audio/webm' }))
 
@@ -62,7 +52,6 @@ export function NewCourse() {
   const pdfInput = useRef<HTMLInputElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const audioInput = useRef<HTMLInputElement>(null)
-  const videoInput = useRef<HTMLInputElement>(null)
   const rec = useRecorder({ maxBytes: MAX_MEDIA_MB * 1024 * 1024, onFile: (f) => void transcribeFile(f, 'audio'), onError: (m) => setError(m) })
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -226,7 +215,6 @@ export function NewCourse() {
       <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
       <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
       <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
-      <input ref={videoInput} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
 
       <EditorScreen
         backLabel="Nouveau cours"
@@ -258,7 +246,7 @@ export function NewCourse() {
         bar={<EditorBar onPhoto={() => photoInput.current?.click()} onDictate={toggleDictation} dictating={listening} onRecord={() => { if (!isOnline() && pendingAudio) return setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); setRecOpen(true); void rec.start() }} recordDisabled={!!step} onPlus={() => setDocSheet(true)} />}
       />
 
-      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} onVideo={() => videoInput.current?.click()} body={content} onBody={setContent} />
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfInput.current?.click()} onAudio={() => audioInput.current?.click()} body={content} onBody={setContent} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )
@@ -507,7 +495,6 @@ export function CourseDetail() {
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
   const { busy, error, setError, run } = useAction()
-  const [sheet, setSheet] = useState(false)
   const [editing, setEditing] = useState(false)
   const [docSheet, setDocSheet] = useState(false)
   const [recOpen, setRecOpen] = useState(false)
@@ -543,7 +530,6 @@ export function CourseDetail() {
   const pdfRef = useRef<HTMLInputElement>(null)
   const photoRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLInputElement>(null)
   const rec = useRecorder({ maxBytes: MAX_MEDIA_MB * 1024 * 1024, onFile: (f) => void transcribeFile(f, 'audio'), onError: (m) => setError(m) })
 
   useEffect(() => () => { dict.current?.stop() }, [])
@@ -631,22 +617,11 @@ export function CourseDetail() {
     appendText(text)
   }
 
-  /* Feuille « Comment veux-tu ajouter ta note ? » : on choisit, puis « Continuer » ouvre l'écran d'écriture. */
+  /* « Ajouter une note » ouvre directement l'écran d'écriture, comme « Nouveau cours » : écrire, dicter, enregistrer, photo, « + » (PDF, audio). */
   function openSheet() {
     setError(null)
     setListenOpen(false)
-    setSheet(true)
-  }
-  function continueFromSheet() {
-    setSheet(false)
     setEditing(true)
-    setError(null)
-    if (noteSource === 'pdf') pdfRef.current?.click()
-    else if (noteSource === 'photo') photoRef.current?.click()
-    else if (noteSource === 'audio') audioRef.current?.click()
-    else if (noteSource === 'video') videoRef.current?.click()
-    else if (noteSource === 'voix') toggleDictation()
-    else if (noteSource === 'enreg') { if (!isOnline() && pendingAudio) { setError("Un enregistrement est déjà gardé sur ce téléphone. Range-le d'abord avec « Brouillon » (ou retire-le), puis fais-en un autre."); return } setRecOpen(true); void rec.start() }
   }
   function resetNote() {
     dict.current?.stop()
@@ -869,23 +844,10 @@ export function CourseDetail() {
         <PillButton variant="outline" onClick={() => { setRevSheet(false); void revise() }} disabled={busy || !online}><Icon name="quiz" size={20} />{online ? 'Quiz sur mes notes' : 'Quiz : réseau requis'}</PillButton>
       </BottomSheet>
 
-      {/* Sélecteurs de fichiers : toujours présents, ouverts par « Continuer » ou par les boutons de l'éditeur. */}
+      {/* Sélecteurs de fichiers : toujours présents, ouverts par les boutons de l'éditeur. */}
       <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
       <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
       <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
-      <input ref={videoRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'video'); e.target.value = '' }} />
-
-      <BottomSheet open={sheet} onClose={() => setSheet(false)} title="Comment veux-tu ajouter ta note ?">
-        <div className="src-grid">
-          {NOTE_SOURCES.map((o) => (
-            <button key={o.id} type="button" className="src-tile" aria-pressed={noteSource === o.id} onClick={() => { setNoteSource(o.id); setError(null) }}>
-              <Icon name={o.icon} size={24} />
-              {o.label}
-            </button>
-          ))}
-        </div>
-        <PillButton onClick={continueFromSheet}>Continuer</PillButton>
-      </BottomSheet>
 
       {editing && (
         <EditorScreen
@@ -972,7 +934,7 @@ export function CourseDetail() {
         </div>
       )}
 
-      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} onVideo={() => videoRef.current?.click()} body={noteText} onBody={setNoteText} />
+      <AddDocSheet open={docSheet} onClose={() => setDocSheet(false)} maxMb={MAX_MEDIA_MB} onPdf={() => pdfRef.current?.click()} onAudio={() => audioRef.current?.click()} body={noteText} onBody={setNoteText} />
       <RecordingSheet open={recOpen} onClose={() => setRecOpen(false)} rec={rec} maxMb={MAX_MEDIA_MB} />
     </main>
   )

@@ -211,7 +211,7 @@ export function EditorBar({ onPhoto, onDictate, dictating, dictateDisabled, onRe
 
 /** Feuille « Ajouter » : d'abord les blocs (Tableau, Graphique, Formes, Diagramme), puis les documents (PDF, Audio, Vidéo).
  *  Pour insérer des blocs, passe `body` et `onBody` (le texte de la note) : le bloc est écrit à la position du curseur. */
-export function AddDocSheet({ open, onClose, maxMb, onPdf, onAudio, onVideo, body, onBody }: { open: boolean; onClose: () => void; maxMb: number; onPdf: () => void; onAudio: () => void; onVideo: () => void; body?: string; onBody?: (v: string) => void }) {
+export function AddDocSheet({ open, onClose, maxMb, onPdf, onAudio, body, onBody }: { open: boolean; onClose: () => void; maxMb: number; onPdf: () => void; onAudio: () => void; body?: string; onBody?: (v: string) => void }) {
   const [kind, setKind] = useState<BlockKind | null>(null)
   const canInsert = typeof body === 'string' && !!onBody
   function save(lines: string[]) {
@@ -228,13 +228,12 @@ export function AddDocSheet({ open, onClose, maxMb, onPdf, onAudio, onVideo, bod
       <BottomSheet open={open} onClose={onClose} title={canInsert ? 'Ajouter' : 'Ajouter un document'}>
         {canInsert && (
           <RowGroup label="Insérer dans la note" tour="editor-blocks">
-            {BLOCK_ROWS.map((r) => <Row key={r.kind} icon={r.icon} title={r.title} sub={r.sub} onClick={() => { onClose(); setKind(r.kind) }} />)}
+            {BLOCK_ROWS.filter((r) => r.kind === 'table').map((r) => <Row key={r.kind} icon={r.icon} title={r.title} sub={r.sub} onClick={() => { onClose(); setKind(r.kind) }} />)}
           </RowGroup>
         )}
         <RowGroup label={canInsert ? 'Ajouter un document' : undefined}>
           <Row icon="pdf" title="PDF" sub="Je lis le texte de ton cours" onClick={() => { onClose(); onPdf() }} />
           <Row icon="audio" title="Audio" sub={`MP3, M4A, WAV · ${maxMb} Mo maximum`} onClick={() => { onClose(); onAudio() }} />
-          <Row icon="video" title="Vidéo" sub="Je garde la voix et je la transcris" onClick={() => { onClose(); onVideo() }} />
         </RowGroup>
       </BottomSheet>
       {kind && <BlockSheet open kind={kind} onClose={() => setKind(null)} onSave={save} />}

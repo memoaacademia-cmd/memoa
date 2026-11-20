@@ -715,7 +715,7 @@ export async function getLibrarySocial(docIds: string[]): Promise<Record<string,
   if (!docIds.length) return out
   if (!isConfigured) {
     const db = loadDemo()
-    docIds.forEach((id) => { const on = db.likes.includes(id); out[id] = { like_count: on ? 1 : 0, liked_by_me: on } })
+    docIds.forEach((id) => { const on = db.favs.includes(id); out[id] = { like_count: on ? 1 : 0, liked_by_me: on } })
     return out
   }
   const { data, error } = await sb().rpc('library_social', { doc_ids: docIds })
@@ -735,7 +735,7 @@ export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<stri
       const p = db.profiles.find((x) => x.id === id)
       if (!p) return
       const mine = db.docs.filter((d) => d.owner_id === id && !d.deleted_at)
-      const likes = mine.filter((d) => db.likes.includes(d.id)).length
+      const likes = mine.filter((d) => db.favs.includes(d.id)).length
       out[id] = { user_id: id, public_name: db.publicName, memo_name: p.memo_name || 'Memo', avatar_url: p.avatar_url, university: p.university, faculty: p.faculty, promotion: p.promotion, bio: db.bio, doc_count: mine.length, total_likes: likes, best_likes: likes ? 1 : 0 }
     })
     return out
