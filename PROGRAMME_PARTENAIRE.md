@@ -1,5 +1,12 @@
 # Programme partenaire — mode d'emploi
 
+> **Mises à jour (version complète)** : ce paquet contient aussi
+> - `supabase/migrations/0036_admin_partenaires_tableau.sql` : à exécuter dans le SQL Editor (en plus de 0035). Il active la carte « Programme partenaire » du tableau de bord (`public/app-admin.html`) : demandes à valider, retraits à payer, partenaires.
+> - `src/pages/Partner.tsx` : le programme partenaire est une page à part, ouverte par la ligne « Programme partenaire » de l'onglet Moi (au lieu d'une carte dépliée).
+> - Page d'installation partenaire : code mis en avant + bouton « Copier mon code » + flèche des trois points sur iPhone ; champ « Coller mon code » plus visible.
+> - `supabase/admin_reset_compte_test.sql` : remise à zéro d'un compte de TEST (garde la connexion, efface les données).
+
+
 ## 1. Fichiers du paquet (chemins depuis la racine du dépôt)
 
 **Nouveaux**

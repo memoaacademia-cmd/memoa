@@ -5,13 +5,12 @@ import { DELETE_WORD, deleteMyAccount, downloadMyData } from '../lib/account'
 import { friendlyError, getLibraryAuthors, getSubscription, listActivity, listCourses, listPayments, PRICE_LABEL, saveProfile, signOut, startPayment, checkPayment, uploadAvatar } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
-import { NOTIFICATIONS_ENABLED, PAYMENT_ENABLED, VAPID_PUBLIC_KEY } from '../lib/features'
+import { NOTIFICATIONS_ENABLED, PARTNER_PROGRAM_ENABLED, PAYMENT_ENABLED, VAPID_PUBLIC_KEY } from '../lib/features'
 import { disablePush, enablePush, isSubscribed, syncPush } from '../lib/push'
 import { getPref, usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import FreePts from '../components/FreePts'
-import PartnerSection from '../components/PartnerSection'
 import ReferralCodeField from '../components/ReferralCodeField'
 import { TRIAL_DAYS, usePlan } from '../lib/plan'
 import { FreeVsPremium, PointsGuide, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
@@ -125,12 +124,11 @@ export function Me() {
 
       <PremiumCard plan={plan} />
 
-      <PartnerSection />
-
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
         <Row tour="me-memo" iconNode={<MemoAvatar animal={profile?.memo_animal ?? 'hibou'} size={30} />} title="Mon Memo" right="Changer" to="/adoption?change=1" />
         <Row tour="me-settings" icon="gear" title="Réglages" sub="Notifications, thème, déconnexion et plus" to="/parametres" />
+        {PARTNER_PROGRAM_ENABLED && <Row icon="star" title="Programme partenaire" sub="Gagne 1 $ par étudiant qui s’abonne" to="/partenaire" />}
       </RowGroup>
       <RowGroup label="Aide">
         <Row tour="me-tours" icon="sparkle" title="Visites guidées" sub="Revoir les explications de chaque page" to="/visites" />

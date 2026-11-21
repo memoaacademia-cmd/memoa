@@ -26,6 +26,49 @@ const PlusIcon = () => (
   </svg>
 )
 
+const MenuIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-label="menu à trois points" style={{ verticalAlign: 'middle' }}>
+    <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
+  </svg>
+)
+
+/** Guide iPhone/iPad : les gestes exacts + la flèche qui montre les trois points de Safari (en bas à droite). */
+function IosGuide({ device, code, copied, onCopy, onClose }: { device: 'IPAD' | 'IPHONE'; code: string; copied: boolean; onCopy: () => void; onClose: () => void }) {
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Ajouter Memoa à l’écran d’accueil" onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(14,26,43,.72)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
+      <div className="card" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <strong className="h2">Ajouter Memoa à l’écran d’accueil</strong>
+        <div className="notice" role="status" style={{ textAlign: 'center' }}>
+          Ton code : <b className="partner-code" style={{ fontSize: 20 }}>{code}</b><br />
+          {copied ? 'Il est copié. ' : ''}À l’inscription, touche « Coller mon code ».
+          <div style={{ marginTop: 8 }}><button type="button" className="pill-btn sm" onClick={onCopy}>{copied ? 'Copier de nouveau' : 'Copier mon code'}</button></div>
+        </div>
+        <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {device === 'IPAD' ? (
+            <Step n={1}>Touche le bouton <b>Partager</b> <ShareIcon /> de <b>Safari</b>, en haut à droite.</Step>
+          ) : (
+            <>
+              <Step n={1}>Touche les <b>trois points</b> <MenuIcon /> tout en bas à droite de la barre de <b>Safari</b> (la flèche te les montre).</Step>
+              <Step n={2}>Dans le menu, touche <b>Partager</b> <ShareIcon />. (Sur un ancien iPhone, il n’y a pas de trois points : touche directement <b>Partager</b>, au milieu en bas.)</Step>
+            </>
+          )}
+          <Step n={device === 'IPAD' ? 2 : 3}>Dans la fenêtre qui s’ouvre, <b>glisse vers le haut</b>, puis touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
+          <Step n={device === 'IPAD' ? 3 : 4}>Si tu ne le vois pas, descends tout en bas de la liste : touche <b>Modifier les actions</b> et ajoute « Sur l’écran d’accueil ».</Step>
+          <Step n={device === 'IPAD' ? 4 : 5}>Touche <b>Ajouter</b> en haut à droite, puis ouvre <b>Memoa depuis ton écran d’accueil</b>.</Step>
+        </ol>
+        <button type="button" className="pill-btn" onClick={onClose}>J’ai compris</button>
+      </div>
+      {device !== 'IPAD' && (
+        <div aria-hidden="true" style={{ position: 'fixed', right: 4, width: 64, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 58px)', color: '#fff', textAlign: 'center', fontWeight: 700 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.15 }}>les 3 points</div>
+          <div style={{ fontSize: 54, lineHeight: 1 }}>↓</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const isStandaloneNow = () =>
   typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true)
 
@@ -34,10 +77,12 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
   const [done, setDone] = useState(false)
   const [note, setNote] = useState('')
   const [guide, setGuide] = useState(false)
+  const [copied, setCopied] = useState(false)
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
   const macTouch = typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
   const isIos = /iPhone|iPad|iPod/i.test(ua) || macTouch
   const inApp = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|Snapchat|musical_ly/i.test(ua)
+  const device: 'IPAD' | 'IPHONE' = /iPad/i.test(ua) || (macTouch && !/iPhone/i.test(ua)) ? 'IPAD' : 'IPHONE'
   const iosSafari = isIos && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//i.test(ua) && !inApp
 
   useEffect(() => {
@@ -51,12 +96,20 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
     }
   }, [])
 
+  async function copyCode() {
+    const ok = await copyText(code)
+    setStoredRef(code, 'link')
+    setCopied(ok)
+    setNote(ok ? 'Code copié. Une fois Memoa ouverte, à « Créer un compte », touche « Coller mon code ».' : 'Copie impossible : note ton code, tu pourras le taper à l’inscription.')
+  }
+
   async function installNow() {
     setNote('')
     // Le code voyage : copié dans le presse-papiers ET gardé sur ce téléphone, avant toute installation.
-    const copied = await copyText(code)
+    const copiedNow = await copyText(code)
+    setCopied(copiedNow)
     setStoredRef(code, 'link')
-    const hint = copied ? ' Ton code est copié : à l’inscription, touche « Coller mon code ».' : ''
+    const hint = copiedNow ? ' Ton code est copié : à l’inscription, touche « Coller mon code ».' : ''
     if (ev) {
       try {
         await ev.prompt()
@@ -93,39 +146,35 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
           </>
         )}
 
-        <div className="card" style={{ alignItems: 'center', textAlign: 'center', gap: 4 }}>
+        <div className="card" style={{ alignItems: 'center', textAlign: 'center', gap: 8, border: '2px solid var(--kivu)' }}>
           <span className="muted">Ton code partenaire :</span>
-          <strong className="partner-code" aria-label={'Code partenaire ' + code}>{code}</strong>
+          <strong className="partner-code" aria-label={'Code partenaire ' + code} style={{ fontSize: 34 }}>{code}</strong>
+          <button type="button" className="pill-btn sm" onClick={() => void copyCode()}>
+            <Icon name={copied ? 'check' : 'copy'} size={18} />{copied ? 'Code copié' : 'Copier mon code'}
+          </button>
+          <span className="muted" style={{ fontSize: 13 }}>Garde-le : à l’inscription, touche « Coller mon code » et il se remplit tout seul.</span>
         </div>
 
         {isIos && !isStandaloneNow() && !done && (
           <section className="card" aria-label="Installer sur iPhone">
-            <strong className="h2">Sur iPhone : 3 gestes dans Safari</strong>
+            <strong className="h2">Sur iPhone : dans Safari</strong>
             <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Step n={1}>Touche <b>Partager</b> <ShareIcon /> (en bas de Safari, ou dans les trois points).</Step>
-              <Step n={2}>Fais défiler, touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
+              {device === 'IPAD' ? (
+                <Step n={1}>Touche <b>Partager</b> <ShareIcon /> en haut à droite de Safari.</Step>
+              ) : (
+                <Step n={1}>Touche les <b>trois points</b> <MenuIcon /> tout en bas à droite de Safari, puis <b>Partager</b> <ShareIcon />.</Step>
+              )}
+              <Step n={2}>Glisse vers le haut, touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
               <Step n={3}>Touche <b>Ajouter</b>, puis ouvre Memoa depuis ton écran d’accueil.</Step>
             </ol>
+            <button type="button" className="pill-btn sm" onClick={() => { void copyCode(); setGuide(true) }}>Me montrer où toucher</button>
           </section>
         )}
 
         <button type="button" className="link" style={{ alignSelf: 'center', padding: 12, textDecoration: 'none', color: 'var(--text-2)' }} onClick={onSkip}>Continuer sans installer</button>
       </main>
 
-      {guide && (
-        <div role="dialog" aria-modal="true" aria-label="Ajouter Memoa à l’écran d’accueil" onClick={() => setGuide(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(14,26,43,.72)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20 }}>
-          <div className="card" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <strong className="h2">Ajouter Memoa à l’écran d’accueil</strong>
-            <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Step n={1}>Touche <b>Partager</b> <ShareIcon /> dans la barre de <b>Safari</b> (ou les trois points, puis Partager).</Step>
-              <Step n={2}>Glisse vers le haut, puis touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
-              <Step n={3}>Touche <b>Ajouter</b> en haut à droite.</Step>
-            </ol>
-            <button type="button" className="pill-btn" onClick={() => setGuide(false)}>J’ai compris</button>
-          </div>
-        </div>
-      )}
+      {guide && <IosGuide device={device} code={code} copied={copied} onCopy={() => void copyCode()} onClose={() => setGuide(false)} />}
     </div>
   )
 }

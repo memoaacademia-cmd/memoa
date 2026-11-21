@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PillButton, PillInput, ErrorBox } from './ui'
 import { attachMessage, attachReferral, getReferralStatus, PARTNER_PROGRAM_ENABLED } from '../lib/partner'
 import { clearStoredRef, getStoredRef, normalizeCode, readClipboardCode, type RefSource } from '../lib/referral'
@@ -14,12 +14,38 @@ export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled
   disabled?: boolean
 }) {
   const [msg, setMsg] = useState('')
+  const triedFocus = useRef(false)
 
   async function paste() {
     setMsg('')
     const r = await readClipboardCode()
-    if (r.code) { onChange(r.code); onSource?.('clipboard'); return }
+    if (r.code) { onChange(r.code); onSource?.('clipboard'); setMsg('Code collé : ' + r.code); return }
     setMsg(r.denied ? 'Ton téléphone n’a pas autorisé le collage. Tape ton code à la main.' : 'Aucun code trouvé dans ce que tu as copié. Tape ton code à la main.')
+  }
+
+  // Android : si l'autorisation de lire le presse-papiers est déjà accordée, le champ se remplit tout seul à l'ouverture.
+  useEffect(() => {
+    if (value.trim()) return
+    let alive = true
+    void (async () => {
+      try {
+        const perms = (navigator as unknown as { permissions?: { query: (d: { name: string }) => Promise<{ state: string }> } }).permissions
+        const st = await perms?.query({ name: 'clipboard-read' })
+        if (!alive || st?.state !== 'granted') return
+        const r = await readClipboardCode()
+        if (alive && r.code) { onChange(r.code); onSource?.('clipboard'); setMsg('Code collé : ' + r.code) }
+      } catch { /* navigateur sans cette API (iPhone) : le bouton prend le relais */ }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Au premier appui sur le champ vide : on essaie de lire le presse-papiers (sur iPhone, une bulle « Coller » apparaît : un seul appui).
+  async function onFocusTry() {
+    if (triedFocus.current || value.trim()) return
+    triedFocus.current = true
+    const r = await readClipboardCode()
+    if (r.code) { onChange(r.code); onSource?.('clipboard'); setMsg('Code collé : ' + r.code) }
   }
 
   return (
@@ -29,6 +55,7 @@ export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled
         value={value}
         disabled={disabled}
         onChange={(e) => { onChange(e.target.value.toUpperCase()); onSource?.('manual'); setMsg('') }}
+        onFocus={() => void onFocusTry()}
         placeholder="ex. JOEL-K7X2"
         aria-label="Code partenaire"
         autoCapitalize="characters"
@@ -38,9 +65,10 @@ export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled
         maxLength={14}
       />
       {!value.trim() && (
-        <button type="button" className="link" style={{ alignSelf: 'flex-start', textDecoration: 'none', padding: '6px 2px', minHeight: 36 }} onClick={() => void paste()} disabled={disabled}>
-          Coller mon code
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+          <PillButton size="sm" variant="outline" onClick={() => void paste()} disabled={disabled}>Coller mon code</PillButton>
+          <span className="muted" style={{ fontSize: 13 }}>Tu as copié ton code depuis le lien d’invitation ? Touche ce bouton, il se remplit.</span>
+        </div>
       )}
       {msg && <span className="muted" role="status">{msg}</span>}
     </div>

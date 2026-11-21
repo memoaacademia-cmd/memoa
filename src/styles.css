@@ -1047,3 +1047,5 @@ button.plq { cursor: pointer; }
 [data-theme='dark'] .partner-gains { background: linear-gradient(135deg, #3a2a0e 0%, #2a1f0a 100%); color: #fbe29a; border-color: #6b4f14; }
 [data-theme='dark'] .partner-gains .muted, [data-theme='dark'] .partner-lines span { color: #e6c98a; }
 @media (prefers-reduced-motion: reduce) { .partner-bump { animation: none; } }
+/* Page « Programme partenaire » : le titre est déjà dans l'en-tête de la page. */
+.partner-page .partner-title { display: none; }

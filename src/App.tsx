@@ -15,6 +15,7 @@ import Assistant from './pages/Assistant'
 import { Me, Premium, Settings } from './pages/Me'
 import { About, Feedback, Help, Privacy, Terms } from './pages/Info'
 import Tours from './pages/Tours'
+import Partner from './pages/Partner'
 import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
 import AutoCards from './components/AutoCards'
@@ -22,7 +23,7 @@ import PushOffer from './components/PushOffer'
 import ReferralAttach from './components/ReferralAttach'
 import { ReferralGate } from './pages/PartnerLanding'
 import { usePref } from './lib/prefs'
-import { AUTO_CARDS_ENABLED, LIBRARY_ENABLED, TP_ASSISTANT_ENABLED } from './lib/features'
+import { AUTO_CARDS_ENABLED, LIBRARY_ENABLED, PARTNER_PROGRAM_ENABLED, TP_ASSISTANT_ENABLED } from './lib/features'
 
 /** Bandeau discret : le réseau coupe, l'étudiant reste connecté et tout se remet à jour au retour. */
 function ConnectionBanner() {
@@ -156,6 +157,7 @@ export default function App() {
             <Route path="/moi" element={<Me />} />
             <Route path="/parametres" element={<Settings />} />
             <Route path="/premium" element={<Premium />} />
+            <Route path="/partenaire" element={PARTNER_PROGRAM_ENABLED ? <Partner /> : <Navigate to="/moi" replace />} />
             <Route path="/visites" element={<Tours />} />
             <Route path="/aide" element={<Help />} />
             <Route path="/signaler" element={<Feedback mode="report" />} />
