@@ -5,6 +5,7 @@ import ChatImage from '../components/ChatImage'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { askAI, fetchPoints, listConversations, listCourses, listMessages, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { getPref, setPref } from '../lib/prefs'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
 import { pendingState, runChatAction, type TpDraft } from '../lib/chatActions'
 import { useTpJob } from '../lib/tpjob'
@@ -27,6 +28,8 @@ function countdown(ms: number): string {
 
 export default function Assistant() {
   const { user, profile } = useAuth()
+  // Première ouverture de l'Assistant : Memo se présente et dit qu'on peut changer son animal et son nom.
+  const [introSeen, setIntroSeen] = useState(() => getPref('memo-intro-seen', '') === '1')
   // Points gratuits : solde (ou compte à rebours à zéro). null pendant l'essai et avec Premium : rien n'est affiché.
   const [pts, setPts] = useState<PointsInfo | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -293,6 +296,15 @@ export default function Assistant() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 8px', textAlign: 'center' }}>
             <span className="hm-memo-av" style={{ width: 72, height: 72 }}><MemoAvatar animal={profile?.memo_animal ?? null} size={50} /></span>
             <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong>
+            {!introSeen && (
+              <div className="notice" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+                <span>Salut ! Je m’appelle {profile?.memo_name || 'Memo'}, je suis ton assistant d’étude. Tu peux changer mon animal et me donner le nom que tu veux.</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Link to="/adoption?change=1" className="pill-btn sm" onClick={() => { setPref('memo-intro-seen', '1'); setIntroSeen(true) }}>Changer mon Memo</Link>
+                  <button type="button" className="pill-btn sm ghost" onClick={() => { setPref('memo-intro-seen', '1'); setIntroSeen(true) }}>Compris</button>
+                </div>
+              </div>
+            )}
             <span className="muted">{courseId ? 'Je m’appuie sur les notes de ce cours.' : 'Choisis un cours pour que je m’appuie sur tes notes, ou pose-moi une question libre.'}</span>
             <span data-tour="as-actions" className="muted" style={{ fontSize: 13 }}>Je peux aussi créer un cours, ajouter une note, faire un quiz ou un résumé, et préparer un TP : demande-moi ici.</span>
             {!!courseId && <div className="as-pills" style={{ justifyContent: 'center' }}>{SUGGESTIONS.map((s) => <button key={s} type="button" className="pill" onClick={() => void send(s)}>{s}</button>)}</div>}

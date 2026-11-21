@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Brand, ErrorBox, MemoAvatar, Steps, useAction } from '../components/ui'
+import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
 import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
 import { BIO_MAX, getMyPublic, PUBLIC_NAME_MAX, saveMyPublic, saveProfile, uploadAvatar } from '../lib/api'
@@ -82,7 +82,9 @@ export default function Onboarding() {
         last_name: last, post_name: post, first_name: first,
         phone: profile?.phone ?? user.phone,
         university, faculty, department,
-        promotion: f.promo, vacation: f.vac
+        promotion: f.promo, vacation: f.vac,
+        // Premier remplissage : Memo (le hibou) est adopté d'office, on peut en changer plus tard dans Moi.
+        ...(profile?.memo_animal ? {} : { memo_animal: 'hibou', memo_name: 'Memo' })
       })
       if (editing && pubLoaded) await saveMyPublic(user.id, { bio: pub.bio, public_name: pub.name })
       await refresh()
@@ -90,18 +92,17 @@ export default function Onboarding() {
     })
     if (ok) {
       if (!editing && !profile?.memo_animal) track('onboarding_step', { step: 'profil' })
-      nav(editing || profile?.memo_animal ? '/moi' : '/adoption', { replace: true })
+      nav(editing || profile?.memo_animal ? '/moi' : '/', { replace: true })
     }
   }
 
   return (
     <main className="page auth">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 8 }}>
-        {!editing && <Steps n={2} />}
         <Brand size={44} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'center' }}>
-        <h1 className="h1 big">{editing ? 'Modifiez vos informations' : 'Présentez-vous'}</h1>
+        <h1 className="h1 big">{editing ? 'Modifie tes informations' : 'Présente-toi'}</h1>
         <p className="lead">Memoa adapte tes cours et ta Librairie à ton parcours.</p>
       </div>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
@@ -214,14 +215,14 @@ export function Adoption() {
     })
     if (ok) {
       track(changing ? 'memo_changed' : 'onboarding_step', changing ? { animal } : { step: 'memo', animal })
-      nav(changing ? '/moi' : '/photo', { replace: true })
+      nav(changing ? '/moi' : '/', { replace: true })
     }
   }
 
   if (!chosen) {
     return (
       <main className="page" style={{ paddingBottom: 28 }}>
-        <span className="label-mono">{changing ? 'Mon Memo' : 'Étape 2 sur 3'}</span>
+        <span className="label-mono">Mon Memo</span>
         <h1 className="h1 big">{changing ? 'Change de Memo' : 'Adopte ton Memo'}</h1>
         <p className="lead">Il t'accompagne dans tes révisions. Choisis l'animal qui te ressemble.</p>
         {changing && <Link to="/moi" className="link">Annuler</Link>}

@@ -4,9 +4,8 @@ import { Brand, NavBar, Spinner } from './components/ui'
 import MiniPlayer from './components/MiniPlayer'
 import { TourProvider } from './components/Tour'
 import { DraftWatcher } from './components/Drafts'
-import { Confirmation, ForgotPassword, GoogleNext, Login, NewPassword, Signup } from './pages/Auth'
-import Onboarding, { Adoption, PhotoStep } from './pages/Onboarding'
-import { NotifStep, TrialStep } from './pages/Welcome'
+import { Confirmation, ForgotPassword, Login, NewPassword, Signup } from './pages/Auth'
+import Onboarding, { Adoption } from './pages/Onboarding'
 import Home from './pages/Home'
 import Review from './pages/Review'
 import Install from './pages/Install'
@@ -19,6 +18,7 @@ import Tours from './pages/Tours'
 import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
 import AutoCards from './components/AutoCards'
+import PushOffer from './components/PushOffer'
 import { usePref } from './lib/prefs'
 
 /** Bandeau discret : le réseau coupe, l'étudiant reste connecté et tout se remet à jour au retour. */
@@ -67,7 +67,6 @@ function ConnectionScreen({ onRetry }: { onRetry: () => void }) {
 
 function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   const { user, profile, loading, recovery, loadFailed, refresh } = useAuth()
-  const loc = useLocation()
   if (loading) return <div className="shell"><Spinner /></div>
   // Réseau coupé au démarrage et aucun profil gardé en mémoire : on attend le retour au lieu d'envoyer vers la connexion.
   if (user && !profile && loadFailed) return <div className="shell"><ConnectionScreen onRetry={() => void refresh()} /></div>
@@ -75,20 +74,18 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   if (recovery && user) return <Navigate to="/nouveau-mot-de-passe" replace />
 
   if (need === 'public') {
-    if (user && !user.needsPassword && loc.pathname !== '/google-suite' && profile?.memo_animal) return <Navigate to="/" replace />
+    if (user && profile?.university) return <Navigate to="/" replace />
     return <div className="shell"><Outlet /></div>
   }
   if (!user) return <Navigate to="/connexion" replace />
-  // Compte créé via Google : mot de passe + téléphone d'abord.
-  if (user.needsPassword) return <Navigate to="/google-suite" replace />
   if (need === 'auth') return <div className="shell app"><Outlet /></div>
-  if (!profile || !profile.university) return <Navigate to="/inscription" replace />
-  if (!profile.memo_animal) return <Navigate to="/adoption" replace />
+  if (!profile?.university) return <Navigate to="/inscription" replace />
   return (
     <div className="shell app">
       <DraftWatcher />
       <OutboxSync />
       <AutoCards />
+      <PushOffer />
       <TourProvider>
         <Outlet />
         <MiniPlayer />
@@ -121,7 +118,6 @@ export default function App() {
           <Route element={<Guard need="public" />}>
             <Route path="/connexion" element={<Login />} />
             <Route path="/creer-un-compte" element={<Signup />} />
-            <Route path="/google-suite" element={<GoogleNext />} />
             <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
             <Route path="/confirmation" element={<ConfirmationRoute />} />
           </Route>
@@ -132,11 +128,13 @@ export default function App() {
           <Route element={<Guard need="auth" />}>
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
-            <Route path="/photo" element={<PhotoStep />} />
             <Route path="/bienvenue" element={<Navigate to="/inscription" replace />} />
-            <Route path="/presentation" element={<Navigate to="/essai" replace />} />
-            <Route path="/essai" element={<TrialStep />} />
-            <Route path="/notifications-etape" element={<NotifStep />} />
+            {/* Anciennes étapes retirées : photo, essai, notifications (elles vivent dans Moi et Réglages). */}
+            <Route path="/photo" element={<Navigate to="/" replace />} />
+            <Route path="/presentation" element={<Navigate to="/" replace />} />
+            <Route path="/essai" element={<Navigate to="/" replace />} />
+            <Route path="/notifications-etape" element={<Navigate to="/" replace />} />
+            <Route path="/google-suite" element={<Navigate to="/inscription" replace />} />
           </Route>
           <Route element={<Guard need="onboarded" />}>
             <Route path="/" element={<Home />} />

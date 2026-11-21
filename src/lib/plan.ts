@@ -8,7 +8,7 @@
 //   pas d'abonnement actif ET réponse « null » du serveur → essai en cours.
 // Si une des deux réponses manque (hors connexion, erreur), l'état est « unknown » : on n'invente rien.
 import { useEffect, useState } from 'react'
-import { fetchPoints, getSubscription, type PointsInfo } from './api'
+import { fetchAccess, getSubscription, type PointsInfo, type TrialInfo } from './api'
 import { useAuth } from './auth'
 import { isConfigured } from './supabase'
 import { isActive } from './subscription'
@@ -21,6 +21,8 @@ export interface Plan {
   expiresAt?: string
   /** Solde de points du jour (offre Free et abonnement expiré seulement). */
   points: PointsInfo | null
+  /** Essai : commencé ou pas (il démarre à la première action IA) et date de fin. */
+  trial?: TrialInfo | null
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -50,16 +52,17 @@ export function compute(uid: string): Promise<Plan> {
   // Une seule lecture partagée si l'Accueil, le profil et la page Premium demandent en même temps.
   if (inflight && inflight.uid === uid && Date.now() - inflight.at < 4000) return inflight.p
   const p = (async (): Promise<Plan> => {
-    const [sub, pts] = await Promise.allSettled([getSubscription(uid), fetchPoints()])
+    const [sub, pts] = await Promise.allSettled([getSubscription(uid), fetchAccess()])
     if (sub.status === 'rejected') return { state: 'unknown', points: null }
     const s = sub.value
     if (s && isActive(s.expires_at)) return { state: 'premium', expiresAt: s.expires_at, points: null }
-    const points = pts.status === 'fulfilled' ? pts.value : null
+    const points = pts.status === 'fulfilled' ? pts.value.points : null
+    const trial = pts.status === 'fulfilled' ? pts.value.trial : null
     if (pts.status === 'rejected') return { state: 'unknown', points: null, expiresAt: s?.expires_at }
     if (points) return { state: s ? 'expired' : 'free', expiresAt: s?.expires_at, points }
     // Mode démo (aucun serveur) : pas d'essai ni de points à décrire.
     if (!isConfigured) return { state: s ? 'expired' : 'free', expiresAt: s?.expires_at, points: null }
-    return { state: 'trial', expiresAt: s?.expires_at, points: null }
+    return { state: 'trial', expiresAt: s?.expires_at, points: null, trial }
   })()
   inflight = { uid, at: Date.now(), p }
   return p

@@ -75,8 +75,15 @@ export default function Install() {
     setNote('')
     if (ev) return install()
     if (isIos && !iosSafari) setNote('Tu n’es pas dans Safari. Ouvre ce lien dans Safari (menu ⋯ ou icône boussole, puis « Ouvrir dans Safari »), puis suis les étapes ci-dessous.')
-    else if (isIos) setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
-    else setNote('Ton navigateur ne propose pas l’installation directe ici. Ouvre cette page dans Chrome, ou suis les étapes ci-dessous.')
+    else if (isIos) {
+      // Apple ne permet à aucun site de déclencher l'installation. Le plus court possible : ce bouton ouvre tout de suite la fenêtre Partager
+      // (l'étudiant saute l'étape « toucher Partager »), il ne reste que « Sur l'écran d'accueil » puis « Ajouter ».
+      setNote('Dans la fenêtre qui s’ouvre : fais défiler un peu, touche « Sur l’écran d’accueil », puis « Ajouter » en haut à droite.')
+      if (typeof navigator.share === 'function') {
+        try { await navigator.share({ title: 'Memoa', url: window.location.origin + window.location.pathname }); return } catch (e) { if ((e as Error).name === 'AbortError') return }
+      }
+      setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
+    } else setNote('Ton navigateur ne propose pas l’installation directe ici. Ouvre cette page dans Chrome, ou suis les étapes ci-dessous.')
     setHl(true)
     stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     window.setTimeout(() => setHl(false), 2500)

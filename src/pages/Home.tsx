@@ -12,6 +12,7 @@ import { useAvatar } from '../lib/avatar'
 import { usePlan } from '../lib/plan'
 import { usePref } from '../lib/prefs'
 import { Price } from '../components/PlanInfo'
+import TrialBanner from '../components/TrialBanner'
 
 const COURSE_COLORS = ['#0B5D54', '#22345A', '#A5600A', '#9A4A32']
 
@@ -78,6 +79,8 @@ export default function Home() {
         <span className="hm-eyebrow">{eyebrow}</span>
         <h1 className="h1 big" style={{ margin: 0 }}>Salut, {first}</h1>
       </div>
+
+      <TrialBanner />
 
       <div className="hm-search" role="search" data-tour="home-search">
         <span className="ico"><Icon name="search" size={20} /></span>

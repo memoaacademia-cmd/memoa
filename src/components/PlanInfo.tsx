@@ -72,8 +72,8 @@ export function PointsGuide() {
 export function TrialInfo({ state }: { state: PlanState }) {
   const items: [string, ReactNode][] = [
     ['Ce que tu reçois', 'Toute l’IA de Memoa : notes, quiz, TP, audio et résumés, avec une utilisation généreuse et sans compter de points.'],
-    ['Durée', `${TRIAL_DAYS} jours, jusqu’à minuit (heure de Kinshasa) le dernier jour. Le jour de ton inscription compte comme le 1er.`],
-    ['Conditions', 'Sans carte bancaire et sans paiement. Un seul essai par numéro de téléphone : refaire un compte avec le même numéro ne relance pas l’essai.'],
+    ['Durée', `${TRIAL_DAYS} jours, jusqu’à minuit (heure de Kinshasa) le dernier jour. L’essai commence à ta première action IA, et ce jour-là compte comme le 1er.`],
+    ['Conditions', 'Sans carte bancaire et sans paiement. Un seul essai par compte.'],
     ['À la fin', <>Rien n’est facturé. Tu gardes ton compte et tout ton contenu, avec <FreePts /> points gratuits chaque jour. Tu passes à Premium seulement si tu le décides.</>]
   ]
   return (

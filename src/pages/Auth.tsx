@@ -2,13 +2,10 @@ import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes, 
 import { takeDeletedNotice } from '../lib/account'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
-import { requestPasswordReset, resendConfirmation, setPasswordAndPhone, signIn, signInWithGoogle, signUp, updatePassword, verifyRecoveryCode, verifySignupCode } from '../lib/api'
+import { requestPasswordReset, resendConfirmation, signIn, signInWithGoogle, signUp, updatePassword, verifyRecoveryCode, verifySignupCode } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
-const cleanPhone = (v: string) => v.replace(/[^0-9]/g, '').replace(/^243/, '').replace(/^0/, '')
-const PHONE_RE = /^[89][0-9]{8}$/
-const PHONE_MSG = 'Entre ton numéro à 9 chiffres, qui commence par 8 ou 9 (sans le +243).'
 
 /* Champ mot de passe avec bouton œil : un appui montre le mot de passe, un autre appui le recache. */
 function PasswordField({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
@@ -104,6 +101,15 @@ function GoogleG() {
   )
 }
 
+/* Bouton « Continuer avec Google » : le même sur « Se connecter » et « Créer un compte ». Après Google, l'étudiant va directement à « Présente-toi ». */
+function GoogleButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="btn ghost" onClick={onClick} disabled={busy} style={{ background: '#fff', color: '#0e1a2b', borderColor: '#b7c4be' }}>
+      <GoogleG /> Continuer avec Google
+    </button>
+  )
+}
+
 function Header({ title, text }: { title: string; text: string }) {
   return (
     <>
@@ -118,7 +124,7 @@ function Header({ title, text }: { title: string; text: string }) {
   )
 }
 
-/* Se connecter : email + mot de passe uniquement (pas de Google ici, par décision produit). */
+/* Se connecter : Google, ou email + mot de passe. */
 export function Login() {
   const nav = useNavigate()
   const { refresh } = useAuth()
@@ -139,6 +145,15 @@ export function Login() {
     if (ok) nav('/', { replace: true })
   }
 
+  async function google() {
+    const ok = await run(async () => {
+      await signInWithGoogle()
+      await refresh()
+      return true
+    })
+    if (ok) nav('/', { replace: true })
+  }
+
   return (
     <main className="page auth" style={{ gap: 16 }}>
       <div>
@@ -151,6 +166,8 @@ export function Login() {
       </div>
       {deleted && <div className="notice" role="status">Ton compte a été supprimé, avec tes données. Merci d’avoir essayé Memoa.</div>}
       <h1 className="h1 big" style={{ textAlign: 'center', margin: '0 0 8px' }}>Content de te revoir</h1>
+      <GoogleButton busy={busy} onClick={google} />
+      <div className="muted" style={{ textAlign: 'center' }}>ou avec ton email</div>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <PillInput id="email" type="email" autoComplete="email" placeholder="Adresse e-mail" aria-label="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
         <PasswordField id="mdp" className="pill-input" autoComplete="current-password" placeholder="Mot de passe" aria-label="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -168,13 +185,12 @@ export function Login() {
   )
 }
 
-/* Créer un compte : seul endroit où « Continuer avec Google » apparaît. */
+/* Créer un compte : Google, ou email + mot de passe. Pas de téléphone : il sera demandé plus tard, au paiement. */
 export function Signup() {
   const nav = useNavigate()
   const { refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
   const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [accepted, setAccepted] = useState(false)
   const MUST_ACCEPT = 'Coche la case pour accepter les conditions d’utilisation et la politique de confidentialité.'
@@ -183,11 +199,9 @@ export function Signup() {
     e.preventDefault()
     const mail = email.trim().toLowerCase()
     if (!EMAIL_RE.test(mail)) return setError('Entre une adresse email valide.')
-    const tel = cleanPhone(phone)
-    if (!PHONE_RE.test(tel)) return setError(PHONE_MSG)
     if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
     if (!accepted) return setError(MUST_ACCEPT)
-    const res = await run(() => signUp(mail, password, '+243' + tel))
+    const res = await run(() => signUp(mail, password, ''))
     if (!res) return
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
     else {
@@ -203,7 +217,7 @@ export function Signup() {
       await refresh()
       return true
     })
-    if (ok) nav('/google-suite', { replace: true })
+    if (ok) nav('/', { replace: true })
   }
 
   return (
@@ -212,19 +226,13 @@ export function Signup() {
         <Brand size={44} />
       </div>
       <h1 className="h1 big" style={{ margin: 0, textAlign: 'center' }}>Crée ton compte</h1>
-      <p className="lead" style={{ margin: 0, textAlign: 'center' }}>Ton numéro active ton essai gratuit de 5 jours. Un seul essai par numéro.</p>
-      <button type="button" className="btn ghost" onClick={google} disabled={busy} style={{ background: '#fff', color: '#0e1a2b', borderColor: '#b7c4be' }}>
-        <GoogleG /> Continuer avec Google
-      </button>
+      <p className="lead" style={{ margin: 0, textAlign: 'center' }}>Quelques secondes suffisent pour commencer.</p>
+      <GoogleButton busy={busy} onClick={google} />
       <div className="muted" style={{ textAlign: 'center' }}>ou avec ton email</div>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div className="field">
           <label htmlFor="email">Email</label>
           <input id="email" className="input" type="email" autoComplete="email" placeholder="ex. jean.kasongo@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="tel">Numéro de téléphone</label>
-          <div className="phone"><span>+243</span><input id="tel" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="8X XXX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
         </div>
         <div className="field">
           <label htmlFor="mdp">Mot de passe</label>
@@ -256,76 +264,17 @@ function strength(p: string): { pct: number; label: string } {
   return { pct: s * 25, label: ['Trop court', 'Faible', 'Correct', 'Bon', 'Solide'][s] }
 }
 
-/* Après Google : créer un mot de passe + ajouter le numéro, pour se reconnecter avec email + mot de passe. */
-export function GoogleNext() {
-  const nav = useNavigate()
-  const { user, loading, refresh } = useAuth()
-  const { busy, error, setError, run } = useAction()
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [phone, setPhone] = useState('')
-  const st = strength(password)
-  // Mot de passe déjà choisi (ancien compte Google) : il ne manque que le numéro.
-  const onlyPhone = !!user?.passwordSet
-
-  useEffect(() => {
-    if (!loading && !user) nav('/creer-un-compte', { replace: true })
-  }, [loading, user, nav])
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!onlyPhone && password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
-    if (!onlyPhone && password !== confirm) return setError('Les deux mots de passe ne sont pas identiques.')
-    const tel = cleanPhone(phone)
-    if (!PHONE_RE.test(tel)) return setError(PHONE_MSG)
-    const ok = await run(async () => {
-      await setPasswordAndPhone(onlyPhone ? null : password, '+243' + tel)
-      // On relit le compte AVANT de continuer : sinon l'ancienne information (« mot de passe manquant ») nous ramènerait ici.
-      await refresh()
-      return true
-    })
-    if (ok) nav('/inscription', { replace: true })
-  }
-
-  return (
-    <main className="page auth">
-      <Header title="Sécurise ton compte" text={onlyPhone ? 'Ajoute ton numéro de téléphone pour continuer : il sert à protéger ton compte.' : 'Crée un mot de passe et ajoute ton numéro : la prochaine fois, tu te connecteras avec ton email et ce mot de passe.'} />
-      {user && <div className="card" style={{ flexDirection: 'row', alignItems: 'center' }}><GoogleG /><span>{user.email}</span></div>}
-      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
-        {!onlyPhone && (
-          <>
-        <div className="field">
-          <label htmlFor="mdp">Crée un mot de passe</label>
-          <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <div className="bar" aria-hidden="true"><i style={{ width: st.pct + '%', background: st.pct < 50 ? '#b3261e' : st.pct < 75 ? '#f2a33a' : '#0b5d54' }} /></div>
-          <span className="muted">{password ? st.label : '8 caractères minimum.'}</span>
-        </div>
-        <div className="field">
-          <label htmlFor="mdp2">Confirme le mot de passe</label>
-          <PasswordField id="mdp2" className="input" autoComplete="new-password" placeholder="Répète le mot de passe" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </div>
-          </>
-        )}
-        <div className="field">
-          <label htmlFor="tel">Numéro de téléphone</label>
-          <div className="phone"><span>+243</span><input id="tel" type="tel" inputMode="numeric" placeholder="8X XXX XX XX" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-        </div>
-        <ErrorBox message={error} />
-        <button className="btn primary-light" type="submit" disabled={busy}>{busy ? 'Enregistrement…' : 'Continuer'}</button>
-      </form>
-    </main>
-  )
-}
-
-/* Email de confirmation (inscription classique). */
+/* Vérification de l'email : le code à 6 chiffres, « Confirmer » (le code part aussi tout seul au 6e chiffre) et « Renvoyer le code ». */
 export function Confirmation({ email }: { email: string }) {
   const nav = useNavigate()
   const { refresh, user } = useAuth()
-  const { busy, error, run } = useAction()
+  const { busy, error, setError, run } = useAction()
   const [wait, setWait] = useState(45)
   const [sent, setSent] = useState(false)
   const [mail, setMail] = useState(email)
   const [code, setCode] = useState('')
+  // Dernier code déjà envoyé : un code refusé n'est pas renvoyé en boucle, il faut le modifier ou toucher « Confirmer ».
+  const tried = useRef('')
 
   useEffect(() => {
     if (wait <= 0) return
@@ -345,13 +294,15 @@ export function Confirmation({ email }: { email: string }) {
     if (ok) {
       setSent(true)
       setWait(45)
+      setCode('')
+      tried.current = ''
     }
   }
 
-  async function validate(e: FormEvent) {
-    e.preventDefault()
-    if (!mail.trim()) return
-    if (!/^[0-9]{6}$/.test(code)) return
+  async function validate(e?: FormEvent) {
+    e?.preventDefault()
+    if (busy || !mail.trim() || !/^[0-9]{6}$/.test(code)) return
+    tried.current = code
     const ok = await run(async () => {
       await verifySignupCode(mail, code)
       await refresh()
@@ -360,9 +311,14 @@ export function Confirmation({ email }: { email: string }) {
     if (ok) nav('/inscription', { replace: true })
   }
 
+  // Confirmation automatique dès que le 6e chiffre est tapé (ou collé).
+  useEffect(() => {
+    if (code.length === 6 && code !== tried.current && mail.trim()) void validate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code])
+
   return (
     <main className="page auth">
-      {/* Même style que la page de connexion : juste le logo, centré, dans son rond. */}
       <div style={{ alignSelf: 'center', width: 76, height: 76, borderRadius: '50%', background: 'var(--surface-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '56px 0 4px' }}>
         <Logo size={44} />
       </div>
@@ -372,18 +328,14 @@ export function Confirmation({ email }: { email: string }) {
       </div>
       <form onSubmit={validate} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {!email && <PillInput type="email" autoComplete="email" placeholder="Ton email" value={mail} onChange={(e) => setMail(e.target.value)} />}
-        <OtpInput value={code} onChange={setCode} />
-        <PillButton type="submit" size="lg" disabled={busy || code.length !== 6 || !mail.trim()}>{busy ? 'Vérification…' : 'Valider le code'}</PillButton>
+        <OtpInput value={code} onChange={(v) => { setCode(v); setError(null) }} />
+        <ErrorBox message={error} />
+        <PillButton type="submit" size="lg" disabled={busy || code.length !== 6 || !mail.trim()}>{busy ? 'Vérification…' : 'Confirmer'}</PillButton>
       </form>
-      <a className="btn primary-light" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
       <button className="btn ghost" type="button" disabled={wait > 0 || busy} onClick={resend}>
-        {wait > 0 ? `Renvoyer l'email (${wait} s)` : "Renvoyer l'email"}
+        {wait > 0 ? `Renvoyer le code (${wait} s)` : 'Renvoyer le code'}
       </button>
-      {sent && <div className="notice">Email renvoyé. Pense à regarder dans les courriers indésirables.</div>}
-      <ErrorBox message={error} />
-      <button className="btn ghost" type="button" onClick={() => void refresh()}>J'ai confirmé mon email</button>
-      <Link className="btn ghost" to="/connexion" replace>Déjà confirmé ? Se connecter</Link>
-      <p className="muted" style={{ textAlign: 'center' }}>Si le lien s’est ouvert dans un autre navigateur, reviens ici et connecte-toi avec ton email et ton mot de passe.</p>
+      {sent && <div className="notice">Nouveau code envoyé. Utilise le dernier reçu, et regarde aussi dans les courriers indésirables.</div>}
     </main>
   )
 }

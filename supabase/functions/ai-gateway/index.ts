@@ -129,7 +129,8 @@ const premiumMsg = (wait: string) => `Tu as utilisé tes 20 points d'aujourd'hui
 
 const natPhone = (raw: unknown): string => { let d = String(raw ?? '').replace(/\D/g, ''); if (d.length > 9 && d.startsWith('243')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d }
 
-async function trialStart(admin: ReturnType<typeof adminClient>, userId: string): Promise<Date> {
+/** ANCIENNE règle (essai lié au numéro de téléphone, à partir de l'inscription). Gardée seulement comme filet de sécurité si la table trial_starts n'existe pas encore (migration 0031 pas faite). */
+async function legacyTrialStart(admin: ReturnType<typeof adminClient>, userId: string): Promise<Date> {
   const { data: prof } = await admin.from('profiles').select('phone,created_at').eq('id', userId).maybeSingle()
   const own = prof?.created_at ? new Date(prof.created_at) : new Date()
   const phone = natPhone(prof?.phone)
@@ -147,15 +148,30 @@ async function trialStart(admin: ReturnType<typeof adminClient>, userId: string)
   return new Date(start)
 }
 
-type Access = { mode: 'premium' } | { mode: 'trial' } | { mode: 'points'; left: number; resetAt: number; from: number }
+/** Début de l'essai de l'étudiant : le jour de sa PREMIÈRE action IA (table trial_starts, migration 0031).
+ *  null = l'essai n'a pas encore commencé. Avec create = true, la première action IA le démarre maintenant (une seule fois par compte). */
+async function trialStart(admin: ReturnType<typeof adminClient>, userId: string, create = false): Promise<Date | null> {
+  const { data, error } = await admin.from('trial_starts').select('started_at').eq('user_id', userId).maybeSingle()
+  if (error) return legacyTrialStart(admin, userId) // table absente : ancien comportement, rien ne casse
+  if (data?.started_at) return new Date(data.started_at)
+  if (!create) return null
+  const now = new Date()
+  await admin.from('trial_starts').upsert({ user_id: userId, started_at: now.toISOString() }, { onConflict: 'user_id', ignoreDuplicates: true })
+  const { data: again } = await admin.from('trial_starts').select('started_at').eq('user_id', userId).maybeSingle()
+  return again?.started_at ? new Date(again.started_at) : now
+}
+
+type Access = { mode: 'premium' } | { mode: 'trial'; started: boolean; endsAt: number | null } | { mode: 'points'; left: number; resetAt: number; from: number }
 
 /** Où en est l'étudiant : Premium, essai de 5 jours, ou points gratuits du jour (solde et prochain renouvellement à minuit Kinshasa). */
-async function accessState(admin: ReturnType<typeof adminClient>, userId: string, sub: { expires_at: string } | null, nowMs = Date.now()): Promise<Access> {
+async function accessState(admin: ReturnType<typeof adminClient>, userId: string, sub: { expires_at: string } | null, nowMs = Date.now(), startTrial = false): Promise<Access> {
   if (sub) return { mode: 'premium' }
   // Fin de l'essai = minuit (Kinshasa) à la fin du dernier jour calendaire.
-  const start = await trialStart(admin, userId)
+  const start = await trialStart(admin, userId, startTrial)
+  // Essai pas encore commencé : il démarre à la première action IA (startTrial = true). Une simple consultation du solde ne le démarre pas.
+  if (!start) return { mode: 'trial', started: false, endsAt: null }
   const trialEnd = kinDayStart(start.getTime()) + TRIAL_DAYS * DAY_MS
-  if (nowMs < trialEnd) return { mode: 'trial' }
+  if (nowMs < trialEnd) return { mode: 'trial', started: true, endsAt: trialEnd }
   // On ne compte que ce qui a été consommé AUJOURD'HUI (jour de Kinshasa) en mode gratuit : ni l'essai, ni un abonnement qui vient de finir.
   const { data: last } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).order('expires_at', { ascending: false }).limit(1)
   const paidUntil = last?.[0]?.expires_at ? new Date(last[0].expires_at).getTime() : 0
@@ -166,6 +182,9 @@ async function accessState(admin: ReturnType<typeof adminClient>, userId: string
   for (const r of rows ?? []) { if (r.task !== 'review_doc') used += r.points ?? POINTS[r.task] ?? 1 }
   return { mode: 'points', left: Math.max(0, FREE_POINTS - used), resetAt: dayStart + DAY_MS, from }
 }
+
+/** État de l'essai pour l'affichage (null hors essai) : commencé ou pas, et date de fin. */
+const trialPayload = (st: Access) => (st.mode === 'trial' ? { started: st.started, endsAt: st.endsAt ? new Date(st.endsAt).toISOString() : null, days: TRIAL_DAYS } : null)
 
 /** Ce que l'appli affiche : solde et heure de remise à zéro (null pendant l'essai et avec Premium). */
 const pointsPayload = (st: Access) => (st.mode === 'points' ? { left: st.left, max: FREE_POINTS, resetAt: st.resetAt ? new Date(st.resetAt).toISOString() : null } : null)
@@ -626,7 +645,7 @@ async function transcribe(req: Request, userId: string) {
   const { count: recent } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'transcribe').gte('created_at', minuteAgo)
   if ((recent ?? 0) >= 3) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
   const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).gt('expires_at', new Date().toISOString()).maybeSingle()
-  const st = await accessState(admin, userId, sub)
+  const st = await accessState(admin, userId, sub, Date.now(), true)
   const cost = costOf('transcribe', 0)
   const denied = await checkAccess(admin, userId, 'transcribe', st, cost)
   if (denied) return json(req, denied.status, { error: denied.error, code: (denied as { code?: string }).code })
@@ -870,7 +889,8 @@ Deno.serve(async (req) => {
   if (body.task === 'balance') {
     const adm = adminClient()
     const { data: sb } = await adm.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
-    return json(req, 200, { points: pointsPayload(await accessState(adm, user.id, sb)) })
+    const stBal = await accessState(adm, user.id, sb)
+    return json(req, 200, { points: pointsPayload(stBal), trial: trialPayload(stBal) })
   }
 
   // Interrupteur général : IA coupée → message clair, rien n'est consommé (le solde ci-dessus reste consultable).
@@ -903,7 +923,8 @@ Deno.serve(async (req) => {
     admin.from('subscriptions').select('expires_at').eq('user_id', user.id).gt('expires_at', new Date().toISOString()).maybeSingle()
   ])
   if (body.task !== 'tp_section' && (lastMinute ?? 0) >= PER_MINUTE) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
-  const st = await accessState(admin, user.id, sub)
+  // La première action IA de l'étudiant démarre son essai de 5 jours (sauf les cartes automatiques, gratuites et sans demande de sa part).
+  const st = await accessState(admin, user.id, sub, Date.now(), !(task === 'cards' && body.auto === true))
 
   // ---- Coût de la demande. TP : un TP complet = 10 points au total (plan + ajustements + rédaction), payés une seule fois. ----
   // Le serveur ouvre une « session de TP » après paiement ; les appels suivants doivent présenter cette session (elle est liée à l'étudiant,
@@ -1106,5 +1127,6 @@ Deno.serve(async (req) => {
       ])
     }
   }
-  return json(req, 200, { reply: result.text, action: task === 'chat' ? action : undefined, conversationId: task === 'chat' ? convId : null, tpSession: isTp ? (tpSession ?? newSession) : undefined, webNotice: task === 'chat' ? undefined : webNotice ?? undefined, points: pointsPayload(await accessState(admin, user.id, sub)) })
+  const stEnd = await accessState(admin, user.id, sub)
+  return json(req, 200, { reply: result.text, action: task === 'chat' ? action : undefined, conversationId: task === 'chat' ? convId : null, tpSession: isTp ? (tpSession ?? newSession) : undefined, webNotice: task === 'chat' ? undefined : webNotice ?? undefined, points: pointsPayload(stEnd), trial: trialPayload(stEnd) })
 })

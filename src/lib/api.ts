@@ -875,8 +875,17 @@ export interface PointsInfo {
   resetAt: string
 }
 
+/** Essai de 5 jours : commencé ou pas (il démarre à la première action IA), date de fin. null hors essai. */
+export interface TrialInfo {
+  started: boolean
+  endsAt: string | null
+  days: number
+}
+
 export interface AiResult {
   reply: string
+  /** État de l'essai après cette demande (absent en mode démo). */
+  trial?: TrialInfo | null
   conversationId: string | null
   /** Solde de points après cette demande (absent en mode démo). */
   points?: PointsInfo | null
@@ -890,9 +899,14 @@ export interface AiResult {
 
 /** Solde de points de l'étudiant, sans rien consommer. null = essai ou Premium (rien à afficher). */
 export async function fetchPoints(): Promise<PointsInfo | null> {
-  if (!isConfigured) return null
-  const r = await invoke<{ points: PointsInfo | null }>('bright-worker', { task: 'balance' }, 'Solde indisponible.')
-  return r.points ?? null
+  return (await fetchAccess()).points
+}
+
+/** Solde de points ET état de l'essai, sans rien consommer ni démarrer l'essai. */
+export async function fetchAccess(): Promise<{ points: PointsInfo | null; trial: TrialInfo | null }> {
+  if (!isConfigured) return { points: null, trial: null }
+  const r = await invoke<{ points: PointsInfo | null; trial?: TrialInfo | null }>('bright-worker', { task: 'balance' }, 'Solde indisponible.')
+  return { points: r.points ?? null, trial: r.trial ?? null }
 }
 
 /** Toutes les tâches IA passent par la fonction serveur « ai-gateway » : aucune clé d'IA dans le navigateur. */
@@ -946,6 +960,10 @@ export async function askAI(args: {
   }
   // Tout l'appli (Accueil, Assistant) affiche le nouveau solde tout de suite.
   if (res.points !== undefined) window.dispatchEvent(new CustomEvent('memoa-points', { detail: res.points }))
+  // L'essai vient peut-être de démarrer (première action IA) : l'accueil affiche tout de suite « N jours restants ».
+  if (res.trial !== undefined) window.dispatchEvent(new CustomEvent('memoa-trial', { detail: res.trial }))
+  // Première action IA réussie : c'est le moment de proposer les notifications (une seule fois, voir PushOffer).
+  if (args.task !== 'review_doc' && !args.auto) window.dispatchEvent(new Event('memoa-ai-done'))
   return res
 }
 
