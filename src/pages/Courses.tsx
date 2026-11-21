@@ -20,7 +20,8 @@ import { buildCoursePdf, buildTpPdfDetailed, stripAiNoise, splitTpTitle, COVER_O
 import { isPremiumNow, usePremium } from '../lib/premium'
 import { usePref } from '../lib/prefs'
 import { cleanPlan, cleanTpText } from '../lib/tpclean'
-import { readPhotoText } from '../lib/ocr'
+import { cleanTranscript, MAX_PHOTOS, readPhotoText, readPhotosText, readScannedPdf } from '../lib/ocr'
+import { memoNameOf } from '../lib/names'
 import { adjustLength, assemble, clearDone, clearProgress, limitPlan, loadDone, loadProgress, parsePlan, partIsComplete, partsFor, saveDone, saveProgress, subsFor } from '../lib/tpwrite'
 import { extractPdfText } from '../lib/pdfimport'
 import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '../lib/tpjob'
@@ -33,7 +34,9 @@ const asFile = (b: Blob): File => (b instanceof File ? b : new File([b], 'enregi
 /* Onglet « Cours » : sert uniquement à créer un cours. Même écran d'écriture que « Ajouter une note ». Une fois créé, le cours est rangé dans le sac à dos. */
 export function NewCourse() {
   const nav = useNavigate()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const memo = memoNameOf(profile)
+  const [photoCount, setPhotoCount] = useState(0) // photos déjà lues dans ce cours (20 au maximum)
   const { busy, error, setError, run } = useAction()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -83,7 +86,7 @@ export function NewCourse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + t.slice(0, 60000)) }
+  function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + cleanTranscript(t).slice(0, 60000)) }
 
   /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (48 h), tout de suite, puis retourne à la liste.
    *  Sans réseau, il sera créé tout seul dès que la connexion revient (voir lib/draftsync.ts). */
@@ -120,24 +123,35 @@ export function NewCourse() {
     if (!f) return
     if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
     setStep('Lecture du PDF…')
-    const text = await run(() => extractPdfText(f))
+    // PDF avec du texte : lu sur le téléphone (instantané, tableaux recopiés). PDF scanné : lu page par page par l'IA qui voit l'image.
+    const text = await run(async () => { const t = await extractPdfText(f); return t.length >= 20 ? t : readScannedPdf(f, setStep, memo) })
     setStep('')
     if (text === undefined) return
-    if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
+    if (text.length < 20) return setError("Je n'arrive pas à lire ce PDF. Essaie un autre PDF, une photo de la page, ou colle le texte.")
     appendText(text)
     setSource('pdf')
     setTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
-  async function pickPhoto(f: File | undefined) {
-    if (!f) return
+  /** Jusqu'à 20 photos par cours : lues 3 à la fois, le texte arrive dans l'ordre des photos. */
+  async function pickPhotos(fl: FileList | null) {
+    const all = Array.from(fl ?? [])
+    if (!all.length) return
     if (!isOnline()) return setError('La lecture d’une photo a besoin du réseau. Réessaie quand il revient.')
-    const text = await run(() => readPhotoText(f, setStep))
+    const room = MAX_PHOTOS - photoCount
+    if (room <= 0) return setError(`Tu as déjà ajouté ${MAX_PHOTOS} photos : c’est le maximum pour un cours.`)
+    const files = all.slice(0, room)
+    const res = await run(() => readPhotosText(files, setStep, memo))
     setStep('')
-    if (text === undefined) return
-    if (text.length < 15) return setError("Je n'arrive pas à lire de texte sur cette photo. Prends-la bien droite, avec de la lumière, ou choisis un texte imprimé.")
-    appendText(text)
+    if (res === undefined) return
+    setPhotoCount((n) => n + files.length)
+    if (res.text.length < 15) return setError("Je n'arrive pas à lire de texte sur " + (files.length > 1 ? 'ces photos' : 'cette photo') + ". Prends-les bien droites, avec de la lumière, ou choisis un texte imprimé.")
+    appendText(res.text)
     setSource('photo')
+    const notes: string[] = []
+    if (all.length > files.length) notes.push(`seules ${files.length} photo${files.length > 1 ? 's ont' : ' a'} été lue${files.length > 1 ? 's' : ''} (maximum ${MAX_PHOTOS})`)
+    if (res.failed) notes.push(`${res.failed} photo${res.failed > 1 ? 's' : ''} illisible${res.failed > 1 ? 's' : ''}`)
+    if (notes.length) setError('Terminé, mais ' + notes.join(' et ') + '.')
   }
 
   async function transcribeFile(f: File, kind: 'audio' | 'video') {
@@ -172,10 +186,10 @@ export function NewCourse() {
       const instr = consignes.trim()
       if (!structured && instr) {
         // Pas de notes : seulement des consignes. L'IA rédige le cours à partir de ses connaissances (et du web si coché).
-        setStep('Rédaction de ton cours par Memo…')
+        setStep(`Rédaction de ton cours par ${memo}…`)
         const r = await askAI({ task: 'enrich_note', purpose: 'course', web: WEB_SEARCH_ENABLED && web, prompt: `Consignes de l'étudiant : ${instr}\n\nTexte déjà écrit par l'étudiant :\n(aucun)` })
         structured = stripAiNoise(r.reply).trim()
-        if (!structured) throw new Error("Memo n'a pas réussi à rédiger le cours. Reformule tes consignes et réessaie.")
+        if (!structured) throw new Error(`${memo} n'a pas réussi à rédiger le cours. Reformule tes consignes et réessaie.`)
       } else if (structured) {
         setStep('Mise en forme de tes notes…')
         try {
@@ -213,7 +227,7 @@ export function NewCourse() {
     <main className="page">
       {/* Sélecteurs de fichiers : toujours présents, ouverts par les boutons de la barre du bas. */}
       <input ref={pdfInput} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
-      <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => { void pickPhotos(e.target.files); e.target.value = '' }} />
       <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
 
       <EditorScreen
@@ -236,7 +250,7 @@ export function NewCourse() {
         banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{step && <span className="muted" role="status">{step}</span>}<ErrorBox message={error} /></>}
         guide={consignes}
         onGuide={setConsignes}
-        guideHelp="Avec des notes : Memo les met en forme selon tes consignes. Sans notes : écris seulement les consignes et Memo rédige le cours à ta place. Créer un cours avec Memo coûte 15 points. Il s’en sert quand tu touches « Créer »."
+        guideHelp={`Avec des notes : ${memo} les met en forme selon tes consignes. Sans notes : écris seulement les consignes et ${memo} rédige le cours à ta place. Créer un cours avec ${memo} coûte 15 points. Il s’en sert quand tu touches « Créer ».`}
         guideExtra={
           <div className="ed-tools-row">
             <DictateButton onText={(t) => setConsignes((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
@@ -491,6 +505,8 @@ function QuizScreen({ qs, raw, onClose, onNext, loading, loadError }: { qs: Quiz
 export function CourseDetail() {
   const { id = '' } = useParams()
   const { user, profile } = useAuth()
+  const memo = memoNameOf(profile)
+  const [photoCount, setPhotoCount] = useState(0) // photos déjà lues dans cette note (20 au maximum)
   const profileName = profile?.full_name ?? ''
   const course = useLoad(() => getCourse(id), [id])
   const notes = useLoad(() => listNotes(id), [id])
@@ -563,7 +579,7 @@ export function CourseDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + t.slice(0, 60000)) }
+  function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + cleanTranscript(t).slice(0, 60000)) }
 
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
@@ -599,22 +615,32 @@ export function CourseDetail() {
     if (!f) return
     if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
     setNoteStep('Lecture du PDF…')
-    const text = await run(() => extractPdfText(f))
+    const text = await run(async () => { const t = await extractPdfText(f); return t.length >= 20 ? t : readScannedPdf(f, setNoteStep, memo) })
     setNoteStep('')
     if (text === undefined) return
-    if (text.length < 20) return setError("Ce PDF ne contient pas de texte lisible (il est peut-être scanné). Essaie un autre PDF ou colle le texte.")
+    if (text.length < 20) return setError("Je n'arrive pas à lire ce PDF. Essaie un autre PDF, une photo de la page, ou colle le texte.")
     appendText(text)
     setNoteTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
-  async function pickPhoto(f: File | undefined) {
-    if (!f) return
+  /** Jusqu'à 20 photos par note : lues 3 à la fois, le texte arrive dans l'ordre des photos. */
+  async function pickPhotos(fl: FileList | null) {
+    const all = Array.from(fl ?? [])
+    if (!all.length) return
     if (!isOnline()) return setError('La lecture d’une photo a besoin du réseau. Réessaie quand il revient.')
-    const text = await run(() => readPhotoText(f, setNoteStep))
+    const room = MAX_PHOTOS - photoCount
+    if (room <= 0) return setError(`Tu as déjà ajouté ${MAX_PHOTOS} photos : c’est le maximum pour une note.`)
+    const files = all.slice(0, room)
+    const res = await run(() => readPhotosText(files, setNoteStep, memo))
     setNoteStep('')
-    if (text === undefined) return
-    if (text.length < 15) return setError("Je n'arrive pas à lire de texte sur cette photo. Prends-la bien droite, avec de la lumière, ou choisis un texte imprimé.")
-    appendText(text)
+    if (res === undefined) return
+    setPhotoCount((n) => n + files.length)
+    if (res.text.length < 15) return setError("Je n'arrive pas à lire de texte sur " + (files.length > 1 ? 'ces photos' : 'cette photo') + ". Prends-les bien droites, avec de la lumière, ou choisis un texte imprimé.")
+    appendText(res.text)
+    const notes: string[] = []
+    if (all.length > files.length) notes.push(`seules ${files.length} photo${files.length > 1 ? 's ont' : ' a'} été lue${files.length > 1 ? 's' : ''} (maximum ${MAX_PHOTOS})`)
+    if (res.failed) notes.push(`${res.failed} photo${res.failed > 1 ? 's' : ''} illisible${res.failed > 1 ? 's' : ''}`)
+    if (notes.length) setError('Terminé, mais ' + notes.join(' et ') + '.')
   }
 
   /* « Ajouter une note » ouvre directement l'écran d'écriture, comme « Nouveau cours » : écrire, dicter, enregistrer, photo, « + » (PDF, audio). */
@@ -625,7 +651,7 @@ export function CourseDetail() {
   }
   function resetNote() {
     dict.current?.stop()
-    setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null)
+    setNoteTitle(''); setNoteText(''); setNoteGuide(''); setNoteSource('texte'); setNoteStep(''); setError(null); setPhotoCount(0)
     setModify(false); setMainId(null); setDraftId(null); setPendingAudio(null)
     setEditing(false)
   }
@@ -710,7 +736,7 @@ export function CourseDetail() {
       const r = await run(() => askAI({ task: 'enrich_note', courseId: id, web: WEB_SEARCH_ENABLED && noteWeb, prompt: `Consignes de l'étudiant : ${guide}\n\nTexte déjà écrit par l'étudiant :\n${toAiText(base) || '(aucun)'}` }))
       if (!r) return
       const extra = stripAiNoise(r.reply).trim()
-      content = base ? `${base}\n\nComplément de Memo :\n${extra}` : extra
+      content = base ? `${base}\n\nComplément de ${memo} :\n${extra}` : extra
     } else if (base && !modify) {
       // Toute note ajoutée avec du texte passe par Memo (15 points). Modifier un cours existant ne coûte rien.
       const r = await run(() => structureNoteText(id, base))
@@ -848,7 +874,7 @@ export function CourseDetail() {
 
       {/* Sélecteurs de fichiers : toujours présents, ouverts par les boutons de l'éditeur. */}
       <input ref={pdfRef} type="file" accept="application/pdf" hidden onChange={(e) => { void pickPdf(e.target.files?.[0]); e.target.value = '' }} />
-      <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={(e) => { void pickPhotos(e.target.files); e.target.value = '' }} />
       <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void transcribeFile(f, 'audio'); e.target.value = '' }} />
 
       {editing && (
@@ -874,7 +900,7 @@ export function CourseDetail() {
           banner={<>{pendingAudio && <PendingAudioChip file={pendingAudio} onRemove={() => setPendingAudio(null)} />}{noteStep && <span className="muted" role="status">{noteStep}</span>}<ErrorBox message={error} /></>}
           guide={noteGuide}
           onGuide={setNoteGuide}
-          guideHelp="Ajouter une note avec du texte coûte 15 points : Memo la met en forme (avec tes consignes si tu en écris). Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note. Elle s’en sert quand tu touches « Terminé »."
+          guideHelp={`Ajouter une note avec du texte coûte 15 points : ${memo} la met en forme (avec tes consignes si tu en écris). Tu n’as pas de notes ? Écris seulement les consignes : l’IA rédige la note. Elle s’en sert quand tu touches « Terminé ».`}
           guideExtra={
             <div className="ed-tools-row">
               <DictateButton onText={(t) => setNoteGuide((b) => (b ? b + ' ' : '') + t)} label="Dicter les consignes" />
@@ -1002,7 +1028,7 @@ export function TpAssistant() {
       text = await run(() => extractPdfText(f))
     } else {
       setStep('Lecture de la photo…')
-      text = await run(() => readPhotoText(f, setStep))
+      text = await run(() => readPhotoText(f, setStep, memoNameOf(profile)))
     }
     setStep('')
     if (text === undefined) return

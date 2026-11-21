@@ -43,7 +43,29 @@ const seenErrors = new Set<string>()
 /** À appeler quand l'étudiant se connecte / se déconnecte (AuthProvider). */
 export function setTrackUser(id: string | null) {
   userId = id
-  if (id) schedule(1500)
+  if (id) { markInstalledIfNeeded(); schedule(1500) }
+}
+
+/** L'appli est-elle ouverte comme une application (ajoutée à l'écran d'accueil ou installée), et non dans un onglet du navigateur ? */
+export function isStandalone(): boolean {
+  try {
+    const mm = (q: string) => !!window.matchMedia?.(q).matches
+    return mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') || mm('(display-mode: minimal-ui)') || (navigator as unknown as { standalone?: boolean }).standalone === true
+  } catch { return false }
+}
+
+/** Compteur « Installés » du tableau de bord : « app_installed » est enregistré UNE fois par étudiant et par téléphone, dès que
+ *  (1) le navigateur annonce l'installation (événement appinstalled, Android et ordinateur), ou
+ *  (2) l'appli s'ouvre depuis l'icône de l'écran d'accueil (seul signal disponible sur iPhone, et sur Android si « Ajouter à l'écran d'accueil »).
+ *  Si l'annonce arrive avant la connexion, elle est gardée et comptée à la connexion suivante. */
+const INSTALL_PENDING = 'memoa-install-pending'
+function markInstalledIfNeeded() {
+  try {
+    const pending = localStorage.getItem(INSTALL_PENDING) === '1'
+    if (!pending && !isStandalone()) return
+    trackOnce('app_installed', { via: pending ? 'event' : 'standalone' })
+    localStorage.removeItem(INSTALL_PENDING)
+  } catch { /* ignoré */ }
 }
 
 function readQ(): QItem[] {
@@ -187,6 +209,10 @@ export function installTracking() {
     reportError(ev.error ?? ev.message, 'window.onerror')
   })
   window.addEventListener('unhandledrejection', (ev) => reportError(ev.reason ?? 'promesse rejetée', 'unhandledrejection'))
+  window.addEventListener('appinstalled', () => {
+    try { localStorage.setItem(INSTALL_PENDING, '1') } catch { /* ignoré */ }
+    markInstalledIfNeeded()
+  })
   window.addEventListener('online', () => schedule(1000))
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void flush() })
   schedule(3000)

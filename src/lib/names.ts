@@ -44,3 +44,8 @@ export function officialName(p: Pick<Profile, 'last_name' | 'post_name' | 'first
   const lead = parts.slice(0, Math.min(2, parts.length - 1))
   return [...lead.map((x) => x.toUpperCase()), titleCase(parts.slice(lead.length).join(' '))].join(' ')
 }
+
+/** Nom que l'étudiant a donné à son Memo (« Memo » tant qu'il n'en a pas choisi). À utiliser dans tous les messages « … lit ta photo », « … rédige ». */
+export function memoNameOf(p: { memo_name?: string | null } | null | undefined): string {
+  return p?.memo_name?.trim() || 'Memo'
+}

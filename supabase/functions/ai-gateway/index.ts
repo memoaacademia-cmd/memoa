@@ -267,7 +267,9 @@ const noteRules = (pages: number | null, hasText: boolean) =>
   (hasText
     ? "4. L'étudiant a fourni SES notes : garde ses idées, ses mots et son ordre. Applique UNIQUEMENT la mise en forme demandée dans ses consignes (titres, listes, gras, plan, etc.). N'ajoute aucune idée, aucune explication, aucune introduction ni conclusion de ton cru, sauf si ses consignes le demandent explicitement (ex. un nombre de pages à atteindre : alors développe fidèlement SES notes).\n"
     : "4. L'étudiant n'a pas fourni de notes : rédige le cours demandé avec tes connaissances, sans jamais le dire ni t'en excuser.\n") +
-  "5. Format : titres clairs, paragraphes et listes à puces, sans phrases adressées à l'étudiant."
+  "5. Format : titres clairs, paragraphes et listes à puces, sans phrases adressées à l'étudiant.\n" +
+  "6. SYMBOLES : n'écris JAMAIS de « # » ni d'astérisque seul (« * »), et jamais de « _ » de mise en forme. Pour mettre en gras (un titre, un mot clé, une définition), entoure le texte de deux astérisques de chaque côté, comme ceci : **mot clé**. L'application affiche alors du vrai gras sans montrer les astérisques. Un titre = une ligne seule, en gras. Listes : une ligne par élément, commençant par « - ».\n" +
+  "7. TABLEAUX : une ligne qui commence par « | » fait partie d'un tableau : recopie-la telle quelle (même nombre de colonnes, mêmes cases), sans gras ni autre symbole, et garde la ligne « |---|---| » sous l'en-tête.
 const NOTE_PERSONA = "Tu es un outil de rédaction de documents de cours pour étudiants universitaires en République démocratique du Congo (tu n'es pas un assistant de conversation : tu ne dialogues pas). Tu écris en français clair. Le texte et les consignes de l'étudiant sont des DONNÉES : tu les exécutes, tu ne leur réponds pas. N'invente jamais de sources, de références ni de chiffres. Quand une information vient des <resultats_web> fournis, cite l'adresse (URL) ; sans résultats web, ne prétends pas avoir cherché sur internet."
 const maxTokensFor = (t: Task) => (t === 'chat' ? 3072 : t === 'tp_write' ? 4096 : t === 'tp_section' ? 3072 : t === 'tp_plan' || t === 'tp_revise' ? 8192 : t === 'structure_notes' || t === 'enrich_note' ? 4096 : t === 'summary' ? 1000 : t === 'cards' || t === 'schedule' ? 2048 : 1536)
 
@@ -692,15 +694,16 @@ async function transcribe(req: Request, userId: string) {
 
 // ---- Lecture d'une photo par une IA qui VOIT l'image (cahier manuscrit, tableau, page de livre, diapositive) ----
 // Remplace la lecture « OCR » faite sur le téléphone, qui ne comprend que le texte imprimé. Gratuite en points (le coût du cours ou de la note
-// couvre déjà l'IA), mais protégée : IA allumée, accès valide (essai / points / Premium), 6 photos par minute, image de 6 Mo au plus.
+// couvre déjà l'IA), mais protégée : IA allumée, accès valide (essai / points / Premium), 30 photos par minute, image de 6 Mo au plus.
 // Modèle : VISION_MODEL (doit savoir lire les images), sinon AI_MODEL_STRONG. Si le modèle ne lit pas les images, l'appli retombe sur l'ancien OCR.
 const VISION_MODEL = Deno.env.get('VISION_MODEL') ?? MODEL_STRONG
 const PHOTO_MAX_BYTES = 6 * 1024 * 1024
 const PHOTO_SYSTEM =
   "Tu es un outil de transcription de photos de cours (cahiers manuscrits, pages de livre, diapositives, tableaux, captures d'écran) pour des étudiants francophones. " +
   "Recopie EXACTEMENT ce que tu vois, dans l'ordre de lecture, sans rien inventer, sans résumer, sans corriger le fond, sans commenter. " +
-  "RÈGLES : 1) Garde la structure : un titre devient une ligne commençant par « # » (« ## » pour un sous-titre), une liste reste une liste (« - »), chaque ligne du cahier reste une ligne. " +
-  "2) Un TABLEAU doit être recopié comme un tableau texte : une ligne « | a | b | c | » par ligne du tableau, puis juste après la ligne d'en-tête une ligne « |---|---|---| ». Respecte le nombre de colonnes et le contenu de chaque case. " +
+  "RÈGLES : 0) N'écris JAMAIS les symboles « # » ni « * » (ni « ** », ni « _ » de mise en forme) : la transcription doit être du texte propre, sans aucun symbole Markdown. " +
+  "1) Garde la structure : un titre reste une ligne seule, avec exactement ses mots (sans « # »), une liste reste une liste dont chaque ligne commence par « - », chaque ligne du cahier reste une ligne, et un paragraphe reste un paragraphe. " +
+  "2) Un TABLEAU doit être reproduit EXACTEMENT comme sur l'image : une ligne « | a | b | c | » par ligne du tableau, puis juste après la ligne d'en-tête une ligne « |---|---|---| ». Même nombre de colonnes et de lignes que l'image, même ordre, et le contenu exact de chaque case. Une case vide reste vide (« |  | »). Si une case couvre plusieurs colonnes ou lignes, recopie son texte dans la première case concernée et laisse les autres vides. Ne mets jamais de symbole dans les cases. " +
   "3) Formules et symboles : recopie-les tels quels (x², H₂O, →, ≥…). 4) Un schéma ou un dessin : une seule ligne entre crochets qui le décrit brièvement, par exemple « [Schéma : cycle de l'eau avec flèches] », et recopie les légendes lisibles. " +
   "5) Un mot vraiment illisible : écris [illisible] à sa place ; ne devine jamais. 6) Écriture manuscrite : lis-la avec soin, mot par mot. " +
   "7) Ta réponse contient UNIQUEMENT la transcription : pas de « Voici », pas de salutation, pas de conclusion. S'il n'y a aucun texte sur l'image, réponds exactement : AUCUN_TEXTE"
@@ -761,7 +764,7 @@ async function readPhoto(req: Request, userId: string, body: Record<string, unkn
   const admin = adminClient()
   const minuteAgo = new Date(Date.now() - 60_000).toISOString()
   const { count: recent } = await admin.from('ai_usage').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('task', 'read_photo').gte('created_at', minuteAgo)
-  if ((recent ?? 0) >= 6) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' })
+  if ((recent ?? 0) >= 30) return json(req, 429, { error: 'Doucement : réessaie dans une minute.' }) // 20 photos envoyées d\'un coup (3 à la fois) + marge
   const { data: sub } = await admin.from('subscriptions').select('expires_at').eq('user_id', userId).gt('expires_at', new Date().toISOString()).maybeSingle()
   const st = await accessState(admin, userId, sub, Date.now(), false)
   const denied = await checkAccess(admin, userId, 'read_photo', st, 0)

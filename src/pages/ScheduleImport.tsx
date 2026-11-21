@@ -31,7 +31,7 @@ export default function ScheduleImport() {
     setRows(null); setGroup('')
     const out = await run(async () => {
       setStatus(kind === 'photo' ? 'Lecture de la photo…' : 'Lecture du PDF…')
-      const text = kind === 'photo' ? await readPhotoText(f, setStatus) : await extractPdfText(f, 12)
+      const text = kind === 'photo' ? await readPhotoText(f, setStatus, memo) : await extractPdfText(f, 12)
       if (text.trim().length < 20) throw new Error('Je n’ai pas pu lire de texte dans ce fichier. Essaie une photo plus nette, bien cadrée, ou un PDF non scanné.')
       setStatus(`${memo} cherche les examens…`)
       track('schedule_uploaded', { kind })

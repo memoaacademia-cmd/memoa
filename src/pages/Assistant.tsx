@@ -164,7 +164,7 @@ export default function Assistant() {
     if (!f) return
     setReading(kind === 'photo' ? 'Lecture de la photo…' : 'Lecture du document…')
     const t = await run(async () => {
-      if (kind === 'photo' || f.type.startsWith('image/')) return readPhotoText(f, setReading)
+      if (kind === 'photo' || f.type.startsWith('image/')) return readPhotoText(f, setReading, profile?.memo_name?.trim() || 'Memo')
       if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) return extractPdfText(f)
       return (await f.text()).trim()
     })

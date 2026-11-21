@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getCurrentUser, getProfile, onAuthChange, touchToday, type AuthUser } from './api'
 import type { Profile } from './types'
-import { setTrackUser, trackOncePerDay } from './track'
+import { isStandalone, setTrackUser, trackOncePerDay } from './track'
 
 interface AuthState {
   user: AuthUser | null
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(p)
         writeCache(p)
         setLoadFailed(false)
-        if (p?.memo_animal) { void touchToday(u.id); trackOncePerDay('app_open', { standalone: window.matchMedia?.('(display-mode: standalone)').matches ?? false }) }
+        if (p?.memo_animal) { void touchToday(u.id); trackOncePerDay('app_open', { standalone: isStandalone() }) }
       } catch {
         // Réseau coupé ou serveur lent : on NE déconnecte PAS l'étudiant. On garde le profil connu (ou celui du dernier passage).
         setProfile((prev) => prev ?? readCache(u.id))
