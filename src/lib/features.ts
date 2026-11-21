@@ -24,6 +24,9 @@ export const AUTO_CARDS_ENABLED = true
 /** Paiement Premium (bouton « S'abonner » dans Moi › Premium). */
 export const PAYMENT_ENABLED = true
 
+/** Programme partenaire (affiliation) : section dans Moi, champ « Code partenaire » dans Réglages et à l'inscription, écran d'accueil des liens ?ref=. false = tout est caché. Le serveur (migration 0035) reste en place. */
+export const PARTNER_PROGRAM_ENABLED = true
+
 /** Création d'images par Memo (Premium). Éteint : Memo répond qu'il ne sait pas créer d'images. Même s'il est allumé ici, le serveur doit avoir IMAGE_MODEL configuré. */
 export const IMAGE_GENERATION_ENABLED = false
 

@@ -1029,3 +1029,21 @@ button.plq { cursor: pointer; }
 .as-intro { display: flex; flex-direction: column; gap: 12px; text-align: left; padding: 14px 16px; border-radius: 18px; background: var(--surface-2); border: 2px solid var(--btn); color: var(--text); font-size: 15px; line-height: 1.5; }
 .as-intro .pill-btn { font-size: 16px; font-weight: 800; }
 .as-intro .pill-btn.outline { background: var(--surface); color: var(--link); border: 2px solid var(--btn); }
+
+/* ====================== Programme partenaire ====================== */
+.partner-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); }
+.partner-title { font-family: var(--font-title); font-weight: 700; font-size: 19px; line-height: 1.25; }
+.partner-pill { align-self: flex-start; background: var(--surface-2); color: var(--link); font-size: 12px; font-weight: 800; letter-spacing: .07em; padding: 6px 12px; border-radius: 999px; }
+.partner-box { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; background: var(--surface-2); }
+.partner-code { font-family: var(--font-title); font-weight: 800; font-size: 26px; letter-spacing: .06em; color: var(--text); overflow-wrap: anywhere; }
+.partner-gains { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, #fff6dc 0%, #fde9b0 100%); color: #3a2400; border: 1px solid #e6c46a; }
+.partner-gains .muted { color: #6b4a10; }
+.partner-amount { font-family: var(--font-title); font-weight: 800; font-size: 28px; line-height: 1.1; }
+.partner-lines { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.partner-lines > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.partner-lines span { color: #5a3e0c; }
+.partner-bump { display: inline-block; animation: partnerBump .5s ease-out; }
+@keyframes partnerBump { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+[data-theme='dark'] .partner-gains { background: linear-gradient(135deg, #3a2a0e 0%, #2a1f0a 100%); color: #fbe29a; border-color: #6b4f14; }
+[data-theme='dark'] .partner-gains .muted, [data-theme='dark'] .partner-lines span { color: #e6c98a; }
+@media (prefers-reduced-motion: reduce) { .partner-bump { animation: none; } }

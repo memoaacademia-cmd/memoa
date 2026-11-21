@@ -27,3 +27,7 @@ verify_jwt = false
 # Les rappels d'examen sont lancés par la planification de Supabase (CRON_SECRET vérifié dans le code).
 [functions.exam-reminder-push]
 verify_jwt = false
+
+# Les alertes du Programme partenaire sont lancées par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.partner-alerts]
+verify_jwt = false

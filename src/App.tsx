@@ -19,6 +19,8 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { OutboxSync } from './components/OfflineSave'
 import AutoCards from './components/AutoCards'
 import PushOffer from './components/PushOffer'
+import ReferralAttach from './components/ReferralAttach'
+import { ReferralGate } from './pages/PartnerLanding'
 import { usePref } from './lib/prefs'
 import { AUTO_CARDS_ENABLED, LIBRARY_ENABLED, TP_ASSISTANT_ENABLED } from './lib/features'
 
@@ -114,6 +116,8 @@ export default function App() {
     <AuthProvider>
       <Theme />
       <ConnectionBanner />
+      <ReferralAttach />
+      <ReferralGate>
       <HashRouter>
         <Routes>
           <Route element={<Guard need="public" />}>
@@ -163,6 +167,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
+      </ReferralGate>
     </AuthProvider>
   )
 }

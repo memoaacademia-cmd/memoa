@@ -6,10 +6,18 @@ import NoticeBar from './components/NoticeBar'
 import { installTracking } from './lib/track'
 import { getPref } from './lib/prefs'
 import { isConfigured } from './lib/supabase'
+import { PARTNER_PROGRAM_ENABLED } from './lib/features'
+import { captureRefFromUrl, prepareInstall } from './lib/referral'
 import './styles.css'
 
 // Thème appliqué avant l'affichage : clair par défaut, pas de flash sombre au démarrage.
 document.documentElement.dataset.theme = getPref('theme', 'light')
+
+// Programme partenaire : si l'adresse contient ?ref=CODE, on garde le code (téléphone) et on prépare l'installation avec ce code.
+if (PARTNER_PROGRAM_ENABLED) {
+  const refCode = captureRefFromUrl()
+  if (refCode) prepareInstall(refCode)
+}
 
 const root = document.getElementById('root') as HTMLElement
 if (!isConfigured) {

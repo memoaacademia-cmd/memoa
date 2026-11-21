@@ -11,6 +11,8 @@ import { getPref, usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import FreePts from '../components/FreePts'
+import PartnerSection from '../components/PartnerSection'
+import ReferralCodeField from '../components/ReferralCodeField'
 import { TRIAL_DAYS, usePlan } from '../lib/plan'
 import { FreeVsPremium, PointsGuide, SubscriptionTerms, TrialInfo } from '../components/PlanInfo'
 import { currentStreak } from '../lib/streak'
@@ -122,6 +124,8 @@ export function Me() {
       </section>
 
       <PremiumCard plan={plan} />
+
+      <PartnerSection />
 
       <RowGroup label="Compte">
         <Row tour="me-profile" icon="user" title="Mon profil" right="Modifier" to="/inscription?edit=1" />
@@ -252,6 +256,8 @@ export function Settings() {
         <Row icon="upload" title="Partager Memoa" onClick={() => void share()} chevron={false} />
       </RowGroup>
       {shared && <div className="notice">Lien copié. Colle-le dans WhatsApp ou ailleurs.</div>}
+
+      <ReferralCodeField />
 
       <RowGroup label="Compte">
         <Row title="E-mail" right={user?.email ?? '—'} chevron={false} />

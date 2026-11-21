@@ -4,6 +4,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Brand, ErrorBox, Icon, Logo, PillButton, PillInput, useAction } from '../components/ui'
 import { requestPasswordReset, resendConfirmation, signIn, signInWithGoogle, signUp, updatePassword, verifyRecoveryCode, verifySignupCode } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { CodeInput } from '../components/ReferralCodeField'
+import { PARTNER_PROGRAM_ENABLED } from '../lib/features'
+import { clearStoredRef, getStoredRef, normalizeCode, setStoredRef, type RefSource } from '../lib/referral'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -193,6 +196,19 @@ export function Signup() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [accepted, setAccepted] = useState(false)
+  // Code partenaire (facultatif) : prérempli si un code est déjà connu (lien, installation, saisie précédente).
+  const [refCode, setRefCode] = useState(() => (PARTNER_PROGRAM_ENABLED ? getStoredRef()?.code ?? '' : ''))
+  const [refSource, setRefSource] = useState<RefSource>(() => getStoredRef()?.source ?? 'manual')
+  const BAD_REF = 'Ce code n’a pas la bonne forme (exemple : JOEL-K7X2). Efface-le pour continuer sans code.'
+  /** Garde le code choisi sur le téléphone : il sera envoyé au serveur juste après la connexion (voir ReferralAttach). Renvoie false si le texte est mal formé. */
+  function keepRef(): boolean {
+    if (!PARTNER_PROGRAM_ENABLED) return true
+    if (!refCode.trim()) { clearStoredRef(); return true } // champ vidé exprès : on n'enverra aucun code
+    const c = normalizeCode(refCode)
+    if (!c) return false
+    setStoredRef(c, refSource)
+    return true
+  }
   const MUST_ACCEPT = 'Coche la case pour accepter les conditions d’utilisation et la politique de confidentialité.'
 
   async function submit(e: FormEvent) {
@@ -201,6 +217,7 @@ export function Signup() {
     if (!EMAIL_RE.test(mail)) return setError('Entre une adresse email valide.')
     if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
     if (!accepted) return setError(MUST_ACCEPT)
+    if (!keepRef()) return setError(BAD_REF)
     const res = await run(() => signUp(mail, password, ''))
     if (!res) return
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
@@ -212,6 +229,7 @@ export function Signup() {
 
   async function google() {
     if (!accepted) return setError(MUST_ACCEPT)
+    if (!keepRef()) return setError(BAD_REF)
     const ok = await run(async () => {
       await signInWithGoogle()
       await refresh()
@@ -239,6 +257,12 @@ export function Signup() {
           <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="muted">8 caractères minimum.</span>
         </div>
+        {PARTNER_PROGRAM_ENABLED && (
+          <div className="field">
+            <label htmlFor="ref-code">Code partenaire (facultatif)</label>
+            <CodeInput value={refCode} onChange={(v) => { setRefCode(v); setError(null) }} onSource={setRefSource} />
+          </div>
+        )}
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, lineHeight: 1.4, cursor: 'pointer' }}>
           <input type="checkbox" checked={accepted} onChange={(e) => { setAccepted(e.target.checked); if (e.target.checked) setError('') }} style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1, accentColor: 'var(--btn)' }} />
           <span>
