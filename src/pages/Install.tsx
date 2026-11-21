@@ -195,7 +195,7 @@ export default function Install() {
             </ol>
             <button type="button" className="pill-btn" onClick={() => setGuide(false)}>J’ai compris</button>
           </div>
-          {device !== 'IPAD' && <div aria-hidden="true" style={{ position: 'fixed', right: 14, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 46px)', color: '#fff', fontSize: 52, lineHeight: 1, fontWeight: 700, textAlign: 'right' }}>↘<div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>les 3 points</div></div>}
+          {device !== 'IPAD' && <div aria-hidden="true" style={{ position: 'fixed', right: 4, width: 64, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 58px)', color: '#fff', textAlign: 'center', fontWeight: 700 }}><div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.15 }}>les 3 points</div><div style={{ fontSize: 54, lineHeight: 1 }}>↓</div></div>}
         </div>
       )}
       <button type="button" className="btn ghost" onClick={() => void shareLink()}>Partager ce lien</button>
