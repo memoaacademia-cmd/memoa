@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           JSON.stringify({ title, body, url: `${site}#/examens`, tag: 'memoa-exam' }),
-          { TTL: 6 * 3600 }
+          { TTL: 6 * 3600, urgency: 'high' }
         )
         sent++
         reached.add(s.user_id)

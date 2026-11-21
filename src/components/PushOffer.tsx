@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './ui'
 import { useAuth } from '../lib/auth'
-import { canInvite, enablePush, needsInstallFirst, noteInvited } from '../lib/push'
+import { canInvite, enablePush, needsInstallFirst, noteInvited, syncPush } from '../lib/push'
 
 /** Après la toute première action IA réussie, une carte propose les notifications (« Le savais-tu » à 8 h, rappels de révision).
  *  Un seul bouton pour accepter ; « Plus tard » ferme. Les règles de fréquence sont celles de canInvite (jamais si déjà accepté ou refusé). */
@@ -10,6 +10,9 @@ export default function PushOffer() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+
+  // À chaque ouverture : répare en silence un abonnement aux notifications perdu (voir syncPush).
+  useEffect(() => { if (user) void syncPush(user.id) }, [user])
 
   useEffect(() => {
     if (!user) return

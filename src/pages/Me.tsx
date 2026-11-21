@@ -6,8 +6,8 @@ import { friendlyError, getLibraryAuthors, getSubscription, listActivity, listCo
 import { useAuth } from '../lib/auth'
 import { initialsOf, officialName } from '../lib/names'
 import { NOTIFICATIONS_ENABLED, PAYMENT_ENABLED, VAPID_PUBLIC_KEY } from '../lib/features'
-import { disablePush, enablePush, isSubscribed } from '../lib/push'
-import { usePref } from '../lib/prefs'
+import { disablePush, enablePush, isSubscribed, syncPush } from '../lib/push'
+import { getPref, usePref } from '../lib/prefs'
 import { useAvatar } from '../lib/avatar'
 import { dateFr, daysLeft, isActive } from '../lib/subscription'
 import FreePts from '../components/FreePts'
@@ -158,7 +158,19 @@ export function Settings() {
   const [pushOn, setPushOn] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
 
-  useEffect(() => { void isSubscribed().then(setPushOn) }, [])
+  useEffect(() => {
+    // On répare d'abord un abonnement perdu, puis on affiche l'état réel. Si l'étudiant avait activé les notifications ici
+    // et qu'elles ne peuvent plus l'être sans lui, on le dit au lieu de laisser l'interrupteur décoché sans explication.
+    let alive = true
+    void (async () => {
+      if (user) await syncPush(user.id)
+      const on = await isSubscribed()
+      if (!alive) return
+      setPushOn(on)
+      if (!on && getPref('notif', '') === '1') setPushMsg('Les notifications ont été coupées sur ce téléphone par ton navigateur (cela arrive après un nettoyage des données ou une longue absence). Touche l’interrupteur pour les réactiver.')
+    })()
+    return () => { alive = false }
+  }, [user])
   async function togglePush(want: boolean) {
     setPushMsg(null)
     if (!want) { await disablePush(); setPushOn(false); return }

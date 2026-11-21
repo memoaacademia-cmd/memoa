@@ -90,6 +90,46 @@ export async function disablePush(): Promise<void> {
   }
 }
 
+const SYNCED_AT = 'push-synced-at' // dernier rappel de ce téléphone au serveur (date en millisecondes)
+const DAY = 86_400_000
+
+/** À l'ouverture de l'appli : si l'étudiant a accepté les notifications sur CE téléphone (et ne les a pas coupées lui-même),
+ *  on s'assure que le téléphone est bien abonné ET connu du serveur. Répare en silence les cas où l'abonnement a été perdu
+ *  (navigateur qui le renouvelle ou le nettoie, ligne supprimée côté serveur, clé d'envoi changée). Ne demande jamais rien à l'étudiant.
+ *  Renvoie true si le téléphone est abonné à la fin. */
+export async function syncPush(userId: string): Promise<boolean> {
+  try {
+    if (!pushSupported() || Notification.permission !== 'granted') return false
+    if (getPref('notif', '') !== '1') return false // seulement si l'étudiant l'a activé ici, et jamais s'il l'a coupé
+    const reg = await Promise.race([registration(), new Promise<null>((r) => setTimeout(() => r(null), 8000))])
+    if (!reg) return false
+    let sub = await reg.pushManager.getSubscription()
+    let changed = false
+    // Abonnement créé avec une autre clé d'envoi que l'actuelle : le serveur ne pourrait pas lui écrire. On le refait.
+    const k = sub?.options?.applicationServerKey
+    if (sub && k) {
+      const a = new Uint8Array(k)
+      const b = keyBytes(VAPID_PUBLIC_KEY)
+      if (a.length !== b.length || a.some((v, i) => v !== b[i])) { await sub.unsubscribe().catch(() => {}); sub = null }
+    }
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) as BufferSource })
+      changed = true
+    }
+    const json = sub.toJSON()
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false
+    // On rappelle le téléphone au serveur au plus une fois par jour (ou tout de suite si l'abonnement vient d'être refait).
+    const last = Number(getPref(SYNCED_AT, '0'))
+    if (changed || !last || Date.now() - last >= DAY) {
+      await savePushSubscription(userId, { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth })
+      setPref(SYNCED_AT, String(Date.now()))
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Le téléphone est-il réellement abonné ? (la case des paramètres reflète cet état, pas seulement une préférence) */
 export async function isSubscribed(): Promise<boolean> {
   try {

@@ -398,7 +398,6 @@ export function ForgotPassword() {
             <ErrorBox message={error} />
             <button className="btn primary-light" type="submit" disabled={busy || code.length !== 6}>{busy ? 'Vérification…' : 'Valider le code'}</button>
           </form>
-          <a className="btn ghost" href="https://mail.google.com" target="_blank" rel="noreferrer">Ouvrir Gmail</a>
           <button className="btn ghost" type="button" disabled={wait > 0 || busy} onClick={resend}>{wait > 0 ? `Renvoyer le code (${wait} s)` : 'Renvoyer le code'}</button>
           {again && <div className="notice">Nouveau code envoyé. Utilise le dernier reçu.</div>}
           <p className="muted" style={{ textAlign: 'center' }}>Si un compte existe avec cet email, le code arrive en quelques instants. Regarde aussi dans les courriers indésirables.</p>

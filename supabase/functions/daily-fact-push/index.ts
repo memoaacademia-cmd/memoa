@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           JSON.stringify({ ...msg, url: Deno.env.get('SITE_URL') ?? './' }),
-          { TTL: 12 * 3600 }
+          { TTL: 12 * 3600, urgency: 'high' }
         )
         sent++
         await admin.from('push_subscriptions').update({ last_sent_at: new Date().toISOString() }).eq('id', s.id)
