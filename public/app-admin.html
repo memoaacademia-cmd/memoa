@@ -286,6 +286,14 @@ function render(d){
 }
 
 /* ---------- appels serveur (fonctions SQL de 0032_admin_tableau_complet.sql) ---------- */
+async function mailPartner(id){
+  var t=getToken();if(!t)return ' E-mail non envoyé (session expirée).';
+  var r=await fetch(SB_URL+'/functions/v1/partner-approved-email',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify({partner_id:id})});
+  if(r.status===404)return ' E-mail non envoyé : la fonction partner-approved-email n\u2019est pas encore déployée.';
+  var j={};try{j=await r.json()}catch(x){}
+  if(j&&j.sent)return ' E-mail de bienvenue envoyé.';
+  return ' E-mail non envoyé'+(j&&j.reason?' : '+j.reason:'')+'.';
+}
 async function rpc(name,body){
   var t=getToken();if(!t)throw{code:401};
   var r=await fetch(SB_URL+'/rest/v1/rpc/'+name,{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify(body)});
@@ -441,7 +449,7 @@ function renderPartners(d){
     return '<div class="pa-row"><div class="who"><b>'+esc(r.full_name||'(compte supprimé)')+' <span class="tag'+(st?' '+st:'')+'">'+esc(PA_STATUS[r.status]||r.status)+'</span></b>'
       +'<span>'+esc(PA_TYPE[r.type]||r.type||'–')+(r.code?' · '+esc(r.code):'')+' · '+nf(r.inscrits)+' inscrits · '+nf(r.payants)+' payants · à venir '+esc(usd(r.a_venir_usd))+' · payé '+esc(usd(r.paye_usd))+'</span></div><div>'
       +(r.status==='active'?'<button class="btn sm" data-pa="suspend" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Suspendre</button>':'')
-      +(r.status==='suspended'?'<button class="btn sm p" data-pa="approve" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Réactiver</button>':'')
+      +(r.status==='suspended'?'<button class="btn sm p" data-pa="approve" data-re="1" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Réactiver</button>':'')
       +'</div></div>';
   }).join(''):'<p class="empty">Aucun partenaire pour le moment.</p>';
 }
@@ -473,7 +481,12 @@ $('pa-card').addEventListener('click',async function(e){
   try{
     var r=await rpc('admin_partner_action',{p_action:act,p_id:id,p_text:text});
     var res=r&&r.result;
-    if(res==='ok'){$('pa-ok').textContent=(act==='approve'&&r.code)?'Approuvé. Code : '+r.code:'Fait.'}
+    if(res==='ok'){
+      var msg=(act==='approve'&&r.code)?'Approuvé. Code : '+r.code:'Fait.';
+      // Première approbation (pas une réactivation) : e-mail de bienvenue au partenaire. Un échec d'e-mail n'annule jamais l'approbation.
+      if(act==='approve'&&!b.getAttribute('data-re')){try{msg+=await mailPartner(id)}catch(x){msg+=' E-mail non envoyé (réseau) : préviens-le toi-même.'}}
+      $('pa-ok').textContent=msg
+    }
     else $('pa-err').textContent=PA_MSG[res]||'Action non effectuée.';
     loadPartners();
   }catch(x){$('pa-err').textContent=paErr(x);b.disabled=false}
