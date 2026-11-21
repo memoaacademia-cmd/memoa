@@ -457,6 +457,40 @@ function copyText(t){
   if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t);
   return new Promise(function(ok,ko){try{var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();var s=document.execCommand('copy');document.body.removeChild(a);s?ok():ko()}catch(e){ko(e)}});
 }
+
+var SUSP_REASONS=[
+  'Non-respect des règles du Programme partenaire',
+  'Promotion trompeuse ou mensongère de Memoa',
+  'Activité suspecte sur les parrainages (faux comptes, auto-parrainage)',
+  'Compte inactif depuis longtemps',
+  'Vérification de ton dossier en cours',
+  'Autre (je l\u2019écris moi-même)'
+];
+var SUSP_DEFAULT='Suspension décidée par l\u2019équipe Memoa. Écris-nous depuis « Un retour ? » dans l\u2019application pour en savoir plus.';
+// Fenêtre : liste de motifs + zone de texte libre. Rien choisi, rien écrit = message par défaut.
+function askSuspendReason(name){
+  return new Promise(function(done){
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    var box=document.createElement('div');
+    box.style.cssText='background:#fff;color:#0e1a2b;border-radius:16px;padding:20px;max-width:440px;width:100%;font-family:Arial,Helvetica,sans-serif;font-size:15px';
+    box.innerHTML='<p style="margin:0 0 10px"><b>Suspendre '+esc(name)+'</b></p>'
+      +'<p style="margin:0 0 6px">Motif envoyé par e-mail et notification :</p>'
+      +'<select id="sr-sel" style="width:100%;padding:10px;font-size:15px;margin-bottom:10px"><option value="">— Motif par défaut —</option>'
+      +SUSP_REASONS.map(function(r,i){return '<option value="'+i+'">'+esc(r)+'</option>'}).join('')+'</select>'
+      +'<textarea id="sr-txt" rows="3" maxlength="400" placeholder="Précision à ajouter (facultatif)" style="width:100%;box-sizing:border-box;padding:10px;font-size:15px;margin-bottom:12px"></textarea>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" id="sr-no" class="btn sm">Annuler</button><button type="button" id="sr-ok" class="btn sm p">Suspendre</button></div>';
+    ov.appendChild(box);document.body.appendChild(ov);
+    function close(v){document.body.removeChild(ov);done(v)}
+    box.querySelector('#sr-no').onclick=function(){close(null)};
+    box.querySelector('#sr-ok').onclick=function(){
+      var i=box.querySelector('#sr-sel').value,extra=box.querySelector('#sr-txt').value.trim();
+      var base=(i!==''&&+i<SUSP_REASONS.length-1)?SUSP_REASONS[+i]:'';
+      var out=base&&extra?base+' — '+extra:(base||extra||SUSP_DEFAULT);
+      close(out.slice(0,400));
+    };
+  });
+}
 $('pa-card').addEventListener('click',async function(e){
   var c=e.target.closest&&e.target.closest('button[data-copy]');
   if(c){var v=c.getAttribute('data-copy');try{await copyText(v);$('pa-ok').textContent='Numéro copié : '+v}catch(x){$('pa-ok').textContent='Numéro : '+v}return}
@@ -466,10 +500,8 @@ $('pa-card').addEventListener('click',async function(e){
   if(act==='approve'){if(!confirm('Approuver '+name+' ? Son code sera créé automatiquement.'))return}
   else if(act==='reject'){if(!confirm('Refuser la demande de '+name+' ?'))return}
   else if(act==='suspend'){
-    if(!confirm('Suspendre '+name+' ? Son code ne parrainera plus.'))return;
-    text=prompt('Motif de la suspension (il sera envoyé par e-mail à '+name+') :');
-    if(text==null)return;text=text.trim();
-    if(!text){$('pa-err').textContent='Le motif est obligatoire pour suspendre.';return}
+    text=await askSuspendReason(name);
+    if(text==null)return;
   }
   else if(act==='resend'){
     b.disabled=true;
