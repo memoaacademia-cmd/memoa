@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Brand, ErrorBox, MemoAvatar, useAction } from '../components/ui'
 import { ANIMALS } from '../data/animals'
-import { CATALOGUE, OTHER_DEP, OTHER_FAC, OTHER_UNIV, PROMOTIONS, VACATIONS } from '../data/academic'
+import { ABA as CATALOGUE_ABA, CATALOGUE, facultiesAvailable, lockedFor, OTHER_DEP, OTHER_FAC, OTHER_UNIV, promotionsFor, VACATIONS } from '../data/academic'
 import { BIO_MAX, getMyPublic, PUBLIC_NAME_MAX, saveMyPublic, saveProfile, uploadAvatar } from '../lib/api'
 import { track } from '../lib/track'
 import { useAuth } from '../lib/auth'
@@ -48,14 +48,32 @@ export default function Onboarding() {
   }, [editing, user])
 
   const univAutre = f.univ === OTHER_UNIV
-  const facs = univAutre ? [] : Object.keys(CATALOGUE[f.univ] ?? {})
+  const facs = univAutre ? [] : facultiesAvailable(f.univ, f.promo)
+  const lock = univAutre ? null : lockedFor(f.univ, f.promo)
+  const promos = promotionsFor(univAutre ? undefined : f.univ)
   const facAutre = univAutre || f.fac === OTHER_FAC
   const deps = facAutre ? [] : CATALOGUE[f.univ]?.[f.fac] ?? []
   const depAutre = facAutre || f.dep === OTHER_DEP
 
+  /** Applique la règle de l'université (ex. ABA : L1 = Licence Transversale) à une nouvelle université / promotion. */
+  function applyRules(univ: string, promo: string): Partial<typeof f> {
+    const l = lockedFor(univ, promo)
+    if (l) return { univ, promo, fac: l.fac, dep: l.dep }
+    return { univ, promo, fac: '', dep: '' }
+  }
   function onUniv(v: string) {
-    if (v === OTHER_UNIV) set({ univ: v, fac: OTHER_FAC, dep: OTHER_DEP })
-    else set({ univ: v, fac: '', dep: '' })
+    if (v === OTHER_UNIV) return set({ univ: v, fac: OTHER_FAC, dep: OTHER_DEP })
+    // Une promotion qui n'existe pas dans cette université (ex. Préparatoire à l'ABA) repasse à L1.
+    const promo = promotionsFor(v).includes(f.promo) ? f.promo : 'L1'
+    set(applyRules(v, promo))
+  }
+  function onPromo(v: string) {
+    if (univAutre) return set({ promo: v })
+    const before = lockedFor(f.univ, f.promo)
+    const after = lockedFor(f.univ, v)
+    // On ne vide faculté et département que si la règle change (ex. L1 → L2 à l'ABA).
+    if (before || after || (f.univ === CATALOGUE_ABA && !facultiesAvailable(f.univ, v).includes(f.fac))) set(applyRules(f.univ, v))
+    else set({ promo: v })
   }
   function onFac(v: string) {
     if (v === OTHER_FAC) set({ fac: v, dep: OTHER_DEP })
@@ -129,43 +147,43 @@ export default function Onboarding() {
         </div>
 
         <div className="field">
-          <label htmlFor="fac">Faculté</label>
+          <label htmlFor="promo">Promotion</label>
+          <select id="promo" className="select" value={f.promo} onChange={(e) => onPromo(e.target.value)}>
+            {promos.map((p) => <option key={p}>{p}</option>)}
+          </select>
+          {lock && <span className="muted" style={{ fontSize: 13 }}>À l’Académie des Beaux-Arts, tous les étudiants de L1 suivent la Licence Transversale (tronc commun). Tu choisiras ta section et ton département en L2.</span>}
+        </div>
+
+        <div className="field">
+          <label htmlFor="fac">{f.univ === CATALOGUE_ABA ? 'Faculté / Section' : 'Faculté'}</label>
           {!univAutre && (
-            <select id="fac" className="select" value={f.fac} onChange={(e) => onFac(e.target.value)}>
+            <select id="fac" className="select" value={f.fac} onChange={(e) => onFac(e.target.value)} disabled={!!lock}>
               <option value="" disabled>Choisis ta faculté</option>
               {facs.map((x) => <option key={x} value={x}>{x}</option>)}
-              <option value={OTHER_FAC}>{OTHER_FAC}</option>
+              {!lock && <option value={OTHER_FAC}>{OTHER_FAC}</option>}
             </select>
           )}
           {facAutre && <input id={univAutre ? 'fac' : undefined} className="input" aria-label="Nom de ta faculté" placeholder="Écris le nom de ta faculté" value={f.facTxt} onChange={(e) => set({ facTxt: e.target.value })} />}
         </div>
 
         <div className="field">
-          <label htmlFor="dep">Département</label>
+          <label htmlFor="dep">{f.univ === CATALOGUE_ABA ? 'Département (mention)' : 'Département'}</label>
           {!facAutre && (
-            <select id="dep" className="select" value={f.dep} onChange={(e) => set({ dep: e.target.value })}>
+            <select id="dep" className="select" value={f.dep} onChange={(e) => set({ dep: e.target.value })} disabled={!!lock}>
               <option value="" disabled>Choisis ton département</option>
               {deps.map((x) => <option key={x} value={x}>{x}</option>)}
-              <option value={OTHER_DEP}>{OTHER_DEP}</option>
+              {!lock && <option value={OTHER_DEP}>{OTHER_DEP}</option>}
             </select>
           )}
           {depAutre && <input id={facAutre ? 'dep' : undefined} className="input" aria-label="Nom de ton département" placeholder="Écris le nom de ton département" value={f.depTxt} onChange={(e) => set({ depTxt: e.target.value })} />}
         </div>
 
-        <div className="row">
-          <div className="field">
-            <label htmlFor="promo">Promotion</label>
-            <select id="promo" className="select" value={f.promo} onChange={(e) => set({ promo: e.target.value })}>
-              {PROMOTIONS.map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="vac">Vacation (facultatif)</label>
-            <select id="vac" className="select" value={f.vac} onChange={(e) => set({ vac: e.target.value })}>
-              <option value="">Je ne précise pas</option>
-              {VACATIONS.map((v) => <option key={v}>{v}</option>)}
-            </select>
-          </div>
+        <div className="field">
+          <label htmlFor="vac">Vacation (facultatif)</label>
+          <select id="vac" className="select" value={f.vac} onChange={(e) => set({ vac: e.target.value })}>
+            <option value="">Je ne précise pas</option>
+            {VACATIONS.map((v) => <option key={v}>{v}</option>)}
+          </select>
         </div>
 
         {editing && pubLoaded && (

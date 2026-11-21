@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { track } from '../lib/track'
 import { ErrorBox, Icon, PillButton, Spinner, useAction, useLoad, Empty } from '../components/ui'
-import { allFaculties, CATALOGUE, PROMOTIONS, universityLabel } from '../data/academic'
+import { allFaculties, CATALOGUE, PROMOTIONS, promotionsFor, universityLabel } from '../data/academic'
 import { askAI, deleteDocForever, docDownloadUrl, getLibraryAuthors, getLibrarySocial, listDocs, listMyTrashedDocs, publishDoc, REPORT_REASONS, reportDoc, setDocTrashed, toggleFavorite, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { plaqueFor } from '../lib/plaque'
@@ -282,7 +282,7 @@ function PublishForm({ defaultPromo, defaultSection, onDone }: { defaultPromo: s
   const [title, setTitle] = useState('')
   const [type, setType] = useState(defaultSection === 'autre' ? 'Livre' : 'Cours')
   const [course, setCourse] = useState('')
-  const [promo, setPromo] = useState(defaultPromo)
+  const [promo, setPromo] = useState(promotionsFor(profile?.university).includes(defaultPromo) ? defaultPromo : 'L1')
   const [fac, setFac] = useState(profile && known.includes(profile.faculty) ? profile.faculty : 'autre')
   const [facTxt, setFacTxt] = useState(profile && !known.includes(profile.faculty) ? profile.faculty : '')
   const [dep, setDep] = useState('')
@@ -337,7 +337,7 @@ function PublishForm({ defaultPromo, defaultSection, onDone }: { defaultPromo: s
         <>
         <div className="row">
           <div className="field"><label htmlFor="pty">Type</label><select id="pty" className="select" value={type} onChange={(e) => setType(e.target.value)}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-          <div className="field"><label htmlFor="pp">Promotion</label><select id="pp" className="select" value={promo} onChange={(e) => setPromo(e.target.value)}>{PROMOTIONS.map((p) => <option key={p}>{p}</option>)}</select></div>
+          <div className="field"><label htmlFor="pp">Promotion</label><select id="pp" className="select" value={promo} onChange={(e) => setPromo(e.target.value)}>{promotionsFor(profile?.university).map((p) => <option key={p}>{p}</option>)}</select></div>
         </div>
         <div className="field"><label htmlFor="pc">Cours concerné</label><input id="pc" className="input" maxLength={100} value={course} onChange={(e) => setCourse(e.target.value)} /></div>
         <div className="field">

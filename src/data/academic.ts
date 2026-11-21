@@ -1,4 +1,5 @@
 // Source : Répertoires académiques UPN et UNIKIN 2026-2027 (colonne « Départements & Mentions »).
+// Académie des Beaux-Arts de Kinshasa (ABA-KIN) : référentiel officiel LMD (academie-kinshasa.cd), voir ABA_RULES plus bas.
 // ULK, UPC et UCC : listes de départ à relire par l'équipe ; l'étudiant peut toujours écrire sa propre faculté ou son département.
 // Modèle : Université → Faculté → Département. Les étudiants peuvent toujours écrire leur propre valeur.
 export const CATALOGUE: Record<string, Record<string, string[]>> = {
@@ -186,13 +187,61 @@ export const CATALOGUE: Record<string, Record<string, string[]>> = {
     "Faculté de Communication": [
       "Sciences et Techniques de la Communication"
     ]
+  },
+  "Académie des Beaux-Arts de Kinshasa (ABA-KIN)": {
+    "Licence Transversale": [
+      "Licence Transversale"
+    ],
+    "Arts Plastiques": [
+      "Sculpture",
+      "Peinture",
+      "Céramique",
+      "Métal",
+      "Conservation et Restauration d'œuvres d'art"
+    ],
+    "Arts Graphiques": [
+      "Communication Visuelle",
+      "Architecture d'Intérieur",
+      "Photographie",
+      "Design",
+      "Design – Design d'objet et mobilier",
+      "Design – Design textile",
+      "Design – Design urbain",
+      "Design – Design industriel"
+    ]
   }
 }
 
-export const PROMOTIONS = ['L1', 'L2', 'L3', 'Master 1', 'Master 2', 'Doctorat'] as const
+/** « Préparatoire » : année avant la L1 dans certaines universités. */
+export const PROMOTIONS = ['Préparatoire', 'L1', 'L2', 'L3', 'Master 1', 'Master 2', 'Doctorat'] as const
 export type Promotion = (typeof PROMOTIONS)[number]
 
 export const VACATIONS = ['Vacation jour', 'Vacation soir', 'Vacation A', 'Vacation B', 'Vacation C'] as const
+
+
+/* ── Règles propres à l'Académie des Beaux-Arts (ABA-KIN) ──
+   • pas d'année préparatoire ;
+   • L1 = tronc commun « Licence Transversale » (faculté et département verrouillés) ;
+   • dès la L2 : Arts Plastiques ou Arts Graphiques seulement. */
+export const ABA = 'Académie des Beaux-Arts de Kinshasa (ABA-KIN)'
+const ABA_TRONC = 'Licence Transversale'
+
+/** Promotions proposées pour une université (l'ABA n'a pas de préparatoire). */
+export function promotionsFor(university: string | undefined): string[] {
+  return university === ABA ? PROMOTIONS.filter((p) => p !== 'Préparatoire') : [...PROMOTIONS]
+}
+
+/** Facultés proposées selon l'université ET la promotion choisies. */
+export function facultiesAvailable(university: string, promo: string): string[] {
+  const all = Object.keys(CATALOGUE[university] ?? {})
+  if (university !== ABA) return all
+  return promo === 'L1' ? all.filter((f) => f === ABA_TRONC) : all.filter((f) => f !== ABA_TRONC)
+}
+
+/** Valeur imposée (L1 de l'ABA) : { fac, dep }, sinon null. */
+export function lockedFor(university: string, promo: string): { fac: string; dep: string } | null {
+  return university === ABA && promo === 'L1' ? { fac: ABA_TRONC, dep: ABA_TRONC } : null
+}
 
 export const OTHER_UNIV = "Autre université (je l'écris moi-même)"
 export const OTHER_FAC = "Autre faculté (je l'écris moi-même)"
@@ -218,7 +267,8 @@ const LOGOS: Record<string, string> = {
   'Université de Kinshasa (UNIKIN)': 'unikin',
   'Université Libre de Kinshasa (ULK)': 'ulk',
   'Université Protestante au Congo (UPC)': 'upc',
-  'Université Catholique du Congo (UCC)': 'ucc'
+  'Université Catholique du Congo (UCC)': 'ucc',
+  'Académie des Beaux-Arts de Kinshasa (ABA-KIN)': 'aba'
 }
 
 export function logoUrlFor(university: string | undefined): string | null {

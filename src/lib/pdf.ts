@@ -540,7 +540,7 @@ export async function buildTpPdfDetailed(c: TpCover, content: string, targetPage
   if (f.student) rows.push(['PRÉSENTÉ PAR', f.student])
   // Pas de ligne « COURS » (le cours est déjà le titre du bandeau) et pas de département ici (il est écrit en haut de la page).
   // La promotion s'écrit dans le système LMD : « L2 LMD », « Master 1 LMD »…
-  if (f.promotion) rows.push(['PROMOTION', /\bLMD\b/i.test(f.promotion) ? f.promotion : `${f.promotion} LMD`])
+  if (f.promotion) rows.push(['PROMOTION', /\bLMD\b/i.test(f.promotion) || /^Pr[ée]paratoire$/i.test(f.promotion) ? f.promotion : `${f.promotion} LMD`])
   if (f.vacation) rows.push(['VACATION', f.vacation.replace(/^Vacation\s+/i, '')])
   if (f.supervisor) rows.push(['PROFESSEUR', f.supervisor])
   const lineX = 74 + sideW / 2
