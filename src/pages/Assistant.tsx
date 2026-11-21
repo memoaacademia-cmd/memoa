@@ -311,11 +311,11 @@ export default function Assistant() {
             <span className="hm-memo-av" style={{ width: 72, height: 72 }}><MemoAvatar animal={profile?.memo_animal ?? null} size={50} /></span>
             <strong className="h2">{profile?.memo_name ?? 'Memo'}</strong>
             {!introSeen && (
-              <div className="notice" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 8, textAlign: 'left' }}>
+              <div className="as-intro" role="status">
                 <span>Salut ! Je m’appelle {profile?.memo_name || 'Memo'}, je suis ton assistant d’étude. Tu peux changer mon animal et me donner le nom que tu veux.</span>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <Link to="/adoption?change=1" className="pill-btn sm" onClick={() => { setPref('memo-intro-seen', '1'); setIntroSeen(true) }}>Changer mon Memo</Link>
-                  <button type="button" className="pill-btn sm ghost" onClick={() => { setPref('memo-intro-seen', '1'); setIntroSeen(true) }}>Compris</button>
+                  <button type="button" className="pill-btn sm outline" onClick={() => { setPref('memo-intro-seen', '1'); setIntroSeen(true) }}>Compris</button>
                 </div>
               </div>
             )}

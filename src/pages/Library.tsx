@@ -10,6 +10,9 @@ import { AuthorSheet, PlaqueAvatar } from '../components/AuthorBadge'
 import type { LibAuthor, LibDoc, LibSocial } from '../lib/types'
 
 const TYPES = ['Cours', 'TP', 'Examen', 'Résumé', 'Autre']
+/** Genres de la section « Autre » (livres, compositions personnelles…). */
+const OTHER_TYPES = ['Livre', 'Composition', 'Autre']
+type Section = 'academique' | 'autre'
 
 /** Minuscules sans accents : « Résumé » et « resume » se trouvent mutuellement. */
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -28,10 +31,11 @@ export default function Library() {
   const [q, setQ] = useState('')
   const [promo, setPromo] = useState('')
   const [fac, setFac] = useState('')
+  const [section, setSection] = useState<Section>('academique')
   const [publishing, setPublishing] = useState(false)
   const [reporting, setReporting] = useState<string | null>(null)
   const [thanks, setThanks] = useState('')
-  const { data, loading, error, reload } = useLoad(() => listDocs(promo || null, fac || null), [promo, fac])
+  const { data, loading, error, reload } = useLoad(() => listDocs(promo || null, fac || null, section), [promo, fac, section])
   const trash = useLoad(() => listMyTrashedDocs(user?.id ?? ''), [user?.id])
   const [showTrash, setShowTrash] = useState(false)
   const act = useAction()
@@ -81,8 +85,9 @@ export default function Library() {
     })
   }, [data, q])
 
-  const filtered = !!(q.trim() || promo || fac)
+  const filtered = !!(q.trim() || (section === 'academique' && (promo || fac)))
   function reset() { setQ(''); setPromo(''); setFac('') }
+  function pickSection(s: Section) { if (s === section) return; setSection(s); setPromo(''); setFac(''); setQ('') }
 
   async function fav(d: LibDoc) {
     if (!user) return
@@ -137,7 +142,7 @@ export default function Library() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
           <h1 className="h1 big" style={{ margin: 0 }}>Librairie</h1>
-          <span className="muted">{shown.length} {shown.length > 1 ? 'documents partagés' : 'document partagé'} par des étudiants</span>
+          <span className="muted">{shown.length} {shown.length > 1 ? 'documents partagés' : 'document partagé'} par des étudiants{section === 'autre' ? ' · section Autre' : ''}</span>
         </div>
         <PillButton size="sm" tour="lib-publish" onClick={() => setPublishing((v) => !v)}><Icon name="upload" size={18} /> Publier</PillButton>
       </div>
@@ -152,29 +157,37 @@ export default function Library() {
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
-      <div className="row" data-tour="lib-filters">
-        <select className="select" aria-label="Faculté" value={fac} onChange={(e) => setFac(e.target.value)}>
-          <option value="">Faculté : toutes</option>
-          {faculties.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-        <select className="select" aria-label="Promotion" value={promo} onChange={(e) => setPromo(e.target.value)}>
-          <option value="">Promotion : toutes</option>
-          {PROMOTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
+      <div className="lib-sections" role="group" aria-label="Section de la Librairie">
+        <button type="button" className={'lib-sec' + (section === 'academique' ? ' on' : '')} aria-pressed={section === 'academique'} onClick={() => pickSection('academique')}>Cours et études</button>
+        <button type="button" className={'lib-sec' + (section === 'autre' ? ' on' : '')} aria-pressed={section === 'autre'} onClick={() => pickSection('autre')}>Autre</button>
       </div>
+      {section === 'academique' ? (
+        <div className="row" data-tour="lib-filters">
+          <select className="select" aria-label="Faculté" value={fac} onChange={(e) => setFac(e.target.value)}>
+            <option value="">Faculté : toutes</option>
+            {faculties.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <select className="select" aria-label="Promotion" value={promo} onChange={(e) => setPromo(e.target.value)}>
+            <option value="">Promotion : toutes</option>
+            {PROMOTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+      ) : (
+        <span className="muted" style={{ fontSize: 13 }}>Livres, compositions personnelles et autres textes qui ne sont pas un cours d’une promotion.</span>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="muted">{filtered ? 'Résultats' : 'Tout'} · {shown.length} {shown.length > 1 ? 'documents' : 'document'}</span>
         {filtered && <button type="button" className="link" onClick={reset}>Tout afficher</button>}
       </div>
 
-      {publishing && <PublishForm defaultPromo={promo || 'L1'} onDone={() => { setPublishing(false); reload() }} />}
+      {publishing && <PublishForm defaultPromo={promo || 'L1'} defaultSection={section} onDone={() => { setPublishing(false); reload() }} />}
 
       <ErrorBox message={error ?? act.error} />
       {thanks && <div className="notice" role="status">{thanks}</div>}
       {loading && !data ? <Spinner /> : !shown.length ? (
         <Empty
-          title={filtered ? 'Aucun document ne correspond' : "Aucun document pour l'instant"}
-          text={filtered ? 'Essaie un autre mot, ou touche « Tout afficher ».' : 'Sois le premier à partager un document avec les étudiants.'}
+          title={filtered ? 'Aucun document ne correspond' : section === 'autre' ? "Rien dans « Autre » pour l'instant" : "Aucun document pour l'instant"}
+          text={filtered ? 'Essaie un autre mot, ou touche « Tout afficher ».' : section === 'autre' ? 'Sois le premier à partager un livre ou une composition.' : 'Sois le premier à partager un document avec les étudiants.'}
         />
       ) : (
         <div data-tour="lib-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -184,9 +197,9 @@ export default function Library() {
                 <DocCover filePath={d.file_path} type={d.doc_type} title={d.title} />
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <strong style={{ fontSize: 15, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{d.title}</strong>
-                  <span className="muted" style={{ fontSize: 13 }}>{[d.faculty, d.promotion, d.department].filter(Boolean).join(' · ')}</span>
+                  <span className="muted" style={{ fontSize: 13 }}>{d.section === 'autre' ? d.doc_type : [d.faculty, d.promotion, d.department].filter(Boolean).join(' · ')}</span>
                   {d.course_title && <span className="muted" style={{ fontSize: 12 }}>{d.course_title}</span>}
-                  {d.university && <span className="muted" style={{ fontSize: 12 }}>{universityLabel(d.university)}</span>}
+                  {d.university && d.section !== 'autre' && <span className="muted" style={{ fontSize: 12 }}>{universityLabel(d.university)}</span>}
                   {d.status === 'rejected' && <span className="badge amber" style={{ alignSelf: 'flex-start' }}>Retiré après vérification</span>}
                   {d.status === 'pending' && <span className="badge amber" style={{ alignSelf: 'flex-start' }}>En vérification… (1 à 2 minutes)</span>}
                 </div>
@@ -261,12 +274,13 @@ export default function Library() {
   )
 }
 
-function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: () => void }) {
+function PublishForm({ defaultPromo, defaultSection, onDone }: { defaultPromo: string; defaultSection: Section; onDone: () => void }) {
   const { user, profile } = useAuth()
   const { busy, error, setError, run } = useAction()
   const known = allFaculties()
+  const [target, setTarget] = useState<Section>(defaultSection)
   const [title, setTitle] = useState('')
-  const [type, setType] = useState('Cours')
+  const [type, setType] = useState(defaultSection === 'autre' ? 'Livre' : 'Cours')
   const [course, setCourse] = useState('')
   const [promo, setPromo] = useState(defaultPromo)
   const [fac, setFac] = useState(profile && known.includes(profile.faculty) ? profile.faculty : 'autre')
@@ -281,12 +295,20 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!user || !profile) return
-    const faculty = fac === 'autre' ? facTxt.trim() : fac
-    if (!faculty) return setError('Indique la faculté concernée.')
-    const department = writeDep ? depTxt.trim() : dep
+    const other = target === 'autre'
+    const faculty = other ? '' : fac === 'autre' ? facTxt.trim() : fac
+    if (!other && !faculty) return setError('Indique la faculté concernée.')
+    const department = other ? '' : writeDep ? depTxt.trim() : dep
     setPhase('send')
     const ok = await run(async () => {
-      const id = await publishDoc(user.id, { title, doc_type: type, university: profile.university, faculty, department, promotion: promo, course_title: course.trim() }, file)
+      // Pour un document d'études, aucun champ « section » n'est envoyé : tout marche même avant la mise à jour 0033 de la base.
+      const id = await publishDoc(
+        user.id,
+        other
+          ? { title, doc_type: type, university: '', faculty: '', department: '', promotion: '', course_title: course.trim(), section: 'autre' }
+          : { title, doc_type: type, university: profile.university, faculty, department, promotion: promo, course_title: course.trim() },
+        file
+      )
       // Vérification par le serveur (il lit lui-même le fichier) : il publie le document, ou le refuse s'il est clairement n'importe quoi.
       // Si cet appel échoue (réseau), le document reste « en vérification » et la vérification est relancée à la prochaine ouverture de la Librairie.
       if (id) {
@@ -301,31 +323,44 @@ function PublishForm({ defaultPromo, onDone }: { defaultPromo: string; onDone: (
   return (
     <form onSubmit={submit} className="rg" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
       <span className="label-mono">Publier un document</span>
+      <div className="lib-sections" role="group" aria-label="Où publier ?">
+        <button type="button" className={'lib-sec' + (target === 'academique' ? ' on' : '')} aria-pressed={target === 'academique'} onClick={() => { setTarget('academique'); setType('Cours') }}>Cours et études</button>
+        <button type="button" className={'lib-sec' + (target === 'autre' ? ' on' : '')} aria-pressed={target === 'autre'} onClick={() => { setTarget('autre'); setType('Livre') }}>Autre (livre, composition…)</button>
+      </div>
       <div className="field"><label htmlFor="pt">Titre</label><input id="pt" className="input" maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-      <div className="row">
-        <div className="field"><label htmlFor="pty">Type</label><select id="pty" className="select" value={type} onChange={(e) => setType(e.target.value)}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-        <div className="field"><label htmlFor="pp">Promotion</label><select id="pp" className="select" value={promo} onChange={(e) => setPromo(e.target.value)}>{PROMOTIONS.map((p) => <option key={p}>{p}</option>)}</select></div>
-      </div>
-      <div className="field"><label htmlFor="pc">Cours concerné</label><input id="pc" className="input" maxLength={100} value={course} onChange={(e) => setCourse(e.target.value)} /></div>
-      <div className="field">
-        <label htmlFor="pf">Faculté</label>
-        <select id="pf" className="select" value={fac} onChange={(e) => { setFac(e.target.value); setDep(''); setDepTxt('') }}>
-          {known.map((f) => <option key={f} value={f}>{f}</option>)}
-          <option value="autre">Autre faculté (je l'écris moi-même)</option>
-        </select>
-        {fac === 'autre' && <input className="input" aria-label="Nom de la faculté" placeholder="Écris le nom de la faculté" value={facTxt} onChange={(e) => setFacTxt(e.target.value)} />}
-      </div>
-      <div className="field">
-        <label htmlFor="pd">Département (facultatif)</label>
-        {fac !== 'autre' && (
-          <select id="pd" className="select" value={dep} onChange={(e) => setDep(e.target.value)}>
-            <option value="">Je ne précise pas</option>
-            {deps.map((d) => <option key={d} value={d}>{d}</option>)}
-            <option value="autre">Autre département (je l'écris moi-même)</option>
+      {target === 'autre' ? (
+        <>
+          <div className="field"><label htmlFor="pty">Genre</label><select id="pty" className="select" value={type} onChange={(e) => setType(e.target.value)}>{OTHER_TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+          <div className="field"><label htmlFor="pc">De quoi ça parle ? (facultatif)</label><input id="pc" className="input" maxLength={100} placeholder="Une ligne pour donner envie de le lire" value={course} onChange={(e) => setCourse(e.target.value)} /></div>
+        </>
+      ) : (
+        <>
+        <div className="row">
+          <div className="field"><label htmlFor="pty">Type</label><select id="pty" className="select" value={type} onChange={(e) => setType(e.target.value)}>{TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
+          <div className="field"><label htmlFor="pp">Promotion</label><select id="pp" className="select" value={promo} onChange={(e) => setPromo(e.target.value)}>{PROMOTIONS.map((p) => <option key={p}>{p}</option>)}</select></div>
+        </div>
+        <div className="field"><label htmlFor="pc">Cours concerné</label><input id="pc" className="input" maxLength={100} value={course} onChange={(e) => setCourse(e.target.value)} /></div>
+        <div className="field">
+          <label htmlFor="pf">Faculté</label>
+          <select id="pf" className="select" value={fac} onChange={(e) => { setFac(e.target.value); setDep(''); setDepTxt('') }}>
+            {known.map((f) => <option key={f} value={f}>{f}</option>)}
+            <option value="autre">Autre faculté (je l'écris moi-même)</option>
           </select>
-        )}
-        {writeDep && <input className="input" aria-label="Nom du département" placeholder="Écris le nom du département" maxLength={160} value={depTxt} onChange={(e) => setDepTxt(e.target.value)} />}
-      </div>
+          {fac === 'autre' && <input className="input" aria-label="Nom de la faculté" placeholder="Écris le nom de la faculté" value={facTxt} onChange={(e) => setFacTxt(e.target.value)} />}
+        </div>
+        <div className="field">
+          <label htmlFor="pd">Département (facultatif)</label>
+          {fac !== 'autre' && (
+            <select id="pd" className="select" value={dep} onChange={(e) => setDep(e.target.value)}>
+              <option value="">Je ne précise pas</option>
+              {deps.map((d) => <option key={d} value={d}>{d}</option>)}
+              <option value="autre">Autre département (je l'écris moi-même)</option>
+            </select>
+          )}
+          {writeDep && <input className="input" aria-label="Nom du département" placeholder="Écris le nom du département" maxLength={160} value={depTxt} onChange={(e) => setDepTxt(e.target.value)} />}
+        </div>
+        </>
+      )}
       <div className="field"><label htmlFor="pfile">Fichier PDF (20 Mo max)</label><input id="pfile" type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></div>
       <div className="notice">Ton document est publié tout de suite. Ne partage que ce que tu as le droit de partager : un document clairement hors sujet ou signalé par plusieurs étudiants est retiré.</div>
       <ErrorBox message={error} />

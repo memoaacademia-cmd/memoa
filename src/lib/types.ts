@@ -41,6 +41,7 @@ export interface LibDoc {
   faculty: string
   department?: string
   promotion: string
+  section?: 'academique' | 'autre'
   course_title: string
   file_path: string | null
   owner_id: string

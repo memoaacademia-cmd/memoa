@@ -428,14 +428,20 @@ export async function renameCourse(id: string, title: string): Promise<void> {
 
 /* ---------------------------- LIBRAIRIE ---------------------------- */
 
-export async function listDocs(promotion: string | null, faculty: string | null): Promise<LibDoc[]> {
+export async function listDocs(promotion: string | null, faculty: string | null, section: 'academique' | 'autre' = 'academique'): Promise<LibDoc[]> {
   let q = sb().from('library_documents').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300)
   if (promotion) q = q.eq('promotion', promotion)
   if (faculty) q = q.eq('faculty', faculty)
+  if (section === 'autre') q = q.eq('section', 'autre')
   const [docs, favs] = await Promise.all([q, sb().from('library_favorites').select('document_id')])
-  if (docs.error) throw docs.error
+  if (docs.error) {
+    // Colonne « section » absente : la mise à jour 0033 de la base n'est pas encore faite.
+    if (section === 'autre' && /section/i.test(docs.error.message ?? '')) throw new Error("La section « Autre » sera disponible dès que la mise à jour 0033 de la base sera faite.")
+    throw docs.error
+  }
   const fav = new Set((favs.data ?? []).map((f: any) => f.document_id as string))
-  return (docs.data as LibDoc[]).map((d) => ({ ...d, is_favorite: fav.has(d.id) }))
+  // Les documents d'études (vue par défaut) ne montrent jamais ceux de la section « Autre ».
+  return (docs.data as LibDoc[]).filter((d) => section === 'autre' || d.section !== 'autre').map((d) => ({ ...d, is_favorite: fav.has(d.id) }))
 }
 
 const ALLOWED_DOC_TYPES = ['application/pdf']
@@ -443,7 +449,7 @@ const MAX_DOC_BYTES = 20 * 1024 * 1024
 
 export async function publishDoc(
   userId: string,
-  input: { title: string; doc_type: string; university: string; faculty: string; department?: string; promotion: string; course_title: string },
+  input: { title: string; doc_type: string; university: string; faculty: string; department?: string; promotion: string; course_title: string; section?: 'academique' | 'autre' },
   file: File | null
 ): Promise<string | null> {
   if (!input.title.trim()) fail('Donne un titre à ton document.')
@@ -461,9 +467,10 @@ export async function publishDoc(
   const { data, error } = await sb().from('library_documents').insert({ ...input, owner_id: userId, file_path, status: 'pending' }).select('id').single()
   if (error) {
     if (file_path) await sb().storage.from('library').remove([file_path]).catch(() => { /* le fichier orphelin sera retiré plus tard */ }) // le document n'a pas été créé (ex. plafond de 30) : on ne garde pas le fichier déposé
+    if (input.section === 'autre' && /section|check constraint|violates/i.test(error.message ?? '')) throw new Error("La section « Autre » n'est pas encore activée : la mise à jour 0033 de la base reste à faire.")
     throw error
   }
-  track('library_publish', { type: input.doc_type, pdf: !!file })
+  track('library_publish', { type: input.doc_type, pdf: !!file, section: input.section ?? 'academique' })
   return (data as { id: string }).id
 }
 
