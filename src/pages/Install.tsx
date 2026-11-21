@@ -115,7 +115,7 @@ export default function Install() {
       <span className="muted">Apple n’autorise pas le bouton d’installation direct : il faut passer par Safari.</span>
       <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Step n={1}>Ouvre cette page dans <b>Safari</b> (pas dans Chrome).</Step>
-        <Step n={2}>Touche <b>Partager</b> <ShareIcon /> en bas de l’écran.</Step>
+        <Step n={2}>Touche les <b>trois points</b> <MenuIcon /> tout en bas à droite de Safari, puis <b>Partager</b> <ShareIcon /> (sur un ancien iPhone : directement <b>Partager</b>, en bas).</Step>
         <Step n={3}>Fais défiler et touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
         <Step n={4}>Touche <b>Ajouter</b> en haut à droite.</Step>
       </ol>
@@ -181,14 +181,21 @@ export default function Install() {
           <div className="card" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <strong className="h2">Ajouter Memoa à l’écran d’accueil</strong>
             <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Step n={1}>Touche le bouton <b>Partager</b> <ShareIcon /> de <b>Safari</b> {device === 'IPAD' ? 'en haut à droite' : 'tout en bas de l’écran (flèche ci-dessous)'}.</Step>
-              <Step n={2}>Dans la fenêtre qui s’ouvre, <b>glisse vers le haut</b> pour voir toute la liste, puis touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
-              <Step n={3}>Si tu ne le vois pas, descends tout en bas de la liste : touche <b>Modifier les actions</b> et ajoute « Sur l’écran d’accueil ».</Step>
-              <Step n={4}>Touche <b>Ajouter</b> en haut à droite.</Step>
+              {device === 'IPAD' ? (
+                <Step n={1}>Touche le bouton <b>Partager</b> <ShareIcon /> de <b>Safari</b>, en haut à droite.</Step>
+              ) : (
+                <>
+                  <Step n={1}>Touche les <b>trois points</b> <MenuIcon /> tout en bas à droite de la barre de <b>Safari</b> (la flèche te les montre).</Step>
+                  <Step n={2}>Dans le menu, touche <b>Partager</b> <ShareIcon />. (Sur un ancien iPhone, il n’y a pas de trois points : touche directement <b>Partager</b>, au milieu en bas.)</Step>
+                </>
+              )}
+              <Step n={device === 'IPAD' ? 2 : 3}>Dans la fenêtre qui s’ouvre, <b>glisse vers le haut</b> pour voir toute la liste, puis touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
+              <Step n={device === 'IPAD' ? 3 : 4}>Si tu ne le vois pas, descends tout en bas de la liste : touche <b>Modifier les actions</b> et ajoute « Sur l’écran d’accueil ».</Step>
+              <Step n={device === 'IPAD' ? 4 : 5}>Touche <b>Ajouter</b> en haut à droite.</Step>
             </ol>
             <button type="button" className="pill-btn" onClick={() => setGuide(false)}>J’ai compris</button>
           </div>
-          {device !== 'IPAD' && <div aria-hidden="true" style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 54px)', textAlign: 'center', color: '#fff', fontSize: 40, lineHeight: 1 }}>↓</div>}
+          {device !== 'IPAD' && <div aria-hidden="true" style={{ position: 'fixed', right: 14, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 46px)', color: '#fff', fontSize: 52, lineHeight: 1, fontWeight: 700, textAlign: 'right' }}>↘<div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>les 3 points</div></div>}
         </div>
       )}
       <button type="button" className="btn ghost" onClick={() => void shareLink()}>Partager ce lien</button>
