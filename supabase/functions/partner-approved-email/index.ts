@@ -1,4 +1,4 @@
-// partner-approved-email : e-mail de bienvenue envoyé à un partenaire juste après son approbation dans ton tableau de bord.
+// partner-approved-email : e-mails envoyés à un partenaire depuis ton tableau de bord : « welcome » (juste après l'approbation, ou renvoi) et « suspended » (suspension, avec le motif que tu écris).
 // Appelée par public/app-admin.html (bouton « Approuver »), avec ta session d'administrateur : la fonction vérifie elle-même que l'appelant est dans app_admins.
 // Fichier autonome (à coller tel quel dans l'éditeur du tableau de bord Supabase ; désactive « Verify JWT »).
 // Secrets à ajouter (Edge Functions > Secrets) :
@@ -33,10 +33,19 @@ Deno.serve(async (req) => {
 
   // 2) Le partenaire doit exister et être actif.
   let partnerId = ''
-  try { partnerId = String(((await req.json()) as { partner_id?: unknown })?.partner_id ?? '') } catch { /* corps vide */ }
+  let kind = 'welcome'
+  let reason = ''
+  try {
+    const b = (await req.json()) as { partner_id?: unknown; kind?: unknown; reason?: unknown }
+    partnerId = String(b?.partner_id ?? '')
+    if (b?.kind === 'suspended') kind = 'suspended'
+    reason = String(b?.reason ?? '').trim().slice(0, 400)
+  } catch { /* corps vide */ }
   if (!UUID.test(partnerId)) return json(400, { error: 'Identifiant invalide' })
+  if (kind === 'suspended' && !reason) return json(400, { error: 'Motif obligatoire' })
   const { data: p } = await admin.from('partners').select('id,status,code,full_name,user_id').eq('id', partnerId).maybeSingle()
-  if (!p || p.status !== 'active' || !p.code || !p.user_id) return json(200, { sent: false, reason: 'partenaire introuvable ou pas encore actif' })
+  const wanted = kind === 'suspended' ? 'suspended' : 'active'
+  if (!p || p.status !== wanted || !p.user_id || (kind === 'welcome' && !p.code)) return json(200, { sent: false, reason: kind === 'suspended' ? 'ce partenaire n’est pas suspendu' : 'partenaire introuvable ou pas actif' })
 
   // 3) Adresse e-mail du partenaire (compte de connexion).
   const { data: pu } = await admin.auth.admin.getUserById(p.user_id)
@@ -52,7 +61,29 @@ Deno.serve(async (req) => {
   const hello = first ? `Bonjour ${first},` : 'Bonjour,'
   const site = (Deno.env.get('SITE_URL') ?? '').trim()
   const base = /^https?:\/\//i.test(site) ? site.split('#')[0].split('?')[0] : ''
-  const link = base ? `${base}?ref=${encodeURIComponent(p.code)}` : ''
+  const link = base && p.code ? `${base}?ref=${encodeURIComponent(p.code)}` : ''
+
+  const suspended = kind === 'suspended'
+  const subject = suspended ? 'Ton compte partenaire Memoa a été suspendu' : 'Tu es maintenant partenaire Memoa'
+
+  const textSusp = [
+    hello,
+    '',
+    'Ton compte partenaire Memoa a été suspendu. Ton code ne parraine plus de nouveaux étudiants pour le moment.',
+    '',
+    `Motif : ${reason}`,
+    '',
+    'Si tu penses qu’il s’agit d’une erreur, contacte l’équipe Memoa.',
+    '',
+    'L’équipe Memoa'
+  ].join('\n')
+  const htmlSusp = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#0e1a2b;max-width:520px">
+<p>${esc(hello)}</p>
+<p>Ton compte partenaire Memoa a été <b>suspendu</b>. Ton code ne parraine plus de nouveaux étudiants pour le moment.</p>
+<p style="background:#EEF2F0;border-radius:12px;padding:12px 16px"><b>Motif :</b> ${esc(reason)}</p>
+<p>Si tu penses qu’il s’agit d’une erreur, contacte l’équipe Memoa.</p>
+<p>L’équipe Memoa</p>
+</div>`
 
   const text = [
     hello,
@@ -93,7 +124,7 @@ ${link ? `<p style="margin:18px 0 6px">Ton lien d’invitation</p><p style="marg
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], subject: 'Tu es maintenant partenaire Memoa', html, text })
+      body: JSON.stringify({ from, to: [to], subject, html: suspended ? htmlSusp : html, text: suspended ? textSusp : text })
     })
     if (!r.ok) {
       console.error('partner-approved-email : Resend HTTP', r.status)

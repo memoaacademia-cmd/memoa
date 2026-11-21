@@ -36,3 +36,7 @@ verify_jwt = false
 # la fonction vérifie elle-même le jeton et la présence dans app_admins.
 [functions.partner-approved-email]
 verify_jwt = false
+
+# Les e-mails automatiques d'inscription (rappel + bienvenue) sont lancés par la planification de Supabase (CRON_SECRET vérifié dans le code).
+[functions.lifecycle-emails]
+verify_jwt = false
