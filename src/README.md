@@ -16,11 +16,18 @@ Compagnon académique pour les étudiants (RDC d'abord). React + Vite (interface
 
 ```bash
 npm install
-npm run dev        # sans clés Supabase : MODE DÉMO (données dans le navigateur)
+npm run dev        # nécessite .env.local avec VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
 npm run build      # vérifie aussi les types TypeScript
 ```
 
-Le mode démo sert à explorer l'interface. Il ne protège rien (mots de passe en clair dans le navigateur) : jamais en production.
+Il n'y a plus de mode démo : sans les deux clés Supabase, l'appli affiche un écran « Configuration manquante ».
+
+## Interrupteurs, lecture des photos et tableau de bord administrateur
+
+- **Interrupteurs** : `src/lib/features.ts` (true = actif, false = caché). Recherche web, notifications, dictée, Librairie, Assistant TP, cartes automatiques, paiement Premium actifs ; création d'images éteinte.
+- **Lecture des photos de cahier** : l'IA « vision » du serveur lit maintenant la photo (écriture manuscrite, tableaux recopiés en `| a | b |`). Tâche `read_photo` dans `ai-gateway` (à redéployer, ET à recopier dans la fonction `bright-worker` si c'est elle que l'appli appelle). Modèle : secret `VISION_MODEL` (un modèle qui lit les images), sinon `AI_MODEL_STRONG`. Si l'IA ne répond pas, l'appli retombe sur l'ancienne lecture du téléphone (texte imprimé seulement).
+- **Tableau de bord administrateur** : c'est la page séparée `public/app-admin.html` (adresse du site + `/app-admin.html`), PAS une page de l'appli. Elle se connecte avec ton compte administrateur (`app_admins`) et montre : chiffres clés, inscriptions, parcours, IA, erreurs, la liste des étudiants (dernière connexion, dernière activité, cours, notes, cartes, Premium, essai) et les tables paiements, abonnements, essais, avis, erreurs, journal IA, demandes IA, Librairie (publier / refuser), notifications. À exécuter dans Supabase : `0028_tableau_de_bord.sql` (chiffres) puis `0032_admin_tableau_complet.sql` (listes ; peut être rejouée sans risque).
+- Plus de mode démo ni de paiement en fenêtre intégrée.
 
 ## Visites guidées
 
@@ -66,7 +73,7 @@ Dépôt GitHub → Settings → Pages → Source : *GitHub Actions*. Ajoute les 
 ## Points à décider ou vérifier
 
 - Paiement : Chariow retenu (OPTGateway abandonné). Moyens de paiement réellement proposés en RDC à confirmer sur la page de paiement.
-- Limites gratuites de l'IA (`AI_FREE_PER_DAY` = 10 par défaut, valeur provisoire) et prix (4,50 USD / 10 500 FC) : à valider avec de vrais étudiants et le coût réel par utilisateur.
+- Limites gratuites de l'IA (`AI_FREE_PER_DAY` = 10 par défaut, valeur provisoire) et prix (4,05 USD / 9 000 FC) : à valider avec de vrais étudiants et le coût réel par utilisateur.
 - Email de confirmation après Google : Google vérifie déjà l'adresse ; un email de confirmation supplémentaire demande un envoi d'email personnalisé (non fait).
 - Sources Voix, Audio, Vidéo, PDF, Photo : affichées « Bientôt » ; seul le texte est actif. Prévoir un traitement asynchrone (et l'enregistreur basse consommation).
 - Photos des animaux : illustrations vectorielles provisoires.

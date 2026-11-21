@@ -1,6 +1,7 @@
 // Dictée vocale et lecture à voix haute : tout se fait avec le navigateur du téléphone, sans serveur ni coût.
 import { useSyncExternalStore } from 'react'
 import { track } from './track'
+import { DICTATION_ENABLED } from './features'
 import { toSpeechText } from './blocks'
 
 /** Lecture en cours (une seule à la fois). Partagée par toute l'application : le mini-lecteur la montre sur tous les écrans. */
@@ -46,7 +47,7 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
-export const canDictate = () => recognitionCtor() !== null
+export const canDictate = () => DICTATION_ENABLED && recognitionCtor() !== null
 export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis' in window
 
 export interface Dictation {

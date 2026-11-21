@@ -39,6 +39,7 @@ export default function Install() {
   const [note, setNote] = useState('')
   const [hl, setHl] = useState(false)
   const [shareNote, setShareNote] = useState('')
+  const [guide, setGuide] = useState(false)
   const stepsRef = useRef<HTMLDivElement | null>(null)
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
   // iPad récent : il se présente comme un Mac, mais il a un écran tactile.
@@ -76,13 +77,11 @@ export default function Install() {
     if (ev) return install()
     if (isIos && !iosSafari) setNote('Tu n’es pas dans Safari. Ouvre ce lien dans Safari (menu ⋯ ou icône boussole, puis « Ouvrir dans Safari »), puis suis les étapes ci-dessous.')
     else if (isIos) {
-      // Apple ne permet à aucun site de déclencher l'installation. Le plus court possible : ce bouton ouvre tout de suite la fenêtre Partager
-      // (l'étudiant saute l'étape « toucher Partager »), il ne reste que « Sur l'écran d'accueil » puis « Ajouter ».
-      setNote('Dans la fenêtre qui s’ouvre : fais défiler un peu, touche « Sur l’écran d’accueil », puis « Ajouter » en haut à droite.')
-      if (typeof navigator.share === 'function') {
-        try { await navigator.share({ title: 'Memoa', url: window.location.origin + window.location.pathname }); return } catch (e) { if ((e as Error).name === 'AbortError') return }
-      }
-      setNote('Sur iPhone, Apple impose 3 touches : Partager, puis « Sur l’écran d’accueil », puis Ajouter. Suis les étapes ci-dessous.')
+      // Apple ne laisse aucun site ouvrir SON bouton Partager. navigator.share() ouvre une AUTRE fenêtre (celle des applis),
+      // où « Sur l'écran d'accueil » n'existe pas : on ne l'utilise donc plus ici. On montre à la place un guide qui pointe
+      // le vrai bouton Partager de Safari.
+      setGuide(true)
+      return
     } else setNote('Ton navigateur ne propose pas l’installation directe ici. Ouvre cette page dans Chrome, ou suis les étapes ci-dessous.')
     setHl(true)
     stepsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -176,6 +175,22 @@ export default function Install() {
       <div ref={stepsRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, borderRadius: 16, outline: hl ? '3px solid var(--btn)' : '3px solid transparent', outlineOffset: 4, transition: 'outline-color .3s' }}>
         {isIos ? <>{iphone}{android}{desktop}</> : isAndroid ? <>{android}{iphone}{desktop}</> : <>{desktop}{android}{iphone}</>}
       </div>
+      {guide && (
+        <div role="dialog" aria-modal="true" aria-label="Ajouter Memoa à l’écran d’accueil" onClick={() => setGuide(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(14,26,43,.72)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <strong className="h2">Ajouter Memoa à l’écran d’accueil</strong>
+            <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Step n={1}>Touche le bouton <b>Partager</b> <ShareIcon /> de <b>Safari</b> {device === 'IPAD' ? 'en haut à droite' : 'tout en bas de l’écran (flèche ci-dessous)'}.</Step>
+              <Step n={2}>Dans la fenêtre qui s’ouvre, <b>glisse vers le haut</b> pour voir toute la liste, puis touche <b>Sur l’écran d’accueil</b> <PlusIcon />.</Step>
+              <Step n={3}>Si tu ne le vois pas, descends tout en bas de la liste : touche <b>Modifier les actions</b> et ajoute « Sur l’écran d’accueil ».</Step>
+              <Step n={4}>Touche <b>Ajouter</b> en haut à droite.</Step>
+            </ol>
+            <button type="button" className="pill-btn" onClick={() => setGuide(false)}>J’ai compris</button>
+          </div>
+          {device !== 'IPAD' && <div aria-hidden="true" style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 54px)', textAlign: 'center', color: '#fff', fontSize: 40, lineHeight: 1 }}>↓</div>}
+        </div>
+      )}
       <button type="button" className="btn ghost" onClick={() => void shareLink()}>Partager ce lien</button>
       {shareNote && <span className="muted" role="status" style={{ textAlign: 'center' }}>{shareNote}</span>}
       <Link to="/" className="link" style={{ textAlign: 'center' }}>Ouvrir Memoa</Link>

@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { ANIMALS } from '../data/animals'
+import { LIBRARY_ENABLED } from '../lib/features'
 
 /** Les trois livres. La couleur des deux livres droits suit le thème (Menthe en sombre, Kivu en clair). */
 export function Logo({ size = 32 }: { size?: number }) {
@@ -126,10 +127,10 @@ export function NavBar() {
   const items = [
     { to: '/', label: 'Accueil', icon: 'home', end: true },
     { to: '/sac', label: 'Cours', icon: 'book', also: '/cours' },
-    { to: '/librairie', label: 'Librairie', icon: 'shelf' },
+    ...(LIBRARY_ENABLED ? [{ to: '/librairie', label: 'Librairie', icon: 'shelf' }] : []),
     { to: '/assistant', label: 'Assistant', icon: 'chat' },
     { to: '/moi', label: 'Moi', icon: 'user' }
-  ]
+  ] as { to: string; label: string; icon: string; end?: boolean; also?: string }[]
   return (
     <nav className="nav" aria-label="Navigation principale" data-tour="nav">
       {items.map((i) => (

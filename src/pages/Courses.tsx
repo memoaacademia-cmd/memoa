@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import RichText from '../components/RichText'
 import { protectBlocks, toAiText } from '../lib/blocks'
 import DictateButton from '../components/Dictate'
-import { WEB_SEARCH_ENABLED } from '../lib/features'
+import { TP_ASSISTANT_ENABLED, WEB_SEARCH_ENABLED } from '../lib/features'
 import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad, WebToggle } from '../components/ui'
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
 import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
@@ -812,9 +812,11 @@ export function CourseDetail() {
       <RowGroup label="Outils">
         <Row tour="course-pdf" icon="pdf" title="Lire le PDF" sub="Ouvrir ton cours, puis le télécharger" onClick={() => void pdf('read')} disabled={!all.length || busy} />
         {canSpeak() && <Row tour="course-listen" icon="headphones" title={reading ? 'Arrêter la lecture' : 'Écouter'} sub="Lecture à voix haute" onClick={togglePanel} disabled={!all.length} />}
-        {online
+        {TP_ASSISTANT_ENABLED && (
+          online
           ? <Row tour="course-tp" icon="book" title="Assistant TP" sub="Plan et rédaction" to={`/tp/${id}`} />
-          : <Row tour="course-tp" icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />}
+          : <Row tour="course-tp" icon="book" title="Assistant TP" sub="Besoin du réseau" onClick={() => setError(OFFLINE_MSG)} disabled />
+        )}
         <Row tour="course-cards" icon="copy" title={busy && !editing ? 'Un instant…' : 'Révision'} sub={courseCards.length ? `${courseCards.filter((c) => isDue(c)).length} carte(s) à réviser · quiz disponible` : 'Cartes de révision et quiz'} onClick={() => setRevSheet(true)} disabled={busy} />
       </RowGroup>
 

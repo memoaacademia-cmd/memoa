@@ -43,8 +43,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 // ---------- Outils Chariow (dupliqués dans les 3 fonctions de paiement : l'éditeur du tableau de bord n'a pas de dossier partagé) ----------
 const CHARIOW_API = 'https://api.chariow.com/v1'
-const PRICE_USD = 4.5 // prix du produit Chariow, en USD (11 000 FC). Doit être identique au prix configuré dans Chariow.
-const PRICE_CDF = 11000 // même prix si Chariow renvoie la vente dans la devise locale
+const PRICE_USD = 4.05 // prix du produit Chariow, en USD (9 000 FC). Doit être identique au prix configuré dans Chariow.
+const PRICE_CDF = 9000 // même prix si Chariow renvoie la vente dans la devise locale
 
 /** Lit une vente chez Chariow. null = vente inconnue (404). Lève une erreur si Chariow est injoignable (→ réessai plus tard). */
 async function getSale(id: string): Promise<Record<string, any> | null> {
@@ -100,7 +100,7 @@ async function verifyAndApply(admin: SupabaseClient, saleId: string, hintUser?: 
 //   { action: 'start' } : crée la vente chez Chariow et renvoie l'adresse de la page de paiement { url }.
 //   { action: 'check' } : « J'ai payé » → revérifie ses paiements en attente directement chez Chariow (sans attendre le webhook)
 //                         et renvoie { active, expires_at }.
-// Le MONTANT n'est jamais fourni par le navigateur : le prix est celui du produit Chariow (4,50 USD), revérifié à la confirmation.
+// Le MONTANT n'est jamais fourni par le navigateur : le prix est celui du produit Chariow (4,05 USD), revérifié à la confirmation.
 //
 // Secrets Supabase attendus (jamais dans le code) :
 //   CHARIOW_API_KEY           clé secrète Chariow (sk_…)
@@ -187,8 +187,6 @@ Deno.serve(async (req) => {
         last_name: last,
         phone: { number: phone, country_code: 'CD' },
         redirect_url: redirect,
-        // Fenêtre intégrée : Chariow n'autorise l'iframe que depuis les origines déclarées ici (HTTPS, sans chemin ni « / » final).
-        ...(body.embed === true ? { embed_origins: [new URL(appUrl).origin] } : {}),
         custom_metadata: { user_id: user.id, app: 'memoa' } // trace + contrôle de cohérence côté serveur ; jamais utilisé seul pour activer
       }),
       signal: AbortSignal.timeout(20_000)

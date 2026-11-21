@@ -1,6 +1,5 @@
 // Compte : export des données de l'étudiant (un seul fichier) et suppression du compte (fonction serveur « account-delete »).
 import { isConfigured, supabase } from './supabase'
-import { loadDemo } from './demo'
 import { listDrafts, wipeLocalDrafts } from './drafts'
 import { idbStore } from './outbox'
 import { clearOfflineCopy } from './api'
@@ -34,9 +33,7 @@ export async function collectMyData(userId: string, email: string): Promise<Row>
     id: d.id, type: d.kind, titre: d.title, texte: d.body, consignes: d.guide, source: d.source,
     enregistrement_audio_en_attente: !!d.audio, cree_le: new Date(d.createdAt).toISOString(), disparait_le: new Date(d.expiresAt).toISOString()
   }))
-  if (!isConfigured || !supabase) {
-    return { ...base, mode: 'démo (données du navigateur)', donnees: loadDemo(), brouillons: drafts }
-  }
+  if (!supabase) return { ...base, brouillons: drafts }
   const [profile, courses, notes, favs, activity, conversations, messages, payments, docs, cartes, examens] = await Promise.all([
     all('profiles', '*', 'created_at', (q) => q.eq('id', userId)),
     all('courses', 'id,title,created_at,deleted_at', 'created_at'),

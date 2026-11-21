@@ -5,21 +5,18 @@ import ErrorBoundary from './components/ErrorBoundary'
 import NoticeBar from './components/NoticeBar'
 import { installTracking } from './lib/track'
 import { getPref } from './lib/prefs'
+import { isConfigured } from './lib/supabase'
 import './styles.css'
 
 // Thème appliqué avant l'affichage : clair par défaut, pas de flash sombre au démarrage.
 document.documentElement.dataset.theme = getPref('theme', 'light')
 
-// Paiement dans une fenêtre intégrée : quand Chariow nous renvoie DANS la fenêtre, on n'affiche pas toute l'appli à l'intérieur,
-// on prévient simplement l'appli parente (même origine) qui ferme la fenêtre et affiche « Activation en cours… ».
-const framed = (() => { try { return window.self !== window.top } catch { return true } })()
-if (framed && /[?&]paiement=retour/.test(window.location.search)) {
-  try { window.parent.postMessage({ type: 'memoa-paiement-retour' }, window.location.origin) } catch { /* sans importance */ }
-  const root = document.getElementById('root') as HTMLElement
-  root.style.cssText = 'display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;text-align:center;font-family:Sora,system-ui,sans-serif;color:#0b1513'
-  root.textContent = 'Paiement reçu. Activation de ton Premium en cours…'
+const root = document.getElementById('root') as HTMLElement
+if (!isConfigured) {
+  root.style.cssText = 'display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;text-align:center;font-family:Sora,system-ui,sans-serif'
+  root.textContent = 'Configuration manquante : les clés Supabase (VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY) ne sont pas renseignées.'
 } else {
-  createRoot(document.getElementById('root') as HTMLElement).render(
+  createRoot(root).render(
     <StrictMode>
       <ErrorBoundary>
         <App />

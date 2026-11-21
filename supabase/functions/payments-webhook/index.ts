@@ -43,8 +43,8 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 // ---------- Outils Chariow (dupliqués dans les 3 fonctions de paiement : l'éditeur du tableau de bord n'a pas de dossier partagé) ----------
 const CHARIOW_API = 'https://api.chariow.com/v1'
-const PRICE_USD = 4.5 // prix du produit Chariow, en USD (11 000 FC). Doit être identique au prix configuré dans Chariow.
-const PRICE_CDF = 11000 // même prix si Chariow renvoie la vente dans la devise locale
+const PRICE_USD = 4.05 // prix du produit Chariow, en USD (9 000 FC). Doit être identique au prix configuré dans Chariow.
+const PRICE_CDF = 9000 // même prix si Chariow renvoie la vente dans la devise locale
 
 /** Lit une vente chez Chariow. null = vente inconnue (404). Lève une erreur si Chariow est injoignable (→ réessai plus tard). */
 async function getSale(id: string): Promise<Record<string, any> | null> {

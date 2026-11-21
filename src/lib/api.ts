@@ -1,11 +1,9 @@
-// Couche d'accès aux données. Chaque fonction a deux implémentations :
-//  - Supabase (production) ; toute la sécurité repose sur les règles RLS de supabase/migrations
-//  - Démo (localStorage) quand les clés Supabase sont absentes.
+// Couche d'accès aux données. Toutes les fonctions passent par Supabase :
+//  - toute la sécurité repose sur les règles RLS de supabase/migrations
 // Les pages n'appellent QUE ce fichier : changer de backend ne touche pas à l'interface.
 import { cacheCourses } from './outbox'
 import { toAiText } from './blocks'
 import { isConfigured, supabase } from './supabase'
-import { loadDemo, saveDemo, uid } from './demo'
 import { shrinkImage } from './image'
 import { reportError, track } from './track'
 import type { AiTask, Conversation, Course, LibAuthor, LibDoc, LibSocial, Message, Note, Payment, Profile } from './types'
@@ -97,11 +95,6 @@ const isNetworkFailure = (e: unknown) => {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const u = db.users.find((x) => x.id === db.session)
-    return u ? { id: u.id, email: u.email, phone: u.phone, needsPassword: u.password === '' || !u.phone, passwordSet: u.password !== '' } : null
-  }
   // Téléphone sans réseau : inutile d'attendre le serveur, on reprend tout de suite le dernier étudiant connu.
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     const known = readUserCache()
@@ -146,29 +139,12 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 export function onAuthChange(cb: (event?: string) => void): () => void {
-  if (!isConfigured) {
-    const handler = () => cb()
-    window.addEventListener('memoa-demo-auth', handler)
-    return () => window.removeEventListener('memoa-demo-auth', handler)
-  }
   const { data } = sb().auth.onAuthStateChange((event) => cb(event))
   return () => data.subscription.unsubscribe()
 }
 
-const pingDemoAuth = () => window.dispatchEvent(new Event('memoa-demo-auth'))
-
 /** Retourne needsConfirmation=true quand un email de confirmation doit être ouvert. */
 export async function signUp(email: string, password: string, phone: string): Promise<{ needsConfirmation: boolean }> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    if (db.users.some((u) => u.email === email)) fail('Un compte existe déjà avec cet email. Connecte-toi.')
-    const id = uid()
-    db.users.push({ id, email, password, phone })
-    db.session = id
-    saveDemo(db)
-    pingDemoAuth()
-    return { needsConfirmation: false }
-  }
   const { data, error } = await sb().auth.signUp({
     email,
     password,
@@ -183,31 +159,11 @@ export async function signUp(email: string, password: string, phone: string): Pr
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const u = db.users.find((x) => x.email === email && x.password === password)
-    if (!u) fail('Email ou mot de passe incorrect.')
-    else {
-      db.session = u.id
-      saveDemo(db)
-      pingDemoAuth()
-    }
-    return
-  }
   const { error } = await sb().auth.signInWithPassword({ email, password })
   if (error) throw error
 }
 
 export async function signInWithGoogle(): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const id = uid()
-    db.users.push({ id, email: `etudiant+${id.slice(0, 4)}@gmail.com`, password: '', phone: null })
-    db.session = id
-    saveDemo(db)
-    pingDemoAuth()
-    return
-  }
   const { error } = await sb().auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin + window.location.pathname }
@@ -255,15 +211,6 @@ export async function verifyRecoveryCode(email: string, code: string): Promise<v
 
 /** Après la validation du code (ou du lien) reçu par email : choisit le nouveau mot de passe. */
 export async function updatePassword(password: string): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const u = db.users.find((x) => x.id === db.session)
-    if (u) {
-      u.password = password
-      saveDemo(db)
-    }
-    return
-  }
   const { error } = await sb().auth.updateUser({ password, data: { password_set: true } })
   if (error) throw error
 }
@@ -286,29 +233,12 @@ export async function sendFeedback(userId: string, kind: FeedbackKind, message: 
 
 /** Après Google : création du mot de passe + numéro, pour pouvoir se reconnecter avec email + mot de passe. */
 export async function setPasswordAndPhone(password: string | null, phone: string): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const u = db.users.find((x) => x.id === db.session)
-    if (u) {
-      if (password) u.password = password
-      u.phone = phone
-      saveDemo(db)
-    }
-    return
-  }
   const { error } = await sb().auth.updateUser({ ...(password ? { password } : {}), data: { phone, password_set: true } })
   if (error) throw error
 }
 
 export async function signOut(): Promise<void> {
   clearOfflineCopy()
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.session = null
-    saveDemo(db)
-    pingDemoAuth()
-    return
-  }
   writeUserCache(null)
   await sb().auth.signOut()
 }
@@ -316,27 +246,12 @@ export async function signOut(): Promise<void> {
 /* ----------------------------- PROFIL ----------------------------- */
 
 export async function getProfile(userId: string): Promise<Profile | null> {
-  if (!isConfigured) return loadDemo().profiles.find((p) => p.id === userId) ?? null
   const { data, error } = await withTimeout(sb().from('profiles').select('*').eq('id', userId).maybeSingle(), 5000)
   if (error) throw error
   return (data as Profile | null) ?? null
 }
 
 export async function saveProfile(userId: string, patch: Partial<Omit<Profile, 'id'>>): Promise<Profile> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    let p = db.profiles.find((x) => x.id === userId)
-    if (!p) {
-      p = {
-        id: userId, full_name: '', last_name: '', post_name: '', first_name: '', phone: null, university: '', faculty: '', department: '',
-        promotion: 'L1', vacation: '', avatar_url: null, memo_animal: null, memo_name: null
-      }
-      db.profiles.push(p)
-    }
-    Object.assign(p, patch)
-    saveDemo(db)
-    return p
-  }
   const { data, error } = await sb().from('profiles').upsert({ id: userId, ...patch }).select().single()
   if (error) throw error
   return data as Profile
@@ -347,14 +262,6 @@ export async function uploadAvatar(userId: string, original: File): Promise<stri
   const file = await shrinkImage(original)
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) fail('Ce format n’est pas pris en charge. Choisis une photo JPG, PNG ou WebP.')
   if (file.size > 3 * 1024 * 1024) fail('Cette photo est trop lourde. Choisis-en une autre.')
-  if (!isConfigured) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader()
-      r.onload = () => resolve(String(r.result))
-      r.onerror = () => reject(new Error('Lecture impossible'))
-      r.readAsDataURL(file)
-    })
-  }
   const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
   const path = `${userId}/avatar.${ext}`
   const { error } = await sb().storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type })
@@ -389,13 +296,6 @@ export function clearOfflineCopy() {
 export const TRASH_DAYS = 30
 
 export async function listCourses(userId: string): Promise<Course[]> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    return db.courses
-      .filter((c) => !c.deleted_at)
-      .map((c) => ({ ...c, notes_count: db.notes.filter((n) => n.course_id === c.id).length }))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-  }
   void userId
   // Sans réseau : la copie locale s'affiche tout de suite, sans attendre.
   if (typeof navigator !== 'undefined' && !navigator.onLine) { const old = readOffline<Course[]>('courses'); if (old) return old }
@@ -426,18 +326,6 @@ export async function listCourses(userId: string): Promise<Course[]> {
 /** Cours dans la corbeille (30 jours). Efface d'abord pour de bon ceux dont le délai est passé. */
 export async function listTrashedCourses(): Promise<Course[]> {
   const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString()
-  if (!isConfigured) {
-    const db = loadDemo()
-    const gone = db.courses.filter((c) => c.deleted_at && c.deleted_at < cutoff).map((c) => c.id)
-    if (gone.length) {
-      db.courses = db.courses.filter((c) => !gone.includes(c.id))
-      db.notes = db.notes.filter((n) => !gone.includes(n.course_id))
-      saveDemo(db)
-    }
-    return db.courses
-      .filter((c) => c.deleted_at)
-      .map((c) => ({ ...c, notes_count: db.notes.filter((n) => n.course_id === c.id).length }))
-  }
   await sb().from('courses').delete().lt('deleted_at', cutoff) // les règles RLS limitent à ses propres cours
   const { data, error } = await sb()
     .from('courses')
@@ -453,12 +341,6 @@ export async function listTrashedCourses(): Promise<Course[]> {
 /** Met un cours à la corbeille (restaurable pendant 30 jours) ou le restaure. */
 export async function setCourseTrashed(id: string, trashed: boolean): Promise<void> {
   const value = trashed ? new Date().toISOString() : null
-  if (!isConfigured) {
-    const db = loadDemo()
-    const c = db.courses.find((x) => x.id === id)
-    if (c) { c.deleted_at = value; saveDemo(db) }
-    return
-  }
   const { error } = await sb().from('courses').update({ deleted_at: value }).eq('id', id)
   if (error) throw error
 }
@@ -471,13 +353,6 @@ export async function getCourse(id: string): Promise<Course | null> {
 export async function createCourse(userId: string, title: string): Promise<Course> {
   const clean = title.trim()
   if (!clean) fail('Donne un nom à ton cours.')
-  if (!isConfigured) {
-    const db = loadDemo()
-    const c = { id: uid(), title: clean, created_at: new Date().toISOString() }
-    db.courses.push(c)
-    saveDemo(db)
-    return { ...c, notes_count: 0 }
-  }
   const { data, error } = await sb().from('courses').insert({ user_id: userId, title: clean }).select().single()
   if (error) throw error
   track('course_created', { source: 'en_ligne' })
@@ -485,9 +360,6 @@ export async function createCourse(userId: string, title: string): Promise<Cours
 }
 
 export async function listNotes(courseId: string): Promise<Note[]> {
-  if (!isConfigured) {
-    return loadDemo().notes.filter((n) => n.course_id === courseId).sort((a, b) => a.created_at.localeCompare(b.created_at))
-  }
   if (typeof navigator !== 'undefined' && !navigator.onLine) { const old = readOffline<Note[]>('notes:' + courseId); if (old) return old }
   let res
   try {
@@ -518,13 +390,6 @@ function snippetOf(content: string, q: string): string {
 export async function searchNotes(userId: string, query: string): Promise<NoteHit[]> {
   const q = query.replace(/[%,()_*\\]/g, ' ').trim()
   if (q.length < 2) return []
-  if (!isConfigured) {
-    const needle = q.toLowerCase()
-    return loadDemo().notes
-      .filter((n) => n.title.toLowerCase().includes(needle) || n.content.toLowerCase().includes(needle))
-      .slice(0, 8)
-      .map((n) => ({ id: n.id, course_id: n.course_id, title: n.title, snippet: snippetOf(toAiText(n.content), q) }))
-  }
   void userId
   const { data, error } = await sb()
     .from('notes')
@@ -539,13 +404,6 @@ export async function searchNotes(userId: string, query: string): Promise<NoteHi
 export async function addNote(userId: string, courseId: string, title: string, content: string, source = 'texte'): Promise<Note> {
   if (!content.trim()) fail('Ta note est vide.')
   if (content.length > 60000) fail('Cette note est trop longue. Découpe-la en plusieurs notes.')
-  if (!isConfigured) {
-    const db = loadDemo()
-    const n: Note = { id: uid(), course_id: courseId, title: title.trim() || 'Note', content, source, created_at: new Date().toISOString() }
-    db.notes.push(n)
-    saveDemo(db)
-    return n
-  }
   const { data, error } = await sb()
     .from('notes').insert({ user_id: userId, course_id: courseId, title: title.trim() || 'Note', content, source }).select().single()
   if (error) throw error
@@ -557,12 +415,6 @@ export async function addNote(userId: string, courseId: string, title: string, c
 export async function updateNote(noteId: string, title: string, content: string): Promise<void> {
   if (!content.trim()) fail('Ton cours est vide.')
   if (content.length > 60000) fail('Ce texte est trop long. Découpe-le en plusieurs notes.')
-  if (!isConfigured) {
-    const db = loadDemo()
-    const n = db.notes.find((x) => x.id === noteId)
-    if (n) { n.title = title.trim() || n.title; n.content = content; saveDemo(db) }
-    return
-  }
   const { error } = await sb().from('notes').update({ title: title.trim() || 'Note', content }).eq('id', noteId)
   if (error) throw error
 }
@@ -570,12 +422,6 @@ export async function updateNote(noteId: string, title: string, content: string)
 export async function renameCourse(id: string, title: string): Promise<void> {
   const clean = title.trim()
   if (!clean) fail('Donne un nom à ton cours.')
-  if (!isConfigured) {
-    const db = loadDemo()
-    const c = db.courses.find((x) => x.id === id)
-    if (c) { c.title = clean; saveDemo(db) }
-    return
-  }
   const { error } = await sb().from('courses').update({ title: clean }).eq('id', id)
   if (error) throw error
 }
@@ -583,13 +429,6 @@ export async function renameCourse(id: string, title: string): Promise<void> {
 /* ---------------------------- LIBRAIRIE ---------------------------- */
 
 export async function listDocs(promotion: string | null, faculty: string | null): Promise<LibDoc[]> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    return db.docs
-      .filter((d) => !d.deleted_at && (!promotion || d.promotion === promotion) && (!faculty || d.faculty === faculty))
-      .map((d) => ({ ...d, is_favorite: db.favs.includes(d.id) }))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-  }
   let q = sb().from('library_documents').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300)
   if (promotion) q = q.eq('promotion', promotion)
   if (faculty) q = q.eq('faculty', faculty)
@@ -612,16 +451,9 @@ export async function publishDoc(
     if (!ALLOWED_DOC_TYPES.includes(file.type)) fail('Seuls les fichiers PDF sont acceptés pour le moment.')
     if (file.size > MAX_DOC_BYTES) fail('Le fichier ne doit pas dépasser 20 Mo.')
   }
-  if (!isConfigured) {
-    const db = loadDemo()
-    const id = uid()
-    db.docs.push({ id, ...input, file_path: null, owner_id: userId, status: 'published', created_at: new Date().toISOString() })
-    saveDemo(db)
-    return id
-  }
   let file_path: string | null = null
   if (file) {
-    file_path = `${userId}/${uid()}.pdf`
+    file_path = `${userId}/${crypto.randomUUID()}.pdf`
     const { error } = await sb().storage.from('library').upload(file_path, file, { contentType: 'application/pdf' })
     if (error) throw error
   }
@@ -638,12 +470,6 @@ export async function publishDoc(
 /** Documents que l'étudiant a supprimés (corbeille de 30 jours). Efface d'abord pour de bon ceux dont le délai est passé. */
 export async function listMyTrashedDocs(userId: string): Promise<LibDoc[]> {
   const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString()
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.docs = db.docs.filter((d) => !(d.deleted_at && d.deleted_at < cutoff))
-    saveDemo(db)
-    return db.docs.filter((d) => d.deleted_at && d.owner_id === userId)
-  }
   const { data, error } = await sb().from('library_documents').select('*').eq('owner_id', userId).not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
   if (error) throw error
   const all = data as LibDoc[]
@@ -654,24 +480,12 @@ export async function listMyTrashedDocs(userId: string): Promise<LibDoc[]> {
 
 /** Met un de ses documents à la corbeille (masqué pour tous, restaurable pendant 30 jours) ou le restaure. */
 export async function setDocTrashed(id: string, trashed: boolean): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    const d = db.docs.find((x) => x.id === id)
-    if (d) { d.deleted_at = trashed ? new Date().toISOString() : null; saveDemo(db) }
-    return
-  }
   const { error } = await sb().rpc('library_trash', { doc_id: id, trashed })
   if (error) throw error
 }
 
 /** Efface pour de bon un de ses documents : la ligne et le fichier PDF. */
 export async function deleteDocForever(doc: LibDoc): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.docs = db.docs.filter((x) => x.id !== doc.id)
-    saveDemo(db)
-    return
-  }
   if (doc.file_path) await sb().storage.from('library').remove([doc.file_path])
   const { error } = await sb().from('library_documents').delete().eq('id', doc.id)
   if (error) throw error
@@ -692,12 +506,6 @@ export async function reportDoc(userId: string, docId: string, reason: string): 
 }
 
 export async function toggleFavorite(userId: string, docId: string, on: boolean): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.favs = on ? [...new Set([...db.favs, docId])] : db.favs.filter((x) => x !== docId)
-    saveDemo(db)
-    return
-  }
   if (on) {
     const { error } = await sb().from('library_favorites').upsert({ user_id: userId, document_id: docId })
     if (error) throw error
@@ -713,11 +521,6 @@ export async function toggleFavorite(userId: string, docId: string, on: boolean)
 export async function getLibrarySocial(docIds: string[]): Promise<Record<string, LibSocial>> {
   const out: Record<string, LibSocial> = {}
   if (!docIds.length) return out
-  if (!isConfigured) {
-    const db = loadDemo()
-    docIds.forEach((id) => { const on = db.favs.includes(id); out[id] = { like_count: on ? 1 : 0, liked_by_me: on } })
-    return out
-  }
   const { data, error } = await sb().rpc('library_social', { doc_ids: docIds })
   if (error) throw error
   ;(data as Array<{ document_id: string; like_count: number; liked_by_me: boolean }>).forEach((r) => { out[r.document_id] = { like_count: r.like_count, liked_by_me: r.liked_by_me } })
@@ -729,17 +532,6 @@ export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<stri
   const out: Record<string, LibAuthor> = {}
   const ids = [...new Set(ownerIds)]
   if (!ids.length) return out
-  if (!isConfigured) {
-    const db = loadDemo()
-    ids.forEach((id) => {
-      const p = db.profiles.find((x) => x.id === id)
-      if (!p) return
-      const mine = db.docs.filter((d) => d.owner_id === id && !d.deleted_at)
-      const likes = mine.filter((d) => db.favs.includes(d.id)).length
-      out[id] = { user_id: id, public_name: db.publicName, memo_name: p.memo_name || 'Memo', avatar_url: p.avatar_url, university: p.university, faculty: p.faculty, promotion: p.promotion, bio: db.bio, doc_count: mine.length, total_likes: likes, best_likes: likes ? 1 : 0 }
-    })
-    return out
-  }
   const { data, error } = await sb().rpc('library_authors', { owner_ids: ids })
   if (error) throw error
   ;(data as LibAuthor[]).forEach((a) => { out[a.user_id] = a })
@@ -748,12 +540,6 @@ export async function getLibraryAuthors(ownerIds: string[]): Promise<Record<stri
 
 /** Like / retire son like (on peut aussi liker son propre document). */
 export async function toggleLike(userId: string, doc: LibDoc, on: boolean): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.likes = on ? [...new Set([...db.likes, doc.id])] : db.likes.filter((x) => x !== doc.id)
-    saveDemo(db)
-    return
-  }
   if (on) {
     const { error } = await sb().from('library_likes').insert({ user_id: userId, document_id: doc.id })
     if (error && (error as { code?: string }).code !== '23505') throw error // déjà liké : sans erreur
@@ -768,7 +554,6 @@ export const PUBLIC_NAME_MAX = 40
 
 /** Ce que l'étudiant montre publiquement dans la Librairie : un nom public et une petite bio (tous deux facultatifs). */
 export async function getMyPublic(userId: string): Promise<{ bio: string; public_name: string }> {
-  if (!isConfigured) { const db = loadDemo(); return { bio: db.bio, public_name: db.publicName } }
   const { data, error } = await sb().from('profile_bios').select('bio, public_name').eq('user_id', userId).maybeSingle()
   if (error) throw error
   const r = data as { bio: string; public_name: string } | null
@@ -780,13 +565,6 @@ export async function saveMyPublic(userId: string, input: { bio: string; public_
   const public_name = input.public_name.replace(/\s+/g, ' ').trim()
   if (bio.length > BIO_MAX) fail(`Ta bio ne doit pas dépasser ${BIO_MAX} caractères.`)
   if (public_name.length > PUBLIC_NAME_MAX) fail(`Ton nom public ne doit pas dépasser ${PUBLIC_NAME_MAX} caractères.`)
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.bio = bio
-    db.publicName = public_name
-    saveDemo(db)
-    return
-  }
   const { error } = await sb().from('profile_bios').upsert({ user_id: userId, bio, public_name, updated_at: new Date().toISOString() })
   if (error) throw error
 }
@@ -802,19 +580,10 @@ export async function docDownloadUrl(path: string | null, saveAs?: string): Prom
 /* ------------------------- FLAMMES (SÉRIE) ------------------------- */
 
 export async function touchToday(userId: string): Promise<void> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    if (!db.activity.includes(today())) {
-      db.activity.push(today())
-      saveDemo(db)
-    }
-    return
-  }
   await sb().from('activity_days').upsert({ user_id: userId, day: today() }, { onConflict: 'user_id,day', ignoreDuplicates: true })
 }
 
 export async function listActivity(userId: string): Promise<string[]> {
-  if (!isConfigured) return loadDemo().activity
   void userId
   const since = new Date(Date.now() + 3_600_000 - 60 * 864e5).toISOString().slice(0, 10)
   const { data, error } = await sb().from('activity_days').select('day').gte('day', since)
@@ -875,7 +644,7 @@ export interface PointsInfo {
   resetAt: string
 }
 
-/** Essai de 5 jours : commencé ou pas (il démarre à la première action IA), date de fin. null hors essai. */
+/** Essai de 7 jours : commencé ou pas (il démarre à la première action IA), date de fin. null hors essai. */
 export interface TrialInfo {
   started: boolean
   endsAt: string | null
@@ -884,10 +653,10 @@ export interface TrialInfo {
 
 export interface AiResult {
   reply: string
-  /** État de l'essai après cette demande (absent en mode démo). */
+  /** État de l'essai après cette demande. */
   trial?: TrialInfo | null
   conversationId: string | null
-  /** Solde de points après cette demande (absent en mode démo). */
+  /** Solde de points après cette demande. */
   points?: PointsInfo | null
   /** Session de TP ouverte (ou réutilisée) par le serveur : à renvoyer avec les demandes suivantes du même TP. */
   tpSession?: string
@@ -934,24 +703,6 @@ export async function askAI(args: {
   /** Chat : identifiant du message envoyé que l'étudiant modifie. Ce message et la suite sont remplacés. */
   editFrom?: string | null
 }): Promise<AiResult> {
-  if (!isConfigured) {
-    await new Promise((r) => setTimeout(r, 600))
-    const db = loadDemo()
-    let cid = args.conversationId ?? null
-    if (args.task === 'chat') {
-      if (!cid) {
-        cid = uid()
-        db.convs.unshift({ id: cid, title: args.prompt.slice(0, 40), created_at: new Date().toISOString() })
-      }
-      const reply = "Mode démo : l'IA réelle sera branchée via la fonction serveur ai-gateway. Voici ta question : « " + args.prompt.slice(0, 120) + " »."
-      const now = new Date().toISOString()
-      db.msgs.push({ id: uid(), conversation_id: cid, role: 'user', content: args.prompt, created_at: now })
-      db.msgs.push({ id: uid(), conversation_id: cid, role: 'assistant', content: reply, created_at: now })
-      saveDemo(db)
-      return { reply, conversationId: cid }
-    }
-    return { reply: `[Démo — tâche « ${args.task} »]\n\n${args.prompt.slice(0, 400)}`, conversationId: null }
-  }
   const res = await invoke<AiResult>('bright-worker', args, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
   trackAi(args)
   if (res.webNotice) {
@@ -969,10 +720,6 @@ export async function askAI(args: {
 
 /** Memo crée une image (Premium). Le serveur vérifie l'abonnement, le plafond du jour et enregistre l'image ; l'historique garde un repère [[image:chemin]]. */
 export async function askImage(args: { prompt: string; conversationId?: string | null }): Promise<{ reply: string; conversationId: string | null }> {
-  if (!isConfigured) {
-    await new Promise((r) => setTimeout(r, 600))
-    return { reply: "Mode démo : la création d'images n'est pas disponible.", conversationId: args.conversationId ?? null }
-  }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour créer une image, il faut une connexion internet.')
   track('image_requested')
   try {
@@ -993,12 +740,14 @@ export async function imageUrl(path: string, download?: string): Promise<string>
   return data.signedUrl
 }
 
+/** Envoie une photo (JPEG réduit, en data-URL) à l'IA qui la lit et renvoie la transcription exacte (texte manuscrit, tableaux en « | a | b | »). */
+export async function readPhotoAI(dataUrl: string): Promise<string> {
+  const r = await invoke<{ text: string }>('bright-worker', { task: 'read_photo', image: dataUrl }, "La lecture de la photo n'a pas abouti.")
+  return r.text ?? ''
+}
+
 /** Envoie un fichier audio au serveur et reçoit le texte de ce qui y est dit. */
 export async function transcribeAudio(file: File): Promise<string> {
-  if (!isConfigured) {
-    await new Promise((r) => setTimeout(r, 600))
-    return '[Démo] Texte de ton audio.'
-  }
   const fd = new FormData()
   fd.append('audio', file, file.name || 'audio')
   const r = await invoke<{ text: string }>('bright-worker', fd, "La transcription n'est pas disponible pour l'instant. Réessaie dans un instant.")
@@ -1006,14 +755,12 @@ export async function transcribeAudio(file: File): Promise<string> {
 }
 
 export async function listConversations(): Promise<Conversation[]> {
-  if (!isConfigured) return loadDemo().convs
   const { data, error } = await sb().from('ai_conversations').select('id,title,created_at').order('created_at', { ascending: false }).limit(50)
   if (error) throw error
   return data as Conversation[]
 }
 
 export async function listMessages(conversationId: string): Promise<Message[]> {
-  if (!isConfigured) return loadDemo().msgs.filter((m) => m.conversation_id === conversationId)
   const { data, error } = await sb().from('ai_messages').select('id,role,content,created_at').eq('conversation_id', conversationId).order('created_at')
   if (error) throw error
   return data as Message[]
@@ -1022,28 +769,18 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 /* ---------------------------- PAIEMENTS ---------------------------- */
 
 export async function listPayments(): Promise<Payment[]> {
-  if (!isConfigured) return loadDemo().payments
   const { data, error } = await sb().from('payments').select('*').order('created_at', { ascending: false })
   if (error) throw error
   return data as Payment[]
 }
 
-export const PRICES = { USD: 4.5, CDF: 11000 } as const // affichage seulement : le serveur fixe le vrai montant
-export const PRICE_LABEL = { USD: '4,50 USD', CDF: '11 000 FC' } as const
+export const PRICES = { USD: 4.05, CDF: 9000 } as const // affichage seulement : le serveur fixe le vrai montant
+export const PRICE_LABEL = { USD: '4,05 USD', CDF: '9 000 FC' } as const
 
 /** Démarre un paiement Chariow : le serveur crée la vente (identité et prix côté serveur, rien n'est choisi par le navigateur)
  *  et renvoie l'adresse de la page de paiement sécurisée, où l'on redirige l'étudiant. */
-export async function startPayment(embed = false): Promise<{ url: string | null; message?: string }> {
-  if (!isConfigured) {
-    const db = loadDemo()
-    db.payments.unshift({
-      id: uid(), provider: 'chariow', amount: PRICES.USD, currency: 'USD', status: 'pending',
-      provider_ref: 'DEMO-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: new Date().toISOString()
-    })
-    saveDemo(db)
-    return { url: null, message: 'Mode démo : paiement simulé, en attente.' }
-  }
-  const r = await invoke<{ url: string | null; message?: string }>('swift-worker', { action: 'start', embed }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
+export async function startPayment(): Promise<{ url: string | null; message?: string }> {
+  const r = await invoke<{ url: string | null; message?: string }>('swift-worker', { action: 'start' }, "Le paiement n'a pas pu démarrer. Réessaie dans un instant.")
   if (r.url) { track('payment_started'); try { localStorage.setItem(PAY_MARK, String(Date.now())) } catch { /* sans importance */ } }
   return r
 }
@@ -1064,7 +801,6 @@ export async function checkPayment(): Promise<{ active: boolean; expires_at: str
 }
 
 export async function hasPremium(userId: string): Promise<boolean> {
-  if (!isConfigured) return loadDemo().payments.some((p) => p.status === 'paid')
   void userId
   const { data } = await sb().from('subscriptions').select('expires_at').gt('expires_at', new Date().toISOString()).limit(1)
   return (data ?? []).length > 0
@@ -1072,10 +808,6 @@ export async function hasPremium(userId: string): Promise<boolean> {
 
 /** Dernier abonnement de l'étudiant (actif ou terminé), ou null s'il n'en a jamais eu. */
 export async function getSubscription(userId: string): Promise<{ expires_at: string } | null> {
-  if (!isConfigured) {
-    const paid = loadDemo().payments.filter((p) => p.status === 'paid').sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
-    return paid ? { expires_at: new Date(new Date(paid.created_at).getTime() + 30 * 86_400_000).toISOString() } : null
-  }
   void userId
   const { data } = await sb().from('subscriptions').select('expires_at').eq('user_id', userId).order('expires_at', { ascending: false }).limit(1)
   return data?.[0] ? { expires_at: data[0].expires_at as string } : null
@@ -1098,7 +830,7 @@ export async function deletePushSubscription(endpoint: string): Promise<void> {
 
 /* ------------------------ VISITES GUIDÉES (progression) ------------------------ */
 // La progression des visites est gardée dans les métadonnées du compte (user_metadata.tours) :
-// pas de migration SQL, et elle suit l'étudiant d'un téléphone à l'autre. En mode démo, la copie
+// pas de migration SQL, et elle suit l'étudiant d'un téléphone à l'autre. La copie
 // locale (lib/tours.ts) suffit : ces deux fonctions ne font alors rien.
 
 /** Lit la progression enregistrée sur le compte, ou null si rien n'est enregistré / pas de réseau. */

@@ -2,13 +2,13 @@ import type { ReactNode } from 'react'
 import { Icon } from './ui'
 import FreePts from './FreePts'
 import { PRICE_LABEL } from '../lib/api'
-import { BASE_PRICE_LABEL, POINT_COSTS, PREMIUM_DAYS, TRIAL_DAYS, type PlanState } from '../lib/plan'
+import { POINT_COSTS, PREMIUM_DAYS, TRIAL_DAYS, type PlanState } from '../lib/plan'
 
 /* Présentation des offres. Tous les chiffres viennent de src/lib/plan.ts (qui reprend les règles du serveur) et de PRICE_LABEL. */
 
-/** Prix de base barré, puis prix promotionnel. */
+/** Le prix (plus de prix barré). */
 export function Price({ cur }: { cur: 'USD' | 'CDF' }) {
-  return <><del className="price-old"><span className="sr-only">Prix normal : </span>{BASE_PRICE_LABEL[cur]}</del> <span>{PRICE_LABEL[cur]}</span></>
+  return <span>{PRICE_LABEL[cur]}</span>
 }
 
 const ROWS: { label: string; free: ReactNode; premium: ReactNode }[] = [

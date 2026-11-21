@@ -71,7 +71,7 @@ function clean(props?: TrackProps): Record<string, string | number | boolean | n
   return out
 }
 
-/** Enregistre un événement d'usage. Sans effet hors connexion à un compte, en mode démo, ou au-delà de la limite anti-spam. */
+/** Enregistre un événement d'usage. Sans effet hors connexion à un compte, ou au-delà de la limite anti-spam. */
 export function track(name: string, props?: TrackProps) {
   try {
     if (!isConfigured || !userId || !/^[a-z][a-z0-9_]{1,59}$/.test(name)) return

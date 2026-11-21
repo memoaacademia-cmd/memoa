@@ -14,7 +14,7 @@ function Skip({ to, step }: { to: string; step: string }) {
   return <button type="button" className="link" style={{ textDecoration: 'none', color: 'var(--text-2)', padding: 10 }} onClick={() => { track('onboarding_step', { step, skipped: true }); nav(to, { replace: true }) }}>Passer</button>
 }
 
-/* Étape 3 sur 4 : l'essai de 5 jours. L'essai démarre à l'inscription (règle du serveur) : ce bouton ne lance rien, il continue l'accueil. */
+/* Étape 3 sur 4 : l'essai de 7 jours. L'essai démarre à l'inscription (règle du serveur) : ce bouton ne lance rien, il continue l'accueil. */
 export function TrialStep() {
   const nav = useNavigate()
   const items: [string, ReactNode][] = [

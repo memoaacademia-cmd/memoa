@@ -187,7 +187,7 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').tri
 
 /** Memo crée des cartes à partir des notes du cours (à la demande : 1 point comme un quiz, Premium et essai : rien à compter ; en automatique : gratuit, une fois par cours et par jour). Renvoie le nombre de cartes ajoutées. */
 export async function generateCards(uid: string, courseId: string, memo = 'Memo', opts: { auto?: boolean } = {}): Promise<number> {
-  if (!isConfigured || !supabase) throw new Error("Les cartes de révision ne sont pas disponibles en mode démo.")
+  if (!isConfigured || !supabase) throw new Error("Les cartes de révision ne sont pas disponibles.")
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour créer des cartes, il faut une connexion internet.')
   const existing = cachedCards(uid).filter((c) => c.course_id === courseId)
   const avoid = existing.slice(-40).map((c) => `- ${c.question}`).join('\n')

@@ -56,13 +56,16 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
 .pf-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .pf-tools input{flex:1;min-width:200px;min-height:42px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:16px}
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
-.tbl table{border-collapse:collapse;width:100%;font-size:13px;min-width:1000px}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px;min-width:1100px}
 .tbl th,.tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
 .tbl th{position:sticky;top:0;background:var(--g2);font-size:12px;white-space:nowrap}
 .tbl tr:last-child td{border-bottom:0}
 .tbl td.nw{white-space:nowrap}
 .tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700;background:var(--g2);color:var(--g)}
 .tag.w{background:#fbefd0;color:#8a5a00}
+.btn.sm{min-height:32px;padding:0 10px;font-size:12px;border-radius:10px;margin:0 4px 4px 0}
+.tag.r{background:#f9dede;color:#9b1c1c}
+.msg{max-width:360px;white-space:pre-wrap;overflow-wrap:anywhere}
 .pf-pager{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--mut)}
 </style>
 </head>
@@ -126,18 +129,33 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
   <section class="card"><h2>Ce qui plante sur les téléphones</h2><p class="sub">Erreurs les plus fréquentes de la période.</p><div class="hb" id="errors"></div></section>
 
   <section class="card">
-    <h2>Profils des étudiants</h2>
-    <p class="sub">Tous les comptes, du plus récent au plus ancien : nom choisi, université, faculté, promotion… Les comptes dont l'inscription n'est pas terminée sont signalés.</p>
+    <h2>Étudiants</h2>
+    <p class="sub">Tous les comptes, du plus récemment actif au moins actif : dernière connexion, dernière activité, cours, notes, cartes, demandes à l'IA, Premium, essai, notifications.</p>
     <div class="pf-tools">
-      <input id="pf-q" type="search" placeholder="Rechercher : nom, e-mail, téléphone, université…" aria-label="Rechercher un profil">
+      <input id="pf-q" type="search" placeholder="Rechercher : nom, e-mail, téléphone, université…" aria-label="Rechercher un étudiant">
       <button class="btn" id="pf-csv" type="button">Exporter en CSV</button>
     </div>
     <p class="err" id="pf-err" role="alert"></p>
     <div class="tbl"><table>
-      <thead><tr><th>Inscrit le</th><th>Nom</th><th>Pseudo Memo</th><th>E-mail</th><th>Téléphone</th><th>Université</th><th>Faculté</th><th>Département</th><th>Promo</th><th>Vacation</th><th>Cours</th><th>Vu le</th><th>Statut</th></tr></thead>
-      <tbody id="pf-body"><tr><td colspan="13" class="empty">Chargement…</td></tr></tbody>
+      <thead><tr><th>Dernière connexion</th><th>Dernière activité</th><th>Nom</th><th>Pseudo Memo</th><th>E-mail</th><th>Téléphone</th><th>Université</th><th>Faculté</th><th>Promo</th><th>Inscrit le</th><th>Cours</th><th>Notes</th><th>Cartes</th><th>Req. IA</th><th>Statut</th></tr></thead>
+      <tbody id="pf-body"><tr><td colspan="15" class="empty">Chargement…</td></tr></tbody>
     </table></div>
     <div class="pf-pager"><span id="pf-count"></span><span><button class="btn" id="pf-prev" type="button">Précédent</button> <button class="btn" id="pf-next" type="button">Suivant</button></span></div>
+  </section>
+
+  <section class="card">
+    <h2>Données de l'application</h2>
+    <p class="sub">Les tables importantes de Supabase, en lecture seule (aucun texte de notes ni de discussion n'est exposé). Dans la Librairie, tu peux publier ou refuser un document.</p>
+    <div class="pf-tools">
+      <select id="dt-kind" aria-label="Choisir la table"></select>
+      <button class="btn" id="dt-csv" type="button">Exporter en CSV</button>
+    </div>
+    <p class="err" id="dt-err" role="alert"></p>
+    <div class="tbl"><table>
+      <thead id="dt-head"></thead>
+      <tbody id="dt-body"><tr><td class="empty">Chargement…</td></tr></tbody>
+    </table></div>
+    <div class="pf-pager"><span id="dt-count"></span><span><button class="btn" id="dt-prev" type="button">Précédent</button> <button class="btn" id="dt-next" type="button">Suivant</button></span></div>
   </section>
 
   <p class="foot" id="gen"></p>
@@ -187,7 +205,7 @@ async function load(){
       $('aerr').textContent='La fonction app_stats est introuvable : exécute 0028_tableau_de_bord.sql dans Supabase (projet de l\u2019application).';return}
     if(!r.ok){$('aerr').textContent='Impossible de charger les chiffres pour le moment (code '+r.status+').';return}
     render(await r.json());
-    loadProfiles();
+    loadProfiles();loadData();
   }catch(x){$('aerr').textContent='Pas de connexion. Réessaie dans un instant.'}
   finally{$('refresh').disabled=false}
 }
@@ -245,31 +263,48 @@ function render(d){
   var g=new Date(d.generated_at);$('gen').textContent='Mis à jour le '+g.toLocaleDateString('fr-FR')+' à '+g.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
 
-/* ---------- Profils des étudiants ---------- */
-var PF={off:0,lim:50,total:0,q:'',timer:null};
-function fdate(s){if(!s)return '–';var d=new Date(s);return isNaN(d)?'–':d.toLocaleDateString('fr-FR')}
-function fullName(r){var n=[r.first_name,r.post_name,r.last_name].filter(Boolean).join(' ');return n||r.full_name||''}
-async function pfFetch(off,lim,q){
+/* ---------- appels serveur (fonctions SQL de 0032_admin_tableau_complet.sql) ---------- */
+async function rpc(name,body){
   var t=getToken();if(!t)throw{code:401};
-  var r=await fetch(SB_URL+'/rest/v1/rpc/app_profiles',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify({q:q,lim:lim,off:off})});
+  var r=await fetch(SB_URL+'/rest/v1/rpc/'+name,{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+t},body:JSON.stringify(body)});
   if(!r.ok)throw{code:r.status};
-  return r.json();
+  var txt=await r.text();return txt?JSON.parse(txt):null;
 }
+function fdate(s){if(!s)return '–';var d=new Date(s);return isNaN(d)?'–':d.toLocaleDateString('fr-FR')}
+function fdt(s){if(!s)return '–';var d=new Date(s);return isNaN(d)?'–':d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+function errText(x,fn){return x.code===401?'Ta session a expiré. Reconnecte-toi.':(x.code===404?'La fonction '+fn+' est introuvable : exécute 0032_admin_tableau_complet.sql dans Supabase (SQL Editor).':(x.code===403?'Ce compte n\u2019est pas administrateur.':'Impossible de charger pour le moment.'))}
+function csvCell(v){v=v==null?'':String(v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}
+function downloadCsv(name,head,rows){
+  var lines=[head.map(csvCell).join(';')].concat(rows.map(function(r){return r.map(csvCell).join(';')}));
+  var blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+}
+
+/* ---------- Étudiants ---------- */
+var PF={off:0,lim:50,total:0,q:'',timer:null};
 async function loadProfiles(){
   $('pf-err').textContent='';
   try{
-    var d=await pfFetch(PF.off,PF.lim,PF.q);
+    var d=await rpc('admin_users',{p_search:PF.q,p_limit:PF.lim,p_offset:PF.off});
     PF.total=d.total||0;renderProfiles(d.rows||[]);
   }catch(x){
-    $('pf-body').innerHTML='<tr><td colspan="13" class="empty">–</td></tr>';
-    $('pf-err').textContent=(x.code===404)?'La fonction app_profiles est introuvable : exécute 0029_profils_admin.sql dans Supabase (projet de l\u2019application).':(x.code===401?'Ta session a expiré. Reconnecte-toi.':'Impossible de charger les profils pour le moment.');
+    $('pf-body').innerHTML='<tr><td colspan="15" class="empty">–</td></tr>';
+    $('pf-err').textContent=errText(x,'admin_users');
   }
 }
+function statusTags(r){
+  var t=[];
+  if(r.is_admin)t.push('<span class="tag">Admin</span>');
+  if(r.premium_until&&new Date(r.premium_until)>new Date())t.push('<span class="tag">Premium</span>');
+  else if(r.trial_started)t.push('<span class="tag w">Essai</span>');
+  if(!r.email_confirmed)t.push('<span class="tag r">E-mail non confirmé</span>');
+  if(r.notifications)t.push('<span class="tag">Notif.</span>');
+  return t.join(' ');
+}
 function renderProfiles(rows){
-  if(!rows.length){$('pf-body').innerHTML='<tr><td colspan="13" class="empty">Aucun profil trouvé.</td></tr>'}
+  if(!rows.length){$('pf-body').innerHTML='<tr><td colspan="15" class="empty">Aucun étudiant trouvé.</td></tr>'}
   else $('pf-body').innerHTML=rows.map(function(r){
-    var st=r.premium_until?'<span class="tag">Premium</span>':(r.complete?'':'<span class="tag w">Incomplet</span>');
-    return '<tr><td class="nw">'+fdate(r.created_at)+'</td><td>'+esc(fullName(r)||'–')+'</td><td>'+esc(r.memo_name||'–')+'</td><td>'+esc(r.email||'–')+'</td><td class="nw">'+esc(r.phone||'–')+'</td><td>'+esc(r.university||'–')+'</td><td>'+esc(r.faculty||'–')+'</td><td>'+esc(r.department||'–')+'</td><td class="nw">'+esc(r.promotion||'–')+'</td><td class="nw">'+esc(r.vacation||'–')+'</td><td>'+nf(r.courses)+'</td><td class="nw">'+fdate(r.last_seen)+'</td><td>'+st+'</td></tr>'
+    return '<tr><td class="nw">'+fdt(r.last_sign_in_at)+'</td><td class="nw">'+fdt(r.last_activity)+'</td><td>'+esc(r.name||r.full_name||'–')+'</td><td>'+esc(r.memo_name||'–')+'</td><td>'+esc(r.email||'–')+'</td><td class="nw">'+esc(r.phone||'–')+'</td><td>'+esc(r.university||'–')+'</td><td>'+esc(r.faculty||'–')+'</td><td class="nw">'+esc(r.promotion||'–')+'</td><td class="nw">'+fdate(r.signed_up_at)+'</td><td>'+nf(r.courses)+'</td><td>'+nf(r.notes)+'</td><td>'+nf(r.cards)+'</td><td>'+nf(r.ai_requests)+'</td><td>'+statusTags(r)+'</td></tr>'
   }).join('');
   var a=PF.total?PF.off+1:0,b=Math.min(PF.off+PF.lim,PF.total);
   $('pf-count').textContent=a+'–'+b+' sur '+nf(PF.total);
@@ -278,17 +313,72 @@ function renderProfiles(rows){
 $('pf-prev').onclick=function(){PF.off=Math.max(0,PF.off-PF.lim);loadProfiles()};
 $('pf-next').onclick=function(){PF.off+=PF.lim;loadProfiles()};
 $('pf-q').addEventListener('input',function(){clearTimeout(PF.timer);PF.timer=setTimeout(function(){PF.q=$('pf-q').value.trim();PF.off=0;loadProfiles()},350)});
-function csvCell(v){v=v==null?'':String(v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}
 $('pf-csv').onclick=async function(){
   var btn=$('pf-csv');btn.disabled=true;btn.textContent='Préparation…';$('pf-err').textContent='';
   try{
     var all=[],off=0,total=1;
-    while(off<total){var d=await pfFetch(off,1000,PF.q);total=d.total||0;all=all.concat(d.rows||[]);if(!(d.rows||[]).length)break;off+=1000}
-    var head=['Inscrit le','Prénom','Post-nom','Nom','Nom complet','Pseudo Memo','Animal Memo','E-mail','Téléphone','Université','Faculté','Département','Promotion','Vacation','Nombre de cours','Dernière ouverture','Premium jusqu\u2019au','Profil complet'];
-    var lines=[head.map(csvCell).join(';')].concat(all.map(function(r){return [fdate(r.created_at),r.first_name,r.post_name,r.last_name,r.full_name,r.memo_name,r.memo_animal,r.email,r.phone,r.university,r.faculty,r.department,r.promotion,r.vacation,r.courses,r.last_seen?fdate(r.last_seen):'',r.premium_until?fdate(r.premium_until):'',r.complete?'oui':'non'].map(csvCell).join(';')}));
-    var blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
-    var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='profils-memoa-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+    while(off<total){var d=await rpc('admin_users',{p_search:PF.q,p_limit:200,p_offset:off});total=d.total||0;all=all.concat(d.rows||[]);if(!(d.rows||[]).length)break;off+=200}
+    var head=['Dernière connexion','Dernière activité','Nom','Nom complet','Pseudo Memo','E-mail','E-mail confirmé','Téléphone','Université','Faculté','Département','Promotion','Inscrit le','Cours','Notes','Cartes','Demandes IA','Dernière demande IA','Premium jusqu\u2019au','Essai commencé le','Paiements réussis','Notifications','Admin'];
+    downloadCsv('etudiants-memoa',head,all.map(function(r){return [fdt(r.last_sign_in_at),fdt(r.last_activity),r.name,r.full_name,r.memo_name,r.email,r.email_confirmed?'oui':'non',r.phone,r.university,r.faculty,r.department,r.promotion,fdate(r.signed_up_at),r.courses,r.notes,r.cards,r.ai_requests,fdt(r.ai_last),r.premium_until?fdate(r.premium_until):'',r.trial_started?fdate(r.trial_started):'',r.paid_total,r.notifications,r.is_admin?'oui':'non']}));
   }catch(x){$('pf-err').textContent='Export impossible pour le moment.'}
+  finally{btn.disabled=false;btn.textContent='Exporter en CSV'}
+};
+
+/* ---------- Données (paiements, abonnements, essais, avis, erreurs, journal IA, usage IA, Librairie, notifications) ---------- */
+function tg(v,cls){return v?'<span class="tag'+(cls?' '+cls:'')+'">'+esc(v)+'</span>':'–'}
+function msg(v){return '<div class="msg">'+esc(v||'–')+'</div>'}
+var KINDS={
+  payments:{label:'Paiements',cols:[['Date',function(r){return fdt(r.created_at)},function(r){return fdt(r.created_at)}],['E-mail','email'],['Montant',function(r){return nf(r.amount)+' '+(r.currency||'')}],['Statut',function(r){return tg(r.status,r.status==='paid'?'':'w')},'status'],['Moyen','provider'],['Référence','provider_ref'],['Traité le',function(r){return fdt(r.processed_at)}]]},
+  subscriptions:{label:'Abonnements Premium',cols:[['E-mail','email'],['Expire le',function(r){return fdt(r.expires_at)}],['État',function(r){return r.active?'<span class="tag">Actif</span>':'<span class="tag w">Expiré</span>'}],['Mis à jour',function(r){return fdt(r.updated_at)}]]},
+  trials:{label:'Essais commencés',cols:[['E-mail','email'],['Commencé le',function(r){return fdt(r.started_at)}]]},
+  feedback:{label:'Avis et signalements',cols:[['Date',function(r){return fdt(r.created_at)}],['E-mail','email'],['Type',function(r){return tg(r.kind)}],['Note','rating'],['Message',function(r){return msg(r.message)}],['Appareil',function(r){return msg((r.user_agent||'').slice(0,80))}]]},
+  errors:{label:'Erreurs sur les téléphones',cols:[['Date',function(r){return fdt(r.created_at)}],['E-mail','email'],['Message',function(r){return msg(r.message)}],['Page','route'],['Détail',function(r){return msg(r.stack)}]]},
+  ai_log:{label:'Journal de l\u2019IA (incidents)',cols:[['Date',function(r){return fdt(r.created_at)}],['E-mail','email'],['Événement',function(r){return tg(AIEV[r.kind]||r.kind,/fail|limit|denied|off/.test(r.kind||'')?'w':'')}],['Tâche','task'],['Modèle','model'],['Détail',function(r){return msg(r.detail)}]]},
+  ai_usage:{label:'Demandes à l\u2019IA',cols:[['Date',function(r){return fdt(r.created_at)}],['E-mail','email'],['Tâche',function(r){return TASKS[r.task]||r.task||'–'}],['Modèle','model'],['Jetons entrée','tokens_in'],['Jetons sortie','tokens_out']]},
+  library:{label:'Librairie (documents)',cols:[['Date',function(r){return fdt(r.created_at)}],['Titre',function(r){return msg(r.title)}],['Type','doc_type'],['Auteur','owner_email'],['Université','university'],['Faculté','faculty'],['Promo','promotion'],['Cours','course_title'],['Statut',function(r){return tg(r.deleted?'Supprimé':r.status,r.status==='published'&&!r.deleted?'':(r.status==='rejected'?'r':'w'))}],['Action',function(r){
+    if(r.deleted)return '–';var b='';
+    if(r.status!=='published')b+='<button class="btn sm p" data-doc="'+esc(r.id)+'" data-st="published" type="button">Publier</button>';
+    if(r.status!=='rejected')b+='<button class="btn sm" data-doc="'+esc(r.id)+'" data-st="rejected" type="button">Refuser</button>';
+    return b}]]},
+  push:{label:'Notifications activées',cols:[['E-mail','email'],['Activées le',function(r){return fdt(r.created_at)}],['Dernier envoi',function(r){return fdt(r.last_sent_at)}]]}
+};
+var DT={kind:'payments',off:0,lim:50,total:0,rows:[]};
+$('dt-kind').innerHTML=Object.keys(KINDS).map(function(k){return '<option value="'+k+'">'+esc(KINDS[k].label)+'</option>'}).join('');
+function cell(c,r){var f=c[1];if(typeof f==='function')return f(r);var v=r[f];return esc(v==null||v===''?'–':v)}
+function cellText(c,r){var f=c[1];if(typeof f==='function'){var d=document.createElement('div');d.innerHTML=f(r);return d.textContent.replace(/^–$/,'')}var v=r[f];return v==null?'':v}
+async function loadData(){
+  var K=KINDS[DT.kind];$('dt-err').textContent='';
+  $('dt-head').innerHTML='<tr>'+K.cols.map(function(c){return '<th>'+esc(c[0])+'</th>'}).join('')+'</tr>';
+  try{
+    var d=await rpc('admin_list',{p_kind:DT.kind,p_limit:DT.lim,p_offset:DT.off});
+    DT.total=d.total||0;DT.rows=d.rows||[];
+    $('dt-body').innerHTML=DT.rows.length?DT.rows.map(function(r){return '<tr>'+K.cols.map(function(c){return '<td>'+cell(c,r)+'</td>'}).join('')+'</tr>'}).join(''):'<tr><td colspan="'+K.cols.length+'" class="empty">Rien pour le moment.</td></tr>';
+  }catch(x){
+    $('dt-body').innerHTML='<tr><td colspan="'+K.cols.length+'" class="empty">–</td></tr>';
+    $('dt-err').textContent=errText(x,'admin_list');DT.total=0;DT.rows=[];
+  }
+  var a=DT.total?DT.off+1:0,b=Math.min(DT.off+DT.lim,DT.total);
+  $('dt-count').textContent=a+'–'+b+' sur '+nf(DT.total);
+  $('dt-prev').disabled=DT.off<=0;$('dt-next').disabled=DT.off+DT.lim>=DT.total;
+}
+$('dt-kind').onchange=function(){DT.kind=$('dt-kind').value;DT.off=0;loadData()};
+$('dt-prev').onclick=function(){DT.off=Math.max(0,DT.off-DT.lim);loadData()};
+$('dt-next').onclick=function(){DT.off+=DT.lim;loadData()};
+$('dt-body').addEventListener('click',async function(e){
+  var b=e.target.closest&&e.target.closest('button[data-doc]');if(!b)return;
+  var st=b.getAttribute('data-st');
+  if(!confirm(st==='published'?'Publier ce document dans la Librairie ?':'Refuser ce document ?'))return;
+  b.disabled=true;
+  try{await rpc('admin_set_doc_status',{p_doc:b.getAttribute('data-doc'),p_status:st});loadData()}
+  catch(x){$('dt-err').textContent=errText(x,'admin_set_doc_status');b.disabled=false}
+});
+$('dt-csv').onclick=async function(){
+  var btn=$('dt-csv'),K=KINDS[DT.kind];btn.disabled=true;btn.textContent='Préparation…';$('dt-err').textContent='';
+  try{
+    var cols=K.cols.filter(function(c){return c[0]!=='Action'}),all=[],off=0,total=1;
+    while(off<total){var d=await rpc('admin_list',{p_kind:DT.kind,p_limit:200,p_offset:off});total=d.total||0;all=all.concat(d.rows||[]);if(!(d.rows||[]).length)break;off+=200}
+    downloadCsv(DT.kind+'-memoa',cols.map(function(c){return c[0]}),all.map(function(r){return cols.map(function(c){return cellText(c,r)})}));
+  }catch(x){$('dt-err').textContent='Export impossible pour le moment.'}
   finally{btn.disabled=false;btn.textContent='Exporter en CSV'}
 };
 

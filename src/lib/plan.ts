@@ -10,7 +10,6 @@
 import { useEffect, useState } from 'react'
 import { fetchAccess, getSubscription, type PointsInfo, type TrialInfo } from './api'
 import { useAuth } from './auth'
-import { isConfigured } from './supabase'
 import { isActive } from './subscription'
 
 export type PlanState = 'unknown' | 'free' | 'trial' | 'premium' | 'expired'
@@ -31,14 +30,14 @@ export interface Plan {
    PAGE_CHARS, CHAT_PAID, DAYS_PER_PAYMENT. Si le serveur change, mettre à jour ce bloc.
    Les tarifs viennent de PRICE_LABEL (api.ts).
 --------------------------------------------------------------------------------------------- */
-export const TRIAL_DAYS = 5
+export const TRIAL_DAYS = 7
 export const FREE_POINTS_PER_DAY = 20
 export const PREMIUM_DAYS = 30
-/** Prix « de base » affiché barré : l'affichage seulement. Le montant réellement payé reste fixé par le serveur (PRICE_LABEL = prix promotionnel). */
-export const BASE_PRICE_LABEL = { USD: '9,99 USD', CDF: '22 000 FC' } as const
 export const POINT_COSTS: { label: string; cost: string }[] = [
   { label: 'Poser des questions à l’assistant', cost: '1 point pour 2 messages' },
-  { label: 'Un quiz de révision', cost: '1 point' },
+  { label: 'Réviser tes cartes de révision', cost: 'gratuit' },
+  { label: 'Un quiz de révision (5 questions)', cost: '1 point, 1 de plus par « Quiz suivant »' },
+  { label: 'Préparer des cartes de révision', cost: 'gratuit en automatique, 1 point à la demande' },
   { label: 'Transcrire un audio dans une note', cost: '3 points' },
   { label: 'Créer un cours avec l’IA', cost: '15 points, 18 depuis un audio' },
   { label: 'Créer ou ajouter une note', cost: '15 points fixes, 18 depuis un audio' },
@@ -60,8 +59,6 @@ export function compute(uid: string): Promise<Plan> {
     const trial = pts.status === 'fulfilled' ? pts.value.trial : null
     if (pts.status === 'rejected') return { state: 'unknown', points: null, expiresAt: s?.expires_at }
     if (points) return { state: s ? 'expired' : 'free', expiresAt: s?.expires_at, points }
-    // Mode démo (aucun serveur) : pas d'essai ni de points à décrire.
-    if (!isConfigured) return { state: s ? 'expired' : 'free', expiresAt: s?.expires_at, points: null }
     return { state: 'trial', expiresAt: s?.expires_at, points: null, trial }
   })()
   inflight = { uid, at: Date.now(), p }

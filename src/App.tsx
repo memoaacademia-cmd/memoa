@@ -20,6 +20,7 @@ import { OutboxSync } from './components/OfflineSave'
 import AutoCards from './components/AutoCards'
 import PushOffer from './components/PushOffer'
 import { usePref } from './lib/prefs'
+import { AUTO_CARDS_ENABLED, LIBRARY_ENABLED, TP_ASSISTANT_ENABLED } from './lib/features'
 
 /** Bandeau discret : le réseau coupe, l'étudiant reste connecté et tout se remet à jour au retour. */
 function ConnectionBanner() {
@@ -84,7 +85,7 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     <div className="shell app">
       <DraftWatcher />
       <OutboxSync />
-      <AutoCards />
+      {AUTO_CARDS_ENABLED && <AutoCards />}
       <PushOffer />
       <TourProvider>
         <Outlet />
@@ -145,8 +146,8 @@ export default function App() {
             <Route path="/examens" element={<Navigate to="/" replace />} />
             <Route path="/examens/horaire" element={<Navigate to="/" replace />} />
             <Route path="/revision/:courseId" element={<Review />} />
-            <Route path="/tp/:id" element={<TpAssistant />} />
-            <Route path="/librairie" element={<Library />} />
+            <Route path="/tp/:id" element={TP_ASSISTANT_ENABLED ? <TpAssistant /> : <Navigate to="/" replace />} />
+            <Route path="/librairie" element={LIBRARY_ENABLED ? <Library /> : <Navigate to="/" replace />} />
             <Route path="/assistant" element={<Assistant />} />
             <Route path="/moi" element={<Me />} />
             <Route path="/parametres" element={<Settings />} />

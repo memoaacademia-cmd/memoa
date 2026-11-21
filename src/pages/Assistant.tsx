@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import ChatImage from '../components/ChatImage'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
-import { askAI, fetchPoints, listConversations, listCourses, listMessages, type PointsInfo } from '../lib/api'
+import { askAI, askImage, fetchPoints, listConversations, listCourses, listMessages, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { getPref, setPref } from '../lib/prefs'
 import { isImageRequest, parseImageMessage, plainMessage } from '../lib/imagegen'
@@ -14,7 +14,7 @@ import { readPhotoText } from '../lib/ocr'
 import { extractPdfText } from '../lib/pdfimport'
 import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Message } from '../lib/types'
-import { WEB_SEARCH_ENABLED } from '../lib/features'
+import { IMAGE_GENERATION_ENABLED, WEB_SEARCH_ENABLED } from '../lib/features'
 
 const SUGGESTIONS = ['Résume ce cours', 'Donne-moi des exemples', 'Fais-moi un quiz de 5 questions']
 
@@ -219,7 +219,21 @@ export default function Assistant() {
     const gen = ++chatRun.gen // une réponse qui arrive après « stop » ou après un autre envoi est ignorée
     hiddenRef.current = false
     const userMsg: ChatMsg = { id: 'u' + Date.now(), role: 'user', content: (joined ? `${joined.name}\n` : '') + prompt, created_at: '', raw: prompt, att: joined ?? undefined }
-    // Memo ne crée pas d'images : il le dit tout de suite, sans appeler le serveur (rien n'est consommé).
+    // Création d'image (Premium) : seulement si l'interrupteur IMAGE_GENERATION_ENABLED est allumé (lib/features.ts).
+    if (IMAGE_GENERATION_ENABLED && !joined && !wasEditing && isImageRequest(prompt)) {
+      setMessages([...base, userMsg])
+      setThinking(true)
+      const img = await run(() => askImage({ prompt, conversationId }))
+      if (gen !== chatRun.gen) return
+      setThinking(false)
+      if (img) {
+        setConversationId(img.conversationId)
+        setMessages((m) => [...m, { id: 'a' + Date.now(), role: 'assistant', content: img.reply, created_at: '' }])
+        convs.reload()
+      }
+      return
+    }
+    // Interrupteur éteint : Memo dit tout de suite qu'il ne crée pas d'images, sans appeler le serveur (rien n'est consommé).
     if (!joined && !wasEditing && isImageRequest(prompt)) {
       setMessages([...base, { ...userMsg, local: true }, { id: 'a' + Date.now(), role: 'assistant', local: true, created_at: '', content: IMAGE_NO }])
       return

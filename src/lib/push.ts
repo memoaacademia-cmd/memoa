@@ -1,6 +1,6 @@
 // Notifications « Le savais-tu ? » sur le téléphone (Web Push). Rien ne part sans le choix de l'étudiant :
 // on ne demande l'autorisation qu'après qu'il a aimé une première carte, jamais à l'ouverture de l'application.
-import { VAPID_PUBLIC_KEY } from './features'
+import { NOTIFICATIONS_ENABLED, VAPID_PUBLIC_KEY } from './features'
 import { getPref, setPref } from './prefs'
 import { deletePushSubscription, savePushSubscription } from './api'
 
@@ -9,7 +9,7 @@ const ASKED_AT = 'push-asked-at' // dernière proposition (date en millisecondes
 const WEEK = 7 * 86_400_000
 
 export function pushSupported(): boolean {
-  return Boolean(VAPID_PUBLIC_KEY) && typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  return NOTIFICATIONS_ENABLED && Boolean(VAPID_PUBLIC_KEY) && typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 }
 
 /** Sur iPhone, les notifications n'existent que si Memoa est installée sur l'écran d'accueil. */
@@ -24,7 +24,7 @@ export function needsInstallFirst(): boolean {
 }
 
 export function permissionState(): NotificationPermission | 'unsupported' {
-  return pushSupported() || (Boolean(VAPID_PUBLIC_KEY) && 'Notification' in window) ? Notification.permission : 'unsupported'
+  return pushSupported() || (NOTIFICATIONS_ENABLED && Boolean(VAPID_PUBLIC_KEY) && 'Notification' in window) ? Notification.permission : 'unsupported'
 }
 
 /** Est-ce le bon moment pour proposer ? Jamais si déjà accepté ou refusé, au plus deux fois, à une semaine d'écart. */

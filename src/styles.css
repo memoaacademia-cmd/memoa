@@ -788,9 +788,6 @@ a.pill-btn { text-decoration: none; }
 .hm-promo-x { position: absolute; top: 4px; right: 4px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; }
 .me-premium .pill-btn { white-space: nowrap; flex: none; }
 
-/* Prix de base barré (le prix payé est le prix promotionnel) */
-.price-old { text-decoration: line-through; text-decoration-thickness: 2px; opacity: .65; font-weight: 600; white-space: nowrap; }
-.price-old.big { font-size: 20px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .me-premium .price { white-space: nowrap; }
 

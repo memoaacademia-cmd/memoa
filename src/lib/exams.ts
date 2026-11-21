@@ -41,7 +41,7 @@ export const cachedExams = (uid: string): Exam[] => { try { const v = JSON.parse
 const writeCache = (uid: string, l: Exam[]) => { try { localStorage.setItem(CACHE(uid), JSON.stringify(l)) } catch { /* plein : la liste sera relue du serveur */ } }
 
 function needNet() {
-  if (!isConfigured || !supabase) throw new Error('Les examens ne sont pas disponibles en mode démo.')
+  if (!isConfigured || !supabase) throw new Error('Les examens ne sont pas disponibles.')
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('Pour enregistrer un examen, il faut une connexion internet.')
   return supabase
 }

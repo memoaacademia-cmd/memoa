@@ -8,7 +8,7 @@ import { getPref, setPref } from '../lib/prefs'
 const DAY = 86_400_000
 const daysLeft = (endsAt: string | null) => (endsAt ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / DAY)) : null)
 
-/** Bande de l'Accueil sur l'essai de 5 jours (il démarre à la première action IA) :
+/** Bande de l'Accueil sur l'essai de 7 jours (il démarre à la première action IA) :
  *  avant le départ → « commence à ta première action IA » ; au départ → message court ; ensuite → « Essai : N jours restants » ; à la fin → plan Free. */
 export default function TrialBanner() {
   const plan = usePlan()
