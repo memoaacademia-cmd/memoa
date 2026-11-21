@@ -67,6 +67,15 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
 .tag.r{background:#f9dede;color:#9b1c1c}
 .msg{max-width:360px;white-space:pre-wrap;overflow-wrap:anywhere}
 .pf-pager{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--mut)}
+
+.pa-row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.pa-row:last-child{border-bottom:0}
+.pa-row .who{min-width:0;flex:1 1 200px}
+.pa-row .who b{display:block;overflow-wrap:anywhere}
+.pa-row .who span{display:block;font-size:13px;color:var(--mut);overflow-wrap:anywhere}
+.pa-sub{font-size:13px;font-weight:700;margin:14px 0 4px;color:var(--ink)}
+.pa-amt{font-size:20px;font-weight:800;color:var(--g)}
+.pa-ok{color:var(--g);font-size:14px;margin:10px 0 0;min-height:20px}
 </style>
 </head>
 <body>
@@ -108,6 +117,19 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
     <div class="kpi"><b id="k-premium">–</b><span>Premium en cours</span><small id="k-paid"></small></div>
     <div class="kpi"><b id="k-errors">–</b><span>erreurs sur la période</span><small>sur les téléphones</small></div>
   </section>
+  <section class="card" id="pa-card">
+    <h2>Programme partenaire <span class="tag w" id="pa-badge" hidden></span></h2>
+    <p class="sub">Valide les demandes, paie les retraits par Mobile Money, puis marque « payé ».</p>
+    <p class="err" id="pa-err" role="alert"></p>
+    <p class="pa-ok" id="pa-ok" role="status"></p>
+    <div class="pa-sub">Demandes à valider</div>
+    <div id="pa-pending"><p class="empty">Chargement…</p></div>
+    <div class="pa-sub">Retraits à payer</div>
+    <div id="pa-payouts"><p class="empty">Chargement…</p></div>
+    <div class="pa-sub">Tous les partenaires</div>
+    <div id="pa-all"><p class="empty">Chargement…</p></div>
+  </section>
+
   <section class="card"><h2>Revenus de la période</h2><p class="sub">Paiements réussis, par monnaie.</p><div class="hb" id="revenue"></div></section>
 
   <section class="card">
@@ -205,7 +227,7 @@ async function load(){
       $('aerr').textContent='La fonction app_stats est introuvable : exécute 0028_tableau_de_bord.sql dans Supabase (projet de l\u2019application).';return}
     if(!r.ok){$('aerr').textContent='Impossible de charger les chiffres pour le moment (code '+r.status+').';return}
     render(await r.json());
-    loadProfiles();loadData();
+    loadProfiles();loadData();loadPartners();
   }catch(x){$('aerr').textContent='Pas de connexion. Réessaie dans un instant.'}
   finally{$('refresh').disabled=false}
 }
@@ -381,6 +403,81 @@ $('dt-csv').onclick=async function(){
   }catch(x){$('dt-err').textContent='Export impossible pour le moment.'}
   finally{btn.disabled=false;btn.textContent='Exporter en CSV'}
 };
+
+
+/* ---------- Programme partenaire (fonctions de 0036_admin_partenaires_tableau.sql) ---------- */
+var PA_TYPE={cp:'CP',influenceur:'Influenceur'},PA_STATUS={pending:'En attente',active:'Actif',rejected:'Refusé',suspended:'Suspendu'};
+var PA_OP={mpesa:'M-Pesa',airtel:'Airtel Money',orange:'Orange Money'};
+function usd(n){return Number(n||0).toFixed(2).replace('.',',')+' $'}
+function paErr(x){return x&&x.code===401?'Ta session a expiré. Reconnecte-toi.':(x&&x.code===404?'Fonction introuvable : exécute 0036_admin_partenaires_tableau.sql dans Supabase (SQL Editor).':(x&&x.code===403?'Ce compte n\u2019est pas administrateur.':'Impossible pour le moment. Réessaie.'))}
+var PA_MSG={ok:'Fait.',deja_actif:'Ce partenaire est déjà actif.',compte_supprime:'Le compte de cette personne a été supprimé.',introuvable:'Introuvable.',introuvable_ou_deja_refuse:'Introuvable ou déjà refusé.',introuvable_ou_pas_actif:'Introuvable ou pas actif.',reference_obligatoire:'La référence de la transaction est obligatoire.',motif_obligatoire:'Le motif est obligatoire.',deja_traite:'Ce retrait a déjà été traité.'};
+async function loadPartners(){
+  try{
+    var d=await rpc('admin_partner_overview',{});
+    renderPartners(d||{});
+  }catch(x){
+    $('pa-err').textContent=paErr(x);
+    ['pa-pending','pa-payouts','pa-all'].forEach(function(i){$(i).innerHTML=''});
+  }
+}
+function renderPartners(d){
+  var pe=d.pending||[],po=d.payouts||[],al=d.partners||[];
+  var n=pe.length+po.length;
+  $('pa-badge').hidden=!n;$('pa-badge').textContent=n+' à traiter';
+  $('pa-pending').innerHTML=pe.length?pe.map(function(r){
+    return '<div class="pa-row"><div class="who"><b>'+esc(r.full_name||'–')+'</b><span>'+esc(PA_TYPE[r.type]||r.type||'–')+' · '+esc(r.email||'')+' · demandé le '+esc(fdt(r.created_at))+'</span></div><div>'
+      +'<button class="btn sm p" data-pa="approve" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Approuver</button>'
+      +'<button class="btn sm" data-pa="reject" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Refuser</button></div></div>';
+  }).join(''):'<p class="empty">Aucune demande en attente.</p>';
+  $('pa-payouts').innerHTML=po.length?po.map(function(r){
+    return '<div class="pa-row"><div class="who"><b>'+esc(r.full_name||'–')+' <span class="pa-amt">'+esc(usd(r.amount_usd))+'</span></b>'
+      +'<span>Envoie à : <b style="display:inline">'+esc(r.phone||'–')+'</b> · '+esc(PA_OP[r.operator]||r.operator||'–')+' · demandé le '+esc(fdt(r.requested_at))+'</span></div><div>'
+      +'<button class="btn sm" data-copy="'+esc(r.phone||'')+'" type="button">Copier le numéro</button>'
+      +'<button class="btn sm p" data-pa="pay" data-id="'+esc(r.payout_id)+'" data-name="'+esc(r.full_name||'')+'" data-amt="'+esc(usd(r.amount_usd))+'" type="button">Marquer payé</button>'
+      +'<button class="btn sm" data-pa="reject_payout" data-id="'+esc(r.payout_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Refuser</button></div></div>';
+  }).join(''):'<p class="empty">Aucun retrait à payer.</p>';
+  $('pa-all').innerHTML=al.length?al.map(function(r){
+    var st=r.status==='active'?'':(r.status==='pending'?'w':'r');
+    return '<div class="pa-row"><div class="who"><b>'+esc(r.full_name||'(compte supprimé)')+' <span class="tag'+(st?' '+st:'')+'">'+esc(PA_STATUS[r.status]||r.status)+'</span></b>'
+      +'<span>'+esc(PA_TYPE[r.type]||r.type||'–')+(r.code?' · '+esc(r.code):'')+' · '+nf(r.inscrits)+' inscrits · '+nf(r.payants)+' payants · à venir '+esc(usd(r.a_venir_usd))+' · payé '+esc(usd(r.paye_usd))+'</span></div><div>'
+      +(r.status==='active'?'<button class="btn sm" data-pa="suspend" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Suspendre</button>':'')
+      +(r.status==='suspended'?'<button class="btn sm p" data-pa="approve" data-id="'+esc(r.partner_id)+'" data-name="'+esc(r.full_name||'')+'" type="button">Réactiver</button>':'')
+      +'</div></div>';
+  }).join(''):'<p class="empty">Aucun partenaire pour le moment.</p>';
+}
+function copyText(t){
+  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t);
+  return new Promise(function(ok,ko){try{var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();var s=document.execCommand('copy');document.body.removeChild(a);s?ok():ko()}catch(e){ko(e)}});
+}
+$('pa-card').addEventListener('click',async function(e){
+  var c=e.target.closest&&e.target.closest('button[data-copy]');
+  if(c){var v=c.getAttribute('data-copy');try{await copyText(v);$('pa-ok').textContent='Numéro copié : '+v}catch(x){$('pa-ok').textContent='Numéro : '+v}return}
+  var b=e.target.closest&&e.target.closest('button[data-pa]');if(!b)return;
+  var act=b.getAttribute('data-pa'),id=b.getAttribute('data-id'),name=b.getAttribute('data-name')||'ce partenaire',text=null;
+  $('pa-err').textContent='';$('pa-ok').textContent='';
+  if(act==='approve'){if(!confirm('Approuver '+name+' ? Son code sera créé automatiquement.'))return}
+  else if(act==='reject'){if(!confirm('Refuser la demande de '+name+' ?'))return}
+  else if(act==='suspend'){if(!confirm('Suspendre '+name+' ? Son code ne parrainera plus.'))return}
+  else if(act==='pay'){
+    var amt=b.getAttribute('data-amt')||'';
+    text=prompt('Tu as envoyé '+amt+' à '+name+' ?\nEntre le numéro de la transaction Mobile Money (référence) :');
+    if(text==null)return;text=text.trim();
+    if(!text){$('pa-err').textContent='La référence de la transaction est obligatoire.';return}
+  }
+  else if(act==='reject_payout'){
+    text=prompt('Motif du refus (affiché à '+name+') :');
+    if(text==null)return;text=text.trim();
+    if(!text){$('pa-err').textContent='Le motif est obligatoire.';return}
+  }
+  b.disabled=true;
+  try{
+    var r=await rpc('admin_partner_action',{p_action:act,p_id:id,p_text:text});
+    var res=r&&r.result;
+    if(res==='ok'){$('pa-ok').textContent=(act==='approve'&&r.code)?'Approuvé. Code : '+r.code:'Fait.'}
+    else $('pa-err').textContent=PA_MSG[res]||'Action non effectuée.';
+    loadPartners();
+  }catch(x){$('pa-err').textContent=paErr(x);b.disabled=false}
+});
 
 if(getToken()){showApp();load()}else showLogin('');
 </script>
