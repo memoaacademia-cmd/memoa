@@ -6,6 +6,7 @@ import { requestPasswordReset, resendConfirmation, signIn, signInWithGoogle, sig
 import { useAuth } from '../lib/auth'
 import { CodeInput } from '../components/ReferralCodeField'
 import { PARTNER_PROGRAM_ENABLED } from '../lib/features'
+import { cleanPhone, PHONE_ERROR } from '../lib/phone'
 import { clearStoredRef, getStoredRef, normalizeCode, setStoredRef, type RefSource } from '../lib/referral'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -104,7 +105,7 @@ function GoogleG() {
   )
 }
 
-/* Bouton « Continuer avec Google » : le même sur « Se connecter » et « Créer un compte ». Après Google, l'étudiant va directement à « Présente-toi ». */
+/* Bouton « Continuer avec Google » : le même sur « Se connecter » et « Créer un compte ». Après Google, l'étudiant passe d'abord par la page « Téléphone » (numéro + code partenaire), puis « Présente-toi ». */
 function GoogleButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
   return (
     <button type="button" className="btn ghost" onClick={onClick} disabled={busy} style={{ background: '#fff', color: '#0e1a2b', borderColor: '#b7c4be' }}>
@@ -188,13 +189,14 @@ export function Login() {
   )
 }
 
-/* Créer un compte : Google, ou email + mot de passe. Pas de téléphone : il sera demandé plus tard, au paiement. */
+/* Créer un compte : Google (numéro demandé ensuite sur la page « Téléphone »), ou email + mot de passe + numéro + code partenaire facultatif. */
 export function Signup() {
   const nav = useNavigate()
   const { refresh } = useAuth()
   const { busy, error, setError, run } = useAction()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [phone, setPhone] = useState('')
   const [accepted, setAccepted] = useState(false)
   // Code partenaire (facultatif) : prérempli si un code est déjà connu (lien, installation, saisie précédente).
   const [refCode, setRefCode] = useState(() => (PARTNER_PROGRAM_ENABLED ? getStoredRef()?.code ?? '' : ''))
@@ -216,9 +218,11 @@ export function Signup() {
     const mail = email.trim().toLowerCase()
     if (!EMAIL_RE.test(mail)) return setError('Entre une adresse email valide.')
     if (password.length < 8) return setError('Le mot de passe doit contenir au moins 8 caractères.')
+    const cleanTel = cleanPhone(phone)
+    if (!cleanTel) return setError(PHONE_ERROR)
     if (!accepted) return setError(MUST_ACCEPT)
     if (!keepRef()) return setError(BAD_REF)
-    const res = await run(() => signUp(mail, password, ''))
+    const res = await run(() => signUp(mail, password, cleanTel))
     if (!res) return
     if (res.needsConfirmation) nav('/confirmation', { state: { email: mail }, replace: true })
     else {
@@ -256,6 +260,10 @@ export function Signup() {
           <label htmlFor="mdp">Mot de passe</label>
           <PasswordField id="mdp" className="input" autoComplete="new-password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
           <span className="muted">8 caractères minimum.</span>
+        </div>
+        <div className="field">
+          <label htmlFor="tel">Numéro de téléphone</label>
+          <input id="tel" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="ex. 0812345678" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null) }} />
         </div>
         {PARTNER_PROGRAM_ENABLED && (
           <div className="field">

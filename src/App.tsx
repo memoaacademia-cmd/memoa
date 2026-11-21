@@ -6,6 +6,8 @@ import { TourProvider } from './components/Tour'
 import { DraftWatcher } from './components/Drafts'
 import { Confirmation, ForgotPassword, Login, NewPassword, Signup } from './pages/Auth'
 import Onboarding, { Adoption } from './pages/Onboarding'
+import PhoneStep from './pages/PhoneStep'
+import { needsPhoneStep } from './lib/phone'
 import Home from './pages/Home'
 import Review from './pages/Review'
 import Install from './pages/Install'
@@ -71,6 +73,7 @@ function ConnectionScreen({ onRetry }: { onRetry: () => void }) {
 
 function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
   const { user, profile, loading, recovery, loadFailed, refresh } = useAuth()
+  const { pathname } = useLocation()
   if (loading) return <div className="shell"><Spinner /></div>
   // Réseau coupé au démarrage et aucun profil gardé en mémoire : on attend le retour au lieu d'envoyer vers la connexion.
   if (user && !profile && loadFailed) return <div className="shell"><ConnectionScreen onRetry={() => void refresh()} /></div>
@@ -82,8 +85,13 @@ function Guard({ need }: { need: 'public' | 'auth' | 'onboarded' }) {
     return <div className="shell"><Outlet /></div>
   }
   if (!user) return <Navigate to="/connexion" replace />
-  if (need === 'auth') return <div className="shell app"><Outlet /></div>
-  if (!profile?.university) return <Navigate to="/inscription" replace />
+  // Inscription pas finie et pas de numéro (typiquement après « Continuer avec Google ») : d'abord la page « Téléphone ».
+  const phoneFirst = needsPhoneStep(user, profile)
+  if (need === 'auth') {
+    if (phoneFirst && pathname !== '/telephone') return <Navigate to="/telephone" replace />
+    return <div className="shell app"><Outlet /></div>
+  }
+  if (!profile?.university) return <Navigate to={phoneFirst ? '/telephone' : '/inscription'} replace />
   return (
     <div className="shell app">
       <DraftWatcher />
@@ -132,6 +140,7 @@ export default function App() {
           <Route path="/legal/conditions" element={<div className="shell"><Terms /></div>} />
           <Route path="/nouveau-mot-de-passe" element={<div className="shell"><NewPassword /></div>} />
           <Route element={<Guard need="auth" />}>
+            <Route path="/telephone" element={<PhoneStep />} />
             <Route path="/inscription" element={<Onboarding />} />
             <Route path="/adoption" element={<Adoption />} />
             <Route path="/bienvenue" element={<Navigate to="/inscription" replace />} />

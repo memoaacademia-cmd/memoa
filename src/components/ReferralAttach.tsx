@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from '../lib/auth'
+import { needsPhoneStep } from '../lib/phone'
 import { attachReferral, PARTNER_PROGRAM_ENABLED } from '../lib/partner'
 import { clearStoredRef, getStoredRef, notice } from '../lib/referral'
 
@@ -7,12 +8,14 @@ import { clearStoredRef, getStoredRef, notice } from '../lib/referral'
  *  et qu'un code parrain est gardé sur le téléphone, il est envoyé au serveur UNE fois, puis effacé.
  *  Ça ne retarde et ne bloque jamais l'inscription : tout se passe en arrière-plan, et un code refusé donne seulement un petit message. */
 export default function ReferralAttach() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const uid = user?.id
+  // Compte Google sans numéro : le code est demandé sur la page « Téléphone », on attend qu'elle soit passée.
+  const waiting = needsPhoneStep(user, profile)
   const running = useRef(false)
 
   useEffect(() => {
-    if (!PARTNER_PROGRAM_ENABLED || !uid) return
+    if (!PARTNER_PROGRAM_ENABLED || !uid || waiting) return
     let alive = true
     async function go() {
       const stored = getStoredRef()
@@ -33,7 +36,7 @@ export default function ReferralAttach() {
     const onOnline = () => void go()
     window.addEventListener('online', onOnline)
     return () => { alive = false; window.removeEventListener('online', onOnline) }
-  }, [uid])
+  }, [uid, waiting])
 
   return null
 }

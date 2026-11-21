@@ -163,6 +163,13 @@ export async function signIn(email: string, password: string): Promise<void> {
   if (error) throw error
 }
 
+/** Enregistre le numéro d'un compte Google (profil + compte). Le numéro doit déjà être propre (voir cleanPhone). */
+export async function savePhone(userId: string, phone: string): Promise<void> {
+  await saveProfile(userId, { phone })
+  // Copie dans le compte (même endroit que l'inscription par email). Non bloquant : le profil fait foi.
+  try { await sb().auth.updateUser({ data: { phone } }) } catch { /* le numéro est déjà dans le profil */ }
+}
+
 export async function signInWithGoogle(): Promise<void> {
   const { error } = await sb().auth.signInWithOAuth({
     provider: 'google',

@@ -5,13 +5,15 @@ import { clearStoredRef, getStoredRef, normalizeCode, readClipboardCode, type Re
 
 /** Champ de code + bouton « Coller mon code » (visible seulement tant que le champ est vide).
  *  Le presse-papiers n'est lu que sur un appui de l'étudiant, et le champ n'est rempli que si le contenu ressemble à un code (PRENOM-XXXX). */
-export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled }: {
+export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled, autoRead }: {
   value: string
   onChange: (v: string) => void
   /** D'où vient le code : 'clipboard' quand il a été collé par le bouton, 'manual' quand il est tapé. */
   onSource?: (s: RefSource) => void
   id?: string
   disabled?: boolean
+  /** Android : lit le presse-papiers dès l'ouverture, même si l'autorisation n'a pas encore été accordée (Chrome la demande alors une fois). Sans effet sur iPhone. */
+  autoRead?: boolean
 }) {
   const [msg, setMsg] = useState('')
   const triedFocus = useRef(false)
@@ -31,7 +33,8 @@ export function CodeInput({ value, onChange, onSource, id = 'ref-code', disabled
       try {
         const perms = (navigator as unknown as { permissions?: { query: (d: { name: string }) => Promise<{ state: string }> } }).permissions
         const st = await perms?.query({ name: 'clipboard-read' })
-        if (!alive || st?.state !== 'granted') return
+        const iphone = /iphone|ipad|ipod/i.test(navigator.userAgent)
+        if (!alive || !(st?.state === 'granted' || (autoRead && !iphone && st && st.state !== 'denied'))) return
         const r = await readClipboardCode()
         if (alive && r.code) { onChange(r.code); onSource?.('clipboard'); setMsg('Code collé : ' + r.code) }
       } catch { /* navigateur sans cette API (iPhone) : le bouton prend le relais */ }
