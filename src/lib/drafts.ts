@@ -4,6 +4,7 @@
 import { track } from './track'
 import { useCallback, useEffect, useState } from 'react'
 import { isConfigured, supabase } from './supabase'
+import { MAX_IMPORT_CHARS } from './splitnotes'
 
 export const DRAFT_HOURS = 48
 export const WARN_HOURS = 5
@@ -92,6 +93,7 @@ export async function listDrafts(userId: string): Promise<Draft[]> {
   return all.sort((a, b) => a.expiresAt - b.expiresAt)
 }
 
+
 export async function saveDraft(input: {
   id?: string | null
   userId: string
@@ -115,7 +117,7 @@ export async function saveDraft(input: {
     courseId: input.courseId ?? null,
     noteId: input.noteId ?? null,
     title: input.title.slice(0, 80),
-    body: input.body.slice(0, 60000),
+    body: input.body.slice(0, MAX_IMPORT_CHARS),
     guide: (input.guide ?? '').slice(0, 2000),
     source: input.source ?? 'texte',
     audio: input.audio ?? null,

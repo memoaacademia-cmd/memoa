@@ -3,6 +3,7 @@
 // AVANT l'envoi ; si la connexion coupe en plein envoi, le renvoi retombe sur le même identifiant (« déjà reçu » = succès).
 import { isConfigured, supabase } from './supabase'
 import { track } from './track'
+import { MAX_IMPORT_CHARS, partId, partTitle, splitText } from './splitnotes'
 
 export type OutboxKind = 'new_course' | 'add_note'
 export interface OutboxItem {
@@ -114,7 +115,7 @@ async function enqueueNow(inp: EnqueueInput, store: Store): Promise<OutboxItem> 
   const content = inp.content.trim()
   const audio = inp.audio ?? null
   if (!content && !audio) throw new Error('Ta note est vide.')
-  if (content.length > 60000) throw new Error('Cette note est trop longue. Découpe-la en plusieurs notes.')
+  if (content.length > MAX_IMPORT_CHARS) throw new Error('Ce texte est vraiment trop long (environ 500 pages). Découpe-le en deux.')
   const courseTitle = inp.courseTitle.trim().slice(0, 80)
   if (!courseTitle) throw new Error('Donne un nom à ton cours.')
   const target = inp.kind === 'new_course' ? '' : inp.courseId ?? ''
@@ -209,8 +210,12 @@ export async function syncOutbox(userId: string, deps: { store?: Store; client?:
           it.audio = null
           await store.put(it)
         }
-        const n = await client.insertNote({ id: it.id, user_id: userId, course_id: courseId, title: it.title, content: it.content, source: it.source })
-        if (n.error && !isDup(n.error)) throw n.error
+        // Long texte : plusieurs notes (60 000 caractères maximum chacune), identifiants stables = pas de doublon après une coupure.
+        const parts = splitText(it.content)
+        for (let i = 0; i < parts.length; i++) {
+          const n = await client.insertNote({ id: partId(it.id, i), user_id: userId, course_id: courseId, title: partTitle(it.title, i, parts.length), content: parts[i], source: it.source })
+          if (n.error && !isDup(n.error)) throw n.error
+        }
         await store.del(it.id)
         if (isNew) track('course_created', { source: 'hors_ligne' })
         track('note_added', { source: it.source, offline: true })

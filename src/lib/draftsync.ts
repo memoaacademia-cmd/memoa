@@ -8,6 +8,7 @@ import { protectBlocks } from './blocks'
 import { stripAiNoise } from './pdf'
 import { track } from './track'
 import { newUuid } from './outbox'
+import { MAX_IMPORT_CHARS, partId, partTitle, splitText } from './splitnotes'
 import { autoSendable, deleteDraft, patchDraft, type Draft } from './drafts'
 
 export interface DraftSyncResult {
@@ -103,13 +104,18 @@ async function insertCourse(userId: string, id: string, title: string): Promise<
   return id
 }
 async function insertNote(userId: string, id: string, courseId: string, title: string, content: string, source: string): Promise<void> {
-  if (!isConfigured || !supabase) {
-    const { addNote } = await import('./api')
-    await addNote(userId, courseId, title, content, source)
-    return
+  // Un long texte est rangé en plusieurs notes (60 000 caractères maximum chacune). Les identifiants sont stables : aucun doublon après une coupure.
+  const parts = splitText(content)
+  for (let i = 0; i < parts.length; i++) {
+    const t = partTitle(title, i, parts.length)
+    if (!isConfigured || !supabase) {
+      const { addNote } = await import('./api')
+      await addNote(userId, courseId, t, parts[i], source)
+      continue
+    }
+    const { error } = await supabase.from('notes').insert({ id: partId(id, i), user_id: userId, course_id: courseId, title: t, content: parts[i], source })
+    if (error && !isDup(error)) throw error
   }
-  const { error } = await supabase.from('notes').insert({ id, user_id: userId, course_id: courseId, title, content, source })
-  if (error && !isDup(error)) throw error
 }
 
 /** Envoie UN brouillon. Lance une erreur si ça échoue ; le brouillon n'est supprimé qu'une fois tout écrit. */
@@ -123,7 +129,7 @@ async function sendOne(userId: string, d0: Draft): Promise<'created' | 'added'> 
     const text = (await transcribeAudio(asFile(d.audio))).trim()
     if (!text) throw new Error("Aucun texte n'a été reconnu dans l'enregistrement.")
     base = base ? `${base}\n\n${text}` : text
-    d = (await patchDraft(d.id, { body: base.slice(0, 60000), audio: null })) ?? d
+    d = (await patchDraft(d.id, { body: base.slice(0, MAX_IMPORT_CHARS), audio: null })) ?? d
   }
 
   if (d.kind === 'course') {
@@ -142,7 +148,7 @@ async function sendOne(userId: string, d0: Draft): Promise<'created' | 'added'> 
       d = (await patchDraft(d.id, { sendCourseId: courseId, sendNoteId: noteId })) ?? d
     }
     const cid = await insertCourse(userId, courseId, title.slice(0, 80))
-    if (content) await insertNote(userId, noteId, cid, title.slice(0, 80), content.slice(0, 60000), base ? courseSource(d.source) : 'texte')
+    if (content) await insertNote(userId, noteId, cid, title.slice(0, 80), content, base ? courseSource(d.source) : 'texte')
     await deleteDraft(d.id)
     track('course_created', { source: 'brouillon' })
     return 'created'
@@ -164,7 +170,7 @@ async function sendOne(userId: string, d0: Draft): Promise<'created' | 'added'> 
   let noteId = d.sendNoteId
   if (!noteId) { noteId = newUuid(); d = (await patchDraft(d.id, { sendNoteId: noteId })) ?? d }
   const title = d.title.trim() || (guide ? guide.slice(0, 50) : '')
-  await insertNote(userId, noteId, courseId, title.slice(0, 80) || 'Note', content.slice(0, 60000), noteSource(d.source))
+  await insertNote(userId, noteId, courseId, title.slice(0, 80) || 'Note', content, noteSource(d.source))
   await deleteDraft(d.id)
   track('note_added', { source: noteSource(d.source), offline: true })
   return 'added'

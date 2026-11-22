@@ -3,6 +3,7 @@
 // Les pages n'appellent QUE ce fichier : changer de backend ne touche pas à l'interface.
 import { cacheCourses } from './outbox'
 import { toAiText } from './blocks'
+import { splitText } from './splitnotes'
 import { isConfigured, supabase } from './supabase'
 import { shrinkImage } from './image'
 import { reportError, track } from './track'
@@ -418,6 +419,19 @@ export async function addNote(userId: string, courseId: string, title: string, c
   return data as Note
 }
 
+/** Range un long texte dans une ou plusieurs notes du cours (60 000 caractères maximum par note) : rien n'est coupé. */
+export async function addNotesSplit(userId: string, courseId: string, title: string, content: string, source = 'texte'): Promise<Note[]> {
+  const parts = splitText(content)
+  if (!parts.length) fail('Ta note est vide.')
+  const base = title.trim() || 'Note'
+  const out: Note[] = []
+  for (let i = 0; i < parts.length; i++) {
+    const t = parts.length === 1 ? base.slice(0, 80) : `${base.slice(0, 65)} (partie ${i + 1}/${parts.length})`
+    out.push(await addNote(userId, courseId, t, parts[i], source))
+  }
+  return out
+}
+
 /** Modifie le titre et le texte d'une note existante (écran « Modifier » d'un cours). */
 export async function updateNote(noteId: string, title: string, content: string): Promise<void> {
   if (!content.trim()) fail('Ton cours est vide.')
@@ -610,6 +624,8 @@ export async function listActivity(userId: string): Promise<string[]> {
 /** Appelle une fonction serveur et remonte le message d'erreur lisible qu'elle renvoie (JSON { error }). */
 /** Le serveur a refusé parce que les points gratuits sont épuisés : l'application propose alors « Passer en Premium ». */
 export class LimitError extends Error {}
+/** Les dictées « de qualité » du jour sont épuisées (10 en gratuit, 20 en Premium). */
+export class DictationLimitError extends Error {}
 
 async function invoke<T>(name: string, body: unknown, fallback: string): Promise<T> {
   const { data, error } = await sb().functions.invoke(name, { body: body as Record<string, unknown> })
@@ -635,6 +651,7 @@ async function invoke<T>(name: string, body: unknown, fallback: string): Promise
     // Rapport d'erreur : seulement les vraies pannes (serveur en erreur, réponse illisible), pas les refus normaux (points épuisés, demande invalide).
     reportError(String((error as Error).message ?? 'échec'), `fn:${name}:${ctx?.status ?? 'réseau'}`)
   }
+  if (code === 'dictation_limit') throw new DictationLimitError(msg)
   throw limit ? new LimitError(msg) : new Error(msg)
 }
 
@@ -766,6 +783,14 @@ export async function transcribeAudio(file: File): Promise<string> {
   fd.append('audio', file, file.name || 'audio')
   const r = await invoke<{ text: string }>('bright-worker', fd, "La transcription n'est pas disponible pour l'instant. Réessaie dans un instant.")
   return r.text
+}
+
+/** Dictée par enregistrement : gratuite en points, plafonnée par jour côté serveur. `left` = dictées restantes aujourd'hui. */
+export async function transcribeDictation(file: File): Promise<{ text: string; left?: number; limit?: number }> {
+  const fd = new FormData()
+  fd.append('audio', file, file.name || 'dictee.webm')
+  fd.append('mode', 'dictation')
+  return invoke<{ text: string; left?: number; limit?: number }>('bright-worker', fd, "La transcription n'est pas disponible pour l'instant. Réessaie dans un instant.")
 }
 
 export async function listConversations(): Promise<Conversation[]> {

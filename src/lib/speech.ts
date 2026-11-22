@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { track } from './track'
 import { DICTATION_ENABLED } from './features'
 import { toSpeechText } from './blocks'
+import { recordedDictationAvailable, startRecordedDictation } from './voicedict'
 
 /** Lecture en cours (une seule à la fois). Partagée par toute l'application : le mini-lecteur la montre sur tous les écrans. */
 export interface Voice {
@@ -47,11 +48,14 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
-export const canDictate = () => DICTATION_ENABLED && recognitionCtor() !== null
+export const canDictate = () => DICTATION_ENABLED && (recognitionCtor() !== null || recordedDictationAvailable())
 export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis' in window
 
 export interface Dictation {
+  /** Arrête la dictée et garde le texte. */
   stop: () => void
+  /** Arrête et jette ce qui vient d'être dicté (dictée par enregistrement : l'enregistrement n'est pas envoyé). */
+  cancel?: () => void
 }
 
 /** Durée maximale d'une dictée (le navigateur coupe tout seul après quelques secondes de silence : on relance automatiquement). */
@@ -64,6 +68,9 @@ export function dictationMessage(err?: string): string | null {
     case 'service-not-allowed': return 'Le micro est bloqué. Autorise-le dans les réglages du navigateur, puis réessaie.'
     case 'audio-capture': return "Je n'arrive pas à utiliser le micro (il est peut-être pris par une autre application). Ferme-la puis réessaie."
     case 'network': return 'La dictée a besoin du réseau sur ce téléphone. Écris à la main, ou réessaie quand le réseau revient.'
+    case 'max-duration': return "La dictée est limitée à 3 minutes : j'ai écrit ce que tu as dit. Touche le micro pour continuer."
+    case 'dictation-limit': return "Tu as atteint ta limite de dictées de qualité pour aujourd'hui (elle revient demain). Ce dernier enregistrement n'a pas été écrit. Touche le micro : la dictée simple du téléphone prend le relais."
+    case 'transcribe-failed': return "La transcription n'a pas marché. Vérifie ton réseau et réessaie."
     case 'no-speech': return "Je n'ai rien entendu. Rapproche le téléphone de ta bouche et réessaie."
     case 'language-not-supported': return "La dictée en français n'est pas disponible sur ce navigateur. Essaie avec Chrome."
     default: return err ? 'La dictée a été interrompue. Réessaie.' : null
@@ -77,7 +84,14 @@ export function dictationMessage(err?: string): string | null {
  * Sur Android, Chrome gère mal le mode « continu » (texte vide ou répété) : on y écoute phrase par phrase et on relance.
  * Si le navigateur coupe sans avoir confirmé la dernière phrase, le texte provisoire est quand même gardé.
  */
-export function startDictation(onText: (t: string) => void, onEnd: (error?: string) => void): Dictation | null {
+export function startDictation(onText: (t: string) => void, onEnd: (error?: string) => void, onBusy?: (busy: boolean) => void): Dictation | null {
+  // Méthode principale : on enregistre la voix puis l'IA la transcrit (gratuit en points, plafonné par jour, 3 minutes maximum).
+  if (recordedDictationAvailable()) return startRecordedDictation(onText, onEnd, onBusy)
+  // Sinon (plafond du jour atteint, pas de réseau, navigateur sans enregistrement) : dictée du navigateur, gratuite.
+  return startBrowserDictation(onText, onEnd)
+}
+
+function startBrowserDictation(onText: (t: string) => void, onEnd: (error?: string) => void): Dictation | null {
   const Ctor = recognitionCtor()
   if (!Ctor) return null
   const android = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent)
@@ -119,10 +133,15 @@ export function startDictation(onText: (t: string) => void, onEnd: (error?: stri
       quick = !heard && Date.now() - began < 1500 ? quick + 1 : 0
       if (quick >= 4) { stopped = true; return onEnd(err ?? 'no-speech') }
       // Coupure automatique (silence, fin de phrase, limite du navigateur) : on relance l'écoute.
+      // Reprise la plus rapide possible (moins de mots perdus pendant la coupure) ; si le navigateur refuse, on réessaie une fois.
       window.setTimeout(() => {
         if (stopped) return
-        if (!begin()) { stopped = true; onEnd(err) }
-      }, 250)
+        if (begin()) return
+        window.setTimeout(() => {
+          if (stopped) return
+          if (!begin()) { stopped = true; onEnd(err) }
+        }, 200)
+      }, 40)
     }
     try {
       began = Date.now()

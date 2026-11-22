@@ -2,6 +2,8 @@
 // Les tableaux sont reconnus d'après la position des mots et recopiés comme dans l'éditeur : lignes « | a | b | ».
 // Un PDF scanné (sans texte) est lu page par page par l'IA qui voit l'image : voir readScannedPdf dans ocr.ts.
 
+import { MAX_IMPORT_CHARS } from './splitnotes'
+
 type Item = { s: string; x: number; y: number; w: number }
 type Cell = { t: string; x: number }
 
@@ -80,6 +82,10 @@ function pageLines(items: Item[]): string[] {
 }
 
 export async function extractPdfText(file: File, maxPages = 60): Promise<string> {
+  return (await extractPdfCore(file, maxPages)).text
+}
+
+async function extractPdfCore(file: File, maxPages: number, onProgress?: (done: number, total: number) => void): Promise<{ text: string; total: number; read: number }> {
   const pdf = await loadPdf(file)
   const pages: string[] = []
   const max = Math.min(pdf.numPages, maxPages)
@@ -92,8 +98,33 @@ export async function extractPdfText(file: File, maxPages = 60): Promise<string>
       items.push({ s: it.str, x: it.transform[4], y: it.transform[5], w: it.width })
     }
     pages.push(pageLines(items).join('\n'))
+    if (onProgress && (i % 10 === 0 || i === max)) onProgress(i, max)
   }
-  return pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return { text: pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(), total: pdf.numPages, read: max }
+}
+
+/** Nombre de pages d'un PDF. */
+export async function pdfPageCount(file: File): Promise<number> {
+  return (await loadPdf(file)).numPages
+}
+
+/**
+ * Lit un PDF pour l'ajouter à un cours : jusqu'à 600 pages et 900 000 caractères (le texte est ensuite rangé en
+ * plusieurs notes, rien n'est perdu). Si le document dépasse encore, une ligne « [Document coupé : …] » est ajoutée
+ * à la fin (l'étudiant la voit, l'IA la lit) et notice contient le message à montrer.
+ */
+export async function extractPdfTextChecked(file: File, maxPages = 600, maxChars = MAX_IMPORT_CHARS, onProgress?: (done: number, total: number) => void): Promise<{ text: string; notice: string | null }> {
+  const { text, total, read } = await extractPdfCore(file, maxPages, onProgress)
+  const cutPages = read < total
+  const cutChars = text.length > maxChars - 300
+  if (!cutPages && !cutChars) return { text, notice: null }
+  const kept = cutChars ? text.slice(0, maxChars - 300) : text
+  const keptPages = cutChars ? Math.max(1, Math.round((read * kept.length) / text.length)) : read
+  const marker = `[Document coupé : seules les ${keptPages} premières pages sur ${total} ont été gardées. Le reste n'est pas dans ce cours.]`
+  return {
+    text: kept + '\n\n' + marker,
+    notice: `Ton PDF fait ${total} pages : j'ai gardé les ${keptPages} premières (c'est la limite d'un seul import). Ajoute le reste en important la suite du PDF dans une autre note.`
+  }
 }
 
 /** Dessine les premières pages d'un PDF en images (pour les PDF scannés, lus ensuite par l'IA). */

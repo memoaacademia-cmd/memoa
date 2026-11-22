@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
 import { canDictate, dictationMessage, startDictation, type Dictation } from '../lib/speech'
 
-/** Bouton micro : le texte dicté est envoyé à onText (le navigateur du téléphone fait la dictée, sans coût serveur). */
+/** Bouton micro : le texte dicté est envoyé à onText (la voix est enregistrée puis transcrite, gratuit ; sinon dictée du téléphone). */
 export default function DictateButton({ onText, label = 'Dicter' }: { onText: (t: string) => void; label?: string }) {
   const [on, setOn] = useState(false)
   const [msg, setMsg] = useState('')
@@ -17,7 +17,7 @@ export default function DictateButton({ onText, label = 'Dicter' }: { onText: (t
       setOn(false)
       const m = dictationMessage(err)
       if (m) setMsg(m)
-    })
+    }, (busy) => setMsg(busy ? 'Transcription de ta voix…' : ''))
     if (!r) { setMsg("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome."); return }
     d.current = r
     setOn(true)

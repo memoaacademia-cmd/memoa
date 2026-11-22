@@ -142,7 +142,8 @@ export default function Assistant() {
         setListening(false)
         const m = dictationMessage(err)
         if (m) setError(m)
-      }
+      },
+      (busy) => setReading(busy ? 'Transcription de ta voix…' : '')
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
     dict.current = d
@@ -151,7 +152,7 @@ export default function Assistant() {
   /** Arrête l'écoute en gardant le texte déjà dicté. */
   function stopMic() { dict.current?.stop(); setListening(false) }
   /** Croix : arrête l'écoute et efface ce qui vient d'être dicté. */
-  function cancelMic() { stopMic(); setText(beforeDict.current) }
+  function cancelMic() { if (dict.current?.cancel) dict.current.cancel(); else dict.current?.stop(); setListening(false); setText(beforeDict.current) }
   /** Le champ grandit vers le bas avec le texte, puis défile à l'intérieur au-delà de 6 lignes. */
   function grow() {
     const el = taRef.current
@@ -171,7 +172,13 @@ export default function Assistant() {
     setReading('')
     if (t === undefined) return
     if (t.length < 10) return setError("Je n'ai pas pu lire de texte dans ce fichier. Essaie une photo plus nette ou un PDF non scanné.")
-    setAttach({ name: f.name || 'photo', text: t.slice(0, 20000) })
+    // Pièce jointe : l'IA ne reçoit que ~19 000 caractères (environ 8 à 10 pages). On le dit à l'étudiant ET à l'IA.
+    if (t.length > 19500) {
+      const cut = t.slice(0, 19000) + "\n\n[Document coupé : seul le début est visible ici. La fin du document n'a pas été lue.]"
+      setError("Ton document est long : l'assistant n'en lit que le début (environ 8 à 10 pages). Pour le reste, envoie-le en plusieurs parties.")
+      return setAttach({ name: f.name || 'photo', text: cut })
+    }
+    setAttach({ name: f.name || 'photo', text: t })
   }
   function readAloud(m: Message) {
     if (speakingId === m.id) { stopSpeaking(); return }

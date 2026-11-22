@@ -6,7 +6,7 @@ import DictateButton from '../components/Dictate'
 import { TP_ASSISTANT_ENABLED, WEB_SEARCH_ENABLED } from '../lib/features'
 import { BackLink, BottomSheet, Empty, ErrorBox, Icon, PageHead, PillButton, PillInput, Row, RowGroup, Spinner, useAction, useLoad, WebToggle } from '../components/ui'
 import { AddDocSheet, EditorBar, EditorScreen, RecordingSheet, useRecorder } from '../components/Editor'
-import { addNote, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
+import { addNote, addNotesSplit, askAI, createCourse, getCourse, listCourses, listNotes, renameCourse, updateNote, LimitError, listTrashedCourses, setCourseTrashed, transcribeAudio, TRASH_DAYS } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { isDue, useCards } from '../lib/review'
 import { DraftsSection } from '../components/Drafts'
@@ -23,7 +23,8 @@ import { cleanPlan, cleanTpText } from '../lib/tpclean'
 import { cleanTranscript, MAX_PHOTOS, readPhotoText, readPhotosText, readScannedPdf } from '../lib/ocr'
 import { memoNameOf } from '../lib/names'
 import { adjustLength, assemble, clearDone, clearProgress, limitPlan, loadDone, loadProgress, parsePlan, partIsComplete, partsFor, saveDone, saveProgress, subsFor } from '../lib/tpwrite'
-import { extractPdfText } from '../lib/pdfimport'
+import { extractPdfText, extractPdfTextChecked, pdfPageCount } from '../lib/pdfimport'
+import { MAX_IMPORT_CHARS } from '../lib/splitnotes'
 import { startTpJob, takeTpResult, dismissTpError, stopTpJob, useTpJob } from '../lib/tpjob'
 import { canDictate, canSpeak, dictationMessage, speak, startDictation, stopSpeaking, useVoice, type Dictation } from '../lib/speech'
 import type { Note } from '../lib/types'
@@ -86,7 +87,7 @@ export function NewCourse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + cleanTranscript(t).slice(0, 60000)) }
+  function appendText(t: string) { setContent((c) => (c ? c + '\n\n' : '') + cleanTranscript(t).slice(0, MAX_IMPORT_CHARS)) }
 
   /** « Brouillon » : garde le cours en cours d'écriture sur le téléphone (48 h), tout de suite, puis retourne à la liste.
    *  Sans réseau, il sera créé tout seul dès que la connexion revient (voir lib/draftsync.ts). */
@@ -111,7 +112,8 @@ export function NewCourse() {
         setListening(false)
         const m = dictationMessage(err)
         if (m) setError(m)
-      }
+      },
+      (busy) => setStep(busy ? 'Transcription de ta voix…' : '')
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
     dict.current = d
@@ -124,11 +126,20 @@ export function NewCourse() {
     if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
     setStep('Lecture du PDF…')
     // PDF avec du texte : lu sur le téléphone (instantané, tableaux recopiés). PDF scanné : lu page par page par l'IA qui voit l'image.
-    const text = await run(async () => { const t = await extractPdfText(f); return t.length >= 20 ? t : readScannedPdf(f, setStep, memo) })
+    let notice: string | null = null
+    const text = await run(async () => {
+      const r = await extractPdfTextChecked(f, undefined, undefined, (d, n) => setStep(`Lecture du PDF… page ${d}/${n}`))
+      if (r.text.length >= 20) { notice = r.notice; return r.text }
+      const total = await pdfPageCount(f)
+      const scanned = await readScannedPdf(f, setStep, memo)
+      if (total > 8) { notice = `Attention : ce PDF scanné fait ${total} pages, mais seules les 8 premières ont été lues.`; return scanned + `\n\n[Document coupé : seules les 8 premières pages sur ${total} ont été lues. Le reste n'est pas dans ce cours.]` }
+      return scanned
+    })
     setStep('')
     if (text === undefined) return
     if (text.length < 20) return setError("Je n'arrive pas à lire ce PDF. Essaie un autre PDF, une photo de la page, ou colle le texte.")
     appendText(text)
+    if (notice) setError(notice)
     setSource('pdf')
     setTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
@@ -214,7 +225,7 @@ export function NewCourse() {
       const course = await createCourse(user.id, title)
       // Le contenu du cours est rangé sous le nom du cours. Les consignes ne sont pas gardées : elles ne servent qu'à guider l'IA.
       if (structured) {
-        await addNote(user.id, course.id, title.trim(), structured.slice(0, 60000), content.trim() ? (source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte') : 'texte')
+        await addNotesSplit(user.id, course.id, title.trim(), structured, content.trim() ? (source === 'pdf' ? 'pdf' : source === 'voix' ? 'voix' : source === 'photo' ? 'photo' : source === 'audio' ? 'audio' : 'texte') : 'texte')
       }
       if (draftId) await deleteDraft(draftId).catch(() => {})
       return course.id
@@ -579,7 +590,7 @@ export function CourseDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + cleanTranscript(t).slice(0, 60000)) }
+  function appendText(t: string) { setNoteText((x) => (x ? x + '\n\n' : '') + cleanTranscript(t).slice(0, MAX_IMPORT_CHARS)) }
 
   function toggleDictation() {
     if (listening) { dict.current?.stop(); return }
@@ -591,7 +602,8 @@ export function CourseDetail() {
         setListening(false)
         const m = dictationMessage(err)
         if (m) setError(m)
-      }
+      },
+      (busy) => setNoteStep(busy ? 'Transcription de ta voix…' : '')
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
     dict.current = d
@@ -615,11 +627,20 @@ export function CourseDetail() {
     if (!f) return
     if (f.size > 15 * 1024 * 1024) return setError('Ce PDF est trop lourd (15 Mo maximum).')
     setNoteStep('Lecture du PDF…')
-    const text = await run(async () => { const t = await extractPdfText(f); return t.length >= 20 ? t : readScannedPdf(f, setNoteStep, memo) })
+    let notice: string | null = null
+    const text = await run(async () => {
+      const r = await extractPdfTextChecked(f, undefined, undefined, (d, n) => setNoteStep(`Lecture du PDF… page ${d}/${n}`))
+      if (r.text.length >= 20) { notice = r.notice; return r.text }
+      const total = await pdfPageCount(f)
+      const scanned = await readScannedPdf(f, setNoteStep, memo)
+      if (total > 8) { notice = `Attention : ce PDF scanné fait ${total} pages, mais seules les 8 premières ont été lues.`; return scanned + `\n\n[Document coupé : seules les 8 premières pages sur ${total} ont été lues. Le reste n'est pas dans ce cours.]` }
+      return scanned
+    })
     setNoteStep('')
     if (text === undefined) return
     if (text.length < 20) return setError("Je n'arrive pas à lire ce PDF. Essaie un autre PDF, une photo de la page, ou colle le texte.")
     appendText(text)
+    if (notice) setError(notice)
     setNoteTitle((t) => t.trim() ? t : f.name.replace(/\.pdf$/i, '').slice(0, 80))
   }
 
@@ -749,9 +770,9 @@ export function CourseDetail() {
         if (!title) throw new Error('Donne un nom à ton cours.')
         await renameCourse(id, title)
         if (mainId) await updateNote(mainId, title, content)
-        else await addNote(user.id, id, title, content, 'texte')
+        else await addNotesSplit(user.id, id, title, content, 'texte')
       } else {
-        await addNote(user.id, id, title, content, src)
+        await addNotesSplit(user.id, id, title, content, src)
       }
       return true
     })

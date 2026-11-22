@@ -4,9 +4,15 @@
 // Secrets à ajouter (Edge Functions > Secrets) :
 //   RESEND_API_KEY : la clé API Resend (la même que celle de l'envoi des e-mails de confirmation)
 //   RESEND_FROM    : l'expéditeur, ex. Memoa <contact@ton-domaine.com> (une adresse de TON domaine vérifié dans Resend)
+//   VAPID_PRIVATE_KEY : (déjà présent pour les notifications) sert à la notification de suspension
 //   SITE_URL       : (déjà présent pour les notifications) adresse du site, ex. https://ton-site.github.io/memoa/ ; sert au lien partenaire dans l'e-mail
 // Aucune donnée personnelle dans les journaux : seulement des codes de statut.
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import webpush from 'npm:web-push@3.6.7'
+
+// Clé PUBLIQUE (la même que dans partner-alerts et src/lib/features.ts).
+const VAPID_PUBLIC_KEY = 'BFSlSc6xPsaWeTvtbl7chIzW2mlhTSyEa1Z1XCkoC3Zx-QveBK_ygbfEZGWQKDgSt01GYbQ5Tbp2zah7E-eaZhs'
+const DEFAULT_REASON = 'Suspension décidée par l’équipe Memoa. Écris-nous depuis « Un retour ? » dans l’application pour en savoir plus.'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +48,7 @@ Deno.serve(async (req) => {
     reason = String(b?.reason ?? '').trim().slice(0, 400)
   } catch { /* corps vide */ }
   if (!UUID.test(partnerId)) return json(400, { error: 'Identifiant invalide' })
-  if (kind === 'suspended' && !reason) return json(400, { error: 'Motif obligatoire' })
+  if (kind === 'suspended' && !reason) reason = DEFAULT_REASON
   const { data: p } = await admin.from('partners').select('id,status,code,full_name,user_id').eq('id', partnerId).maybeSingle()
   const wanted = kind === 'suspended' ? 'suspended' : 'active'
   if (!p || p.status !== wanted || !p.user_id || (kind === 'welcome' && !p.code)) return json(200, { sent: false, reason: kind === 'suspended' ? 'ce partenaire n’est pas suspendu' : 'partenaire introuvable ou pas actif' })
@@ -120,6 +126,27 @@ ${link ? `<p style="margin:18px 0 6px">Ton lien d’invitation</p><p style="marg
 <p>Merci de faire connaître Memoa !<br>L’équipe Memoa</p>
 </div>`
 
+  // Notification sur le téléphone du partenaire (si elle a activé les notifications). Un échec ne bloque jamais l'e-mail.
+  let pushed = 0
+  if (suspended) {
+    const priv = Deno.env.get('VAPID_PRIVATE_KEY')
+    if (priv) {
+      try {
+        webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT') ?? 'mailto:contact@memoa.app', VAPID_PUBLIC_KEY, priv)
+        const { data: subs } = await admin.from('push_subscriptions').select('id,endpoint,p256dh,auth').eq('user_id', p.user_id)
+        for (const s of subs ?? []) {
+          try {
+            await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ title: 'Programme partenaire', body: 'Ton compte partenaire a été suspendu. ' + reason.slice(0, 120), url: (base || './') + '#/moi', tag: 'memoa-partner-suspended' }), { TTL: 24 * 3600 })
+            pushed++
+          } catch (e) {
+            const st = (e as { statusCode?: number }).statusCode
+            if (st === 404 || st === 410) await admin.from('push_subscriptions').delete().eq('id', s.id)
+          }
+        }
+      } catch { console.error('partner-approved-email : push impossible') }
+    }
+  }
+
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -130,7 +157,7 @@ ${link ? `<p style="margin:18px 0 6px">Ton lien d’invitation</p><p style="marg
       console.error('partner-approved-email : Resend HTTP', r.status)
       return json(200, { sent: false, reason: `Resend a refusé l’envoi (HTTP ${r.status}) : vérifie RESEND_FROM et la clé` })
     }
-    return json(200, { sent: true })
+    return json(200, { sent: true, pushed })
   } catch {
     console.error('partner-approved-email : Resend injoignable')
     return json(200, { sent: false, reason: 'Resend injoignable' })
