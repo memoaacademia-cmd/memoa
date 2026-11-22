@@ -117,6 +117,13 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
     <div class="kpi"><b id="k-premium">–</b><span>Premium en cours</span><small id="k-paid"></small></div>
     <div class="kpi"><b id="k-errors">–</b><span>erreurs sur la période</span><small>sur les téléphones</small></div>
   </section>
+  <section class="kpis" aria-label="Installations de l'application">
+    <div class="kpi"><b id="in-total">–</b><span>apps sur l'écran d'accueil</span><small id="in-people"></small></div>
+    <div class="kpi"><b id="in-new">–</b><span>nouvelles sur la période</span><small>Android et iPhone</small></div>
+    <div class="kpi"><b id="in-active">–</b><span>ouvertes depuis l'écran d'accueil</span><small>ces 7 derniers jours</small></div>
+    <div class="kpi"><b id="in-rate">–</b><span>des inscrits l'ont installée</span><small id="in-rate-sub"></small></div>
+  </section>
+  <p class="err" id="in-err" role="alert"></p>
   <section class="card" id="pa-card">
     <h2>Programme partenaire <span class="tag w" id="pa-badge" hidden></span></h2>
     <p class="sub">Valide les demandes, paie les retraits par Mobile Money, puis marque « payé ».</p>
@@ -140,6 +147,7 @@ svg text{fill:var(--mut);font-size:10px;font-family:inherit}
   </section>
 
   <div class="grid2">
+    <section class="card"><h2>Comment elle a été installée</h2><p class="sub">Depuis le début, une ligne par téléphone et par étudiant.</p><div class="hb" id="installvia"></div></section>
     <section class="card"><h2>Reviennent-ils ?</h2><p class="sub">Part des inscrits de la période qui rouvrent l'app le jour 1, 3 et 5.</p><div class="hb" id="retention"></div></section>
     <section class="card"><h2>Le parcours des étudiants</h2><p class="sub">Étudiants distincts à chaque étape (depuis le début).</p><div class="hb" id="funnel"></div></section>
     <section class="card"><h2>Fonctions les plus utilisées</h2><p class="sub">Nombre d'actions (et d'étudiants).</p><div class="hb" id="features"></div></section>
@@ -226,7 +234,8 @@ async function load(){
       if(r.status===403||/forbidden|permission/i.test(JSON.stringify(b))){clearToken();showLogin('Ce compte n\u2019est pas administrateur de l\u2019application.');return}
       $('aerr').textContent='La fonction app_stats est introuvable : exécute 0028_tableau_de_bord.sql dans Supabase (projet de l\u2019application).';return}
     if(!r.ok){$('aerr').textContent='Impossible de charger les chiffres pour le moment (code '+r.status+').';return}
-    render(await r.json());
+    var stats=await r.json();render(stats);
+    loadInstalls((stats.totals||{}).students);
     loadProfiles();loadData();loadPartners();
   }catch(x){$('aerr').textContent='Pas de connexion. Réessaie dans un instant.'}
   finally{$('refresh').disabled=false}
@@ -283,6 +292,45 @@ function render(d){
   hbars('aievents',d.ai_events,function(l){return AIEV[l]||l});
   hbars('errors',d.errors_top,null,function(r){return nf(r.n)+'×'});
   var g=new Date(d.generated_at);$('gen').textContent='Mis à jour le '+g.toLocaleDateString('fr-FR')+' à '+g.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+
+
+/* ---------- Installations (écran d'accueil) : lues directement dans app_events, réservé aux admins (règle « lecture admin ») ---------- */
+async function fetchRows(path){
+  var t=getToken();if(!t)throw{code:401};
+  var all=[],off=0;
+  for(var i=0;i<30;i++){
+    var r=await fetch(SB_URL+'/rest/v1/'+path,{headers:{apikey:SB_KEY,Authorization:'Bearer '+t,'Range-Unit':'items',Range:off+'-'+(off+999)}});
+    if(!r.ok&&r.status!==206)throw{code:r.status};
+    var rows=await r.json();all=all.concat(rows);
+    if(rows.length<1000)break;off+=1000;
+  }
+  return all;
+}
+function distinct(rows){var s={};rows.forEach(function(r){if(r.user_id)s[r.user_id]=1});return Object.keys(s).length}
+var INSTALL_VIA={event:'Installée depuis le navigateur (Android, ordinateur)',standalone:'Ajoutée à l\u2019écran d\u2019accueil (iPhone ou Android)'};
+async function loadInstalls(students){
+  $('in-err').textContent='';
+  try{
+    var days=Number($('days').value),since=new Date(Date.now()-days*864e5).toISOString(),w7=new Date(Date.now()-7*864e5).toISOString();
+    var res=await Promise.all([
+      fetchRows('app_events?select=user_id,created_at,props&name=eq.app_installed&order=created_at.asc'),
+      fetchRows('app_events?select=user_id&name=eq.app_open&'+encodeURIComponent('props->>standalone')+'=eq.true&created_at=gte.'+encodeURIComponent(w7))
+    ]);
+    var inst=res[0],open7=res[1];
+    var people=distinct(inst);
+    var fresh=inst.filter(function(r){return r.created_at>=since}).length;
+    $('in-total').textContent=nf(inst.length);
+    $('in-people').textContent=nf(people)+' étudiant(s) concerné(s)';
+    $('in-new').textContent=nf(fresh);
+    $('in-active').textContent=nf(distinct(open7));
+    $('in-rate').textContent=students?Math.round(people/students*100)+' %':'–';
+    $('in-rate-sub').textContent=students?nf(people)+' sur '+nf(students)+' inscrits':'';
+    var via={};inst.forEach(function(r){var k=(r.props&&r.props.via)||'standalone';via[k]=(via[k]||0)+1});
+    hbars('installvia',Object.keys(via).map(function(k){return{label:k,n:via[k]}}),function(l){return INSTALL_VIA[l]||l});
+  }catch(x){
+    $('in-err').textContent=x&&x.code===401?'Ta session a expiré. Reconnecte-toi.':'Chiffres d\u2019installation indisponibles pour le moment'+(x&&x.code?' (code '+x.code+')':'')+'.';
+  }
 }
 
 /* ---------- appels serveur (fonctions SQL de 0032_admin_tableau_complet.sql) ---------- */
