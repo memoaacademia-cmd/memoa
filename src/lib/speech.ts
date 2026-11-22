@@ -56,6 +56,8 @@ export interface Dictation {
   stop: () => void
   /** Arrête et jette ce qui vient d'être dicté (dictée par enregistrement : l'enregistrement n'est pas envoyé). */
   cancel?: () => void
+  /** Vrai pour la dictée par enregistrement : le texte n'arrive qu'après l'arrêt (donc pas de texte pendant qu'on parle). */
+  recorded?: boolean
 }
 
 /** Durée maximale d'une dictée (le navigateur coupe tout seul après quelques secondes de silence : on relance automatiquement). */

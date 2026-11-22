@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as Reac
 import { Link } from 'react-router-dom'
 import RichText from '../components/RichText'
 import ChatImage from '../components/ChatImage'
+import Thinking from '../components/Thinking'
 import { BottomSheet, ErrorBox, Icon, MemoAvatar, Row, RowGroup, Spinner, useAction, useLoad } from '../components/ui'
 import { askAI, askImage, fetchPoints, listConversations, listCourses, listMessages, type PointsInfo } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -53,6 +54,8 @@ export default function Assistant() {
   const announced = useRef('')
   const [text, setText] = useChat('draft')
   const [listening, setListening] = useState(false)
+  // Dictée par enregistrement : pas de texte pendant qu'on parle, la flèche verte sert alors à terminer et lancer la transcription.
+  const [recMode, setRecMode] = useState(false)
   const [web, setWeb] = useChat('web') // éteinte par défaut : l'étudiant l'active quand il en a besoin
   const [attach, setAttach] = useChat('attach')
   const [reading, setReading] = useState('')
@@ -147,6 +150,7 @@ export default function Assistant() {
     )
     if (!d) return setError("La dictée n'est pas disponible sur ce navigateur. Essaie avec Chrome.")
     dict.current = d
+    setRecMode(d.recorded === true)
     setListening(true)
   }
   /** Arrête l'écoute en gardant le texte déjà dicté. */
@@ -349,7 +353,7 @@ export default function Assistant() {
             </div>
           </div>
         ))}
-        {thinking && <div className="as-ai muted">{acting ? `${profile?.memo_name || 'Memo'} s’en occupe…` : 'Réflexion…'}</div>}
+        {thinking && <Thinking name={profile?.memo_name?.trim() || 'Memo'} acting={acting} web={web} attach={!!attach} />}
       </div>
 
       <form className="as-comp" onSubmit={submit}>
@@ -372,7 +376,7 @@ export default function Assistant() {
             ref={taRef}
             className="as-ta"
             rows={1}
-            placeholder={listening ? 'Je t’écoute…' : 'Pose ta question à Memo'}
+            placeholder={listening ? (recMode ? 'Je t’écoute… touche la flèche verte quand tu as fini' : 'Je t’écoute…') : 'Pose ta question à Memo'}
             maxLength={40000}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -396,7 +400,11 @@ export default function Assistant() {
             ) : listening ? (
               <>
                 <button type="button" className="as-act" onClick={cancelMic} aria-label="Annuler la dictée"><Icon name="close" size={20} stroke={2.2} /></button>
-                <button type="submit" className="as-act go" aria-label="Envoyer" disabled={!text.trim()}><Icon name="arrowup" size={20} stroke={2.4} /></button>
+                {recMode ? (
+                  <button type="button" className="as-act go" onClick={stopMic} aria-label="Terminer la dictée et transcrire"><Icon name="arrowup" size={20} stroke={2.4} /></button>
+                ) : (
+                  <button type="submit" className="as-act go" aria-label="Envoyer" disabled={!text.trim()}><Icon name="arrowup" size={20} stroke={2.4} /></button>
+                )}
               </>
             ) : text.trim() ? (
               <button type="submit" className="as-act go" aria-label="Envoyer"><Icon name="arrowup" size={20} stroke={2.4} /></button>

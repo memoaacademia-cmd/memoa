@@ -112,5 +112,5 @@ export function startRecordedDictation(onText: (t: string) => void, onEnd: (erro
   }
 
   void begin()
-  return { stop, cancel: () => { cancelled = true; stop() } }
+  return { stop, cancel: () => { cancelled = true; stop() }, recorded: true }
 }
