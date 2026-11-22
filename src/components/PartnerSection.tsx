@@ -265,6 +265,7 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
   const { busy, error, setError, run } = useAction()
   const [phone, setPhone] = useState(d.payout_phone ?? '')
   const [op, setOp] = useState<Operator | ''>(d.payout_operator ?? '')
+  const [accName, setAccName] = useState(d.payout_account_name ?? '')
   const [step, setStep] = useState<1 | 2>(1)
 
   // À chaque ouverture : on repart de l'étape 1, avec les coordonnées déjà connues.
@@ -272,6 +273,7 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
     if (!open) return
     setPhone(d.payout_phone ?? '')
     setOp(d.payout_operator ?? '')
+    setAccName(d.payout_account_name ?? '')
     setStep(1)
     setError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -279,17 +281,19 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
 
   const clean = cleanPhone(phone)
   const opName = OPERATORS.find((o) => o.id === op)?.name ?? ''
+  const cleanName = accName.replace(/\s+/g, ' ').trim()
 
   function next() {
     if (!clean) return setError('Entre un numéro Mobile Money valide (ex. 0812345678).')
     if (!op) return setError('Choisis ton opérateur.')
+    if (cleanName.length < 2) return setError('Entre le nom du compte Mobile Money (le nom qui s’affiche quand on t’envoie de l’argent).')
     setError(null)
     setStep(2)
   }
 
   async function confirm() {
-    if (!clean || !op) return
-    const r = await run(() => requestPayout(clean, op), (e) => friendlyError(e))
+    if (!clean || !op || cleanName.length < 2) return
+    const r = await run(() => requestPayout(clean, op, cleanName), (e) => friendlyError(e))
     if (!r) return
     switch (r.result) {
       case 'ok': track('partner_payout_requested'); return onDone(`Demande envoyée : ${usd(r.amount_usd ?? d.withdrawable_usd)}. Tu seras payé par Mobile Money, frais à notre charge.`)
@@ -297,6 +301,7 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
       case 'sous_seuil': setStep(1); return setError(`Il faut au moins ${usd(r.min_payout_usd ?? d.min_payout_usd)} de solde retirable.`)
       case 'numero_invalide': setStep(1); return setError('Ce numéro n’est pas valide.')
       case 'operateur_invalide': setStep(1); return setError('Choisis ton opérateur.')
+      case 'nom_invalide': setStep(1); return setError('Entre le nom du compte Mobile Money.')
       default: setStep(1); return setError('La demande n’a pas pu être faite. Réessaie dans un instant.')
     }
   }
@@ -306,8 +311,9 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 4px 8px' }}>
         {step === 1 ? (
           <>
-            <p className="lead" style={{ margin: 0 }}>Tu retires <b>{usd(d.withdrawable_usd)}</b>. Où doit-on t’envoyer l’argent ?</p>
-            <PillInput value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="Numéro Mobile Money" aria-label="Numéro Mobile Money" disabled={busy} />
+            <p className="lead" style={{ margin: 0 }}>Tu retires <b>{usd(d.withdrawable_usd)}</b>. Où doit-on t’envoyer l’argent ? Ce n’est pas forcément le numéro de ton inscription.</p>
+            <PillInput value={accName} onChange={(e) => setAccName(e.target.value)} type="text" autoComplete="name" maxLength={100} placeholder="Nom du compte Mobile Money" aria-label="Nom du compte Mobile Money" disabled={busy} />
+            <PillInput value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="Numéro où recevoir l’argent" aria-label="Numéro où recevoir l’argent" disabled={busy} />
             <div role="radiogroup" aria-label="Opérateur" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {OPERATORS.map((o) => (
                 <button key={o.id} type="button" role="radio" aria-checked={op === o.id} className={'pill' + (op === o.id ? ' on' : '')} onClick={() => setOp(o.id)}>{o.name}</button>
@@ -321,6 +327,7 @@ function PayoutSheet({ d, open, onClose, onDone }: { d: Active; open: boolean; o
             <p className="lead" style={{ margin: 0 }}>Vérifie avant d’envoyer :</p>
             <div className="partner-box">
               <strong className="partner-amount">{usd(d.withdrawable_usd)}</strong>
+              <span>{cleanName}</span>
               <span>{opName} · {clean}</span>
               <span className="muted">Tu reçois le montant complet : les frais Mobile Money sont à notre charge. Si le numéro est faux, l’argent sera perdu.</span>
             </div>

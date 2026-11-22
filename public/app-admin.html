@@ -487,6 +487,7 @@ function renderPartners(d){
   }).join(''):'<p class="empty">Aucune demande en attente.</p>';
   $('pa-payouts').innerHTML=po.length?po.map(function(r){
     return '<div class="pa-row"><div class="who"><b>'+esc(r.full_name||'–')+' <span class="pa-amt">'+esc(usd(r.amount_usd))+'</span></b>'
+      +'<span>Nom du compte : <b style="display:inline">'+esc(r.account_name||'(non renseigné)')+'</b></span>'
       +'<span>Envoie à : <b style="display:inline">'+esc(r.phone||'–')+'</b> · '+esc(PA_OP[r.operator]||r.operator||'–')+' · demandé le '+esc(fdt(r.requested_at))+'</span></div><div>'
       +'<button class="btn sm" data-copy="'+esc(r.phone||'')+'" type="button">Copier le numéro</button>'
       +'<button class="btn sm p" data-pa="pay" data-id="'+esc(r.payout_id)+'" data-name="'+esc(r.full_name||'')+'" data-amt="'+esc(usd(r.amount_usd))+'" type="button">Marquer payé</button>'

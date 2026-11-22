@@ -48,6 +48,7 @@ export type PartnerDashboard =
       min_payout_usd: number
       payout_phone: string | null
       payout_operator: Operator | null
+      payout_account_name?: string | null
       has_open_payout: boolean
       payouts: PayoutRow[]
     }
@@ -82,8 +83,8 @@ export async function requestPartner(type: PartnerType, fullName: string): Promi
   return String((data as { result?: string } | null)?.result ?? '')
 }
 
-export async function requestPayout(phone: string, operator: Operator): Promise<{ result: string; amount_usd?: number; min_payout_usd?: number }> {
-  const { data, error } = await sb().rpc('request_payout', { p_phone: phone, p_operator: operator })
+export async function requestPayout(phone: string, operator: Operator, accountName: string): Promise<{ result: string; amount_usd?: number; min_payout_usd?: number }> {
+  const { data, error } = await sb().rpc('request_payout', { p_phone: phone, p_operator: operator, p_account_name: accountName })
   if (error) throw error
   const d = (data ?? {}) as { result?: string; amount_usd?: unknown; min_payout_usd?: unknown }
   return { result: String(d.result ?? ''), amount_usd: d.amount_usd == null ? undefined : num(d.amount_usd), min_payout_usd: d.min_payout_usd == null ? undefined : num(d.min_payout_usd) }
