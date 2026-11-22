@@ -36,6 +36,8 @@ const MenuIcon = () => (
 export default function Install() {
   const [ev, setEv] = useState<InstallPromptEvent | null>(null)
   const [done, setDone] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [slow, setSlow] = useState(false)
   const [note, setNote] = useState('')
   const [hl, setHl] = useState(false)
   const [shareNote, setShareNote] = useState('')
@@ -52,7 +54,7 @@ export default function Install() {
 
   useEffect(() => {
     const onPrompt = (e: Event) => { e.preventDefault(); setEv(e as InstallPromptEvent) }
-    const onInstalled = () => setDone(true)
+    const onInstalled = () => { setInstalling(false); setDone(true) }
     window.addEventListener('beforeinstallprompt', onPrompt)
     window.addEventListener('appinstalled', onInstalled)
     return () => {
@@ -61,12 +63,20 @@ export default function Install() {
     }
   }, [])
 
+  // « En cours » tant que le navigateur n'a pas confirmé. S'il ne confirme pas au bout de 45 s, on invite à patienter puis à vérifier l'écran d'accueil.
+  useEffect(() => {
+    if (!installing) { setSlow(false); return }
+    const t = window.setTimeout(() => setSlow(true), 45000)
+    return () => window.clearTimeout(t)
+  }, [installing])
+
   async function install() {
     if (!ev) return
     try {
       await ev.prompt()
       const c = await ev.userChoice
       if (c && c.outcome === 'dismissed') setNote('Installation annulée. Touche de nouveau le bouton, ou suis les étapes ci-dessous.')
+      else if (c && c.outcome === 'accepted') setInstalling(true)
     } catch { /* annulé */ }
     setEv(null)
   }
@@ -150,7 +160,15 @@ export default function Install() {
         ))}
       </div>
       {standalone || done ? (
-        <div className="notice" role="status">Memoa est déjà installée sur cet appareil. Cherche son icône sur ton écran d’accueil.</div>
+        <div className="notice" role="status">{done ? 'Memoa est installée. Cherche son icône sur ton écran d’accueil.' : 'Memoa est déjà installée sur cet appareil. Cherche son icône sur ton écran d’accueil.'}</div>
+      ) : installing ? (
+        <div className="notice" role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <strong>Installation en cours…</strong>
+          <span>{slow
+            ? 'Ça prend un peu plus de temps que prévu. Attends encore quelques minutes, puis vérifie ton écran d’accueil : l’icône Memoa doit y apparaître.'
+            : 'Memoa s’installe sur ton téléphone. Ça peut prendre une ou deux minutes. Garde cette page ouverte : on te confirmera ici dès que c’est terminé.'}</span>
+          {slow && <button type="button" className="btn ghost" onClick={() => setInstalling(false)}>Je ne la vois pas : réessayer</button>}
+        </div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }} aria-hidden="true">

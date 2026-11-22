@@ -75,6 +75,8 @@ const isStandaloneNow = () =>
 function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void }) {
   const [ev, setEv] = useState(() => getInstallEvent())
   const [done, setDone] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [slow, setSlow] = useState(false)
   const [note, setNote] = useState('')
   const [guide, setGuide] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -87,7 +89,7 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
 
   useEffect(() => {
     const onPrompt = () => setEv(getInstallEvent())
-    const onInstalled = () => setDone(true)
+    const onInstalled = () => { setInstalling(false); setDone(true) }
     window.addEventListener('memoa-installprompt', onPrompt)
     window.addEventListener('appinstalled', onInstalled)
     return () => {
@@ -95,6 +97,13 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
       window.removeEventListener('appinstalled', onInstalled)
     }
   }, [])
+
+  // « En cours » tant que le navigateur n'a pas confirmé ; au bout de 45 s, on invite à patienter puis à vérifier l'écran d'accueil.
+  useEffect(() => {
+    if (!installing) { setSlow(false); return }
+    const t = window.setTimeout(() => setSlow(true), 45000)
+    return () => window.clearTimeout(t)
+  }, [installing])
 
   async function copyCode() {
     const ok = await copyText(code)
@@ -115,7 +124,7 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
         await ev.prompt()
         const c = await ev.userChoice
         if (c && c.outcome === 'dismissed') setNote('Installation annulée. Touche de nouveau « Installer Memoa » quand tu veux.' + hint)
-        else setNote('Memoa s’installe. Ouvre-la depuis ton écran d’accueil pour créer ton compte.' + hint)
+        else { setInstalling(true); setNote(hint.trim()) }
       } catch { /* annulé */ }
       takeInstallEvent()
       setEv(null)
@@ -139,6 +148,17 @@ function ReferralLanding({ code, onSkip }: { code: string; onSkip: () => void })
 
         {isStandaloneNow() || done ? (
           <div className="notice" role="status">Memoa est installée. Ouvre-la depuis ton écran d’accueil, puis crée ton compte : ton code t’attend.</div>
+        ) : installing ? (
+          <>
+            <div className="notice" role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <strong>Installation en cours…</strong>
+              <span>{slow
+                ? 'Ça prend un peu plus de temps que prévu. Attends encore quelques minutes, puis vérifie ton écran d’accueil : l’icône Memoa doit y apparaître. Ouvre-la ensuite pour créer ton compte.'
+                : 'Memoa s’installe sur ton téléphone. Ça peut prendre une ou deux minutes. Garde cette page ouverte : on te confirmera ici dès que c’est terminé.'}</span>
+              {slow && <button type="button" className="btn ghost" onClick={() => setInstalling(false)}>Je ne la vois pas : réessayer</button>}
+            </div>
+            {note && <div className="notice" role="status">{note}</div>}
+          </>
         ) : (
           <>
             <button type="button" className="pill-btn lg" onClick={() => void installNow()}><Icon name="download" size={22} />Installer Memoa</button>
